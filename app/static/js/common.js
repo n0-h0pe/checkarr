@@ -2,7 +2,17 @@
 // dashboard (public.js). Keeps their read-only rendering identical without
 // the public surface ever importing anything that can mutate state.
 
-const state = { meta: null, services: [], statuses: [], tab: "dashboard" };
+const state = { meta: null, services: [], statuses: [], tab: "dashboard", activeLayout: null };
+
+// Dashboard tile grid: each track is one unit (px). A card's size is stored
+// as {w, h} in units and applied as `grid-column/row: span N`. No grid gap -
+// cards get their visual spacing from their own margin instead, so a drag
+// delta of exactly GRID_UNIT px always means exactly 1 unit, no gap math.
+const GRID_UNIT = 20;
+const MIN_CARD_W = 16;
+const MIN_CARD_H = 10;
+const DEFAULT_CARD_W = 16;
+const DEFAULT_CARD_H = 10;
 
 function $(sel, root = document) { return root.querySelector(sel); }
 function $all(sel, root = document) { return Array.from(root.querySelectorAll(sel)); }
@@ -95,11 +105,30 @@ async function ensureStatuses(force = false) {
   return state.statuses;
 }
 
+async function ensureActiveLayout(force = false) {
+  if (force || !state.activeLayout) {
+    try {
+      state.activeLayout = await api("/api/dashboard-layouts/active");
+    } catch (_) { /* leave whatever we had, or null - sizeFor() falls back to defaults */ }
+  }
+  return state.activeLayout;
+}
+
+function sizeFor(serviceId) {
+  const sizes = (state.activeLayout && state.activeLayout.sizes) || {};
+  const s = sizes[String(serviceId)];
+  return {
+    w: s && Number.isFinite(s.w) ? Math.max(MIN_CARD_W, s.w) : DEFAULT_CARD_W,
+    h: s && Number.isFinite(s.h) ? Math.max(MIN_CARD_H, s.h) : DEFAULT_CARD_H,
+  };
+}
+
 // ---------- dashboard (shared) ----------
 
 function renderServiceCard(s, opts = {}) {
   const svc = s.service;
-  const card = el("div", { class: "card" });
+  const size = sizeFor(svc.id);
+  const card = el("div", { class: "card", style: `grid-column: span ${size.w}; grid-row: span ${size.h};` });
 
   card.appendChild(
     el("div", { class: "card-header" }, [
@@ -121,8 +150,9 @@ function renderServiceCard(s, opts = {}) {
   const strip = el("div", { class: "uptime-strip", id: `strip-${svc.id}` });
   card.appendChild(strip);
 
+  const checksBox = el("div", { class: "card-checks" });
   for (const r of s.latest_results) {
-    card.appendChild(
+    checksBox.appendChild(
       el("div", { class: "check-row" }, [
         el("div", { class: "name" }, [
           el("span", { class: `dot ${r.status}` }),
@@ -133,8 +163,9 @@ function renderServiceCard(s, opts = {}) {
     );
   }
   if (s.latest_results.length === 0) {
-    card.appendChild(el("div", { class: "check-row" }, [el("span", { class: "text-dim", text: "No results yet" })]));
+    checksBox.appendChild(el("div", { class: "check-row" }, [el("span", { class: "text-dim", text: "No results yet" })]));
   }
+  card.appendChild(checksBox);
 
   if (opts.interactive) {
     card.appendChild(
@@ -143,9 +174,46 @@ function renderServiceCard(s, opts = {}) {
         el("button", { class: "small", onclick: () => opts.onHistory && opts.onHistory(svc.id) }, "History"),
       ])
     );
+    attachResizeHandle(card, svc.id, size.w, size.h, opts.onResize);
   }
 
   return card;
+}
+
+function attachResizeHandle(card, serviceId, initialW, initialH, onResize) {
+  const handle = el("div", { class: "resize-handle", title: "Drag to resize" });
+  card.appendChild(handle);
+
+  let current = { w: initialW, h: initialH };
+  let start = null;
+
+  function onPointerMove(e) {
+    const dx = e.clientX - start.x;
+    const dy = e.clientY - start.y;
+    const newW = Math.max(MIN_CARD_W, start.w + Math.round(dx / GRID_UNIT));
+    const newH = Math.max(MIN_CARD_H, start.h + Math.round(dy / GRID_UNIT));
+    current = { w: newW, h: newH };
+    card.style.gridColumn = `span ${newW}`;
+    card.style.gridRow = `span ${newH}`;
+  }
+
+  function onPointerUp() {
+    document.removeEventListener("pointermove", onPointerMove);
+    document.removeEventListener("pointerup", onPointerUp);
+    if (onResize && (current.w !== initialW || current.h !== initialH)) {
+      onResize(serviceId, current.w, current.h);
+      initialW = current.w;
+      initialH = current.h;
+    }
+  }
+
+  handle.addEventListener("pointerdown", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    start = { x: e.clientX, y: e.clientY, w: current.w, h: current.h };
+    document.addEventListener("pointermove", onPointerMove);
+    document.addEventListener("pointerup", onPointerUp);
+  });
 }
 
 async function loadUptimeStrip(serviceId) {
@@ -180,6 +248,7 @@ async function loadUptimeStrip(serviceId) {
 
 async function loadDashboard(cardOpts = {}) {
   const statuses = await ensureStatuses(true);
+  await ensureActiveLayout();
   const grid = $("#dashboard-grid");
   if (!grid) return;
   grid.innerHTML = "";

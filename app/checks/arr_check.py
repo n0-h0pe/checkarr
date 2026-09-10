@@ -157,7 +157,7 @@ async def check_filesystem_path_api(
     filesystem-browse API - the same one its "Add Root Folder" picker uses.
 
     Unlike the generic `filesystem_path` check, this needs only a path as
-    Radarr/Sonarr/etc. themselves see it: no bind-mount on the HealthChecker
+    Radarr/Sonarr/etc. themselves see it: no bind-mount on the Checkarr
     container at all, because the app is doing the looking, not us. Use this
     for a path that isn't one of the app's configured root folders (those
     are already covered by the "Root folders accessible" check) - e.g. a

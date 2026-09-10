@@ -105,3 +105,19 @@ class Notification(Base):
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     service: Mapped["Service"] = relationship(back_populates="notifications")
+
+
+class DashboardLayout(Base):
+    """A named, saveable arrangement of dashboard card sizes. `sizes` maps
+    service id (as a string, since JSON object keys must be strings) to
+    {"w": int, "h": int} in grid units. Exactly one row has is_active=True
+    at a time - that's what the dashboard (admin and public) renders."""
+
+    __tablename__ = "dashboard_layouts"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    sizes: Mapped[dict] = mapped_column(JSON, default=dict)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)

@@ -1,4 +1,4 @@
-# Media Estate HealthChecker
+# Checkarr
 
 A self-hosted dashboard that periodically polls your media stack (Radarr,
 Sonarr, Lidarr, Whisparr, Chaptarr, Prowlarr, Plex, Jellyfin, qBittorrent,
@@ -17,6 +17,7 @@ of what's healthy, what's degraded, and why.
 - "Test connection" button in the Add/Edit service form - a quick green ✓/red ✕ per address before you even save, plus autofilled Name and a type-appropriate default port in the address placeholder when you pick a service type.
 - For Plex, a "Sign in to Plex" button fills in the X-Plex-Token for you via Plex's own sign-in flow - no copying tokens out of your browser's dev tools.
 - Quick-edit controls on every check's row in Settings (Enabled, and for Plex/Jellyfin path checks, the empty-path severity and minimum-entries count) - no need to open Edit for a one-field change. These stage locally with an obvious "unsaved changes" banner and explicit Save/Discard, so a stray click can't silently change what's being monitored.
+- Resizable dashboard cards, snapped to an invisible grid and saved as named, switchable layouts. See "Dashboard layouts" below.
 - API keys are encrypted at rest (Fernet/AES) and never echoed back to the browser.
 - Historic results stored in SQLite, with a History tab and per-service uptime strip on the dashboard.
 - Single Docker container: web GUI + API + scheduler + database, no external dependencies.
@@ -41,7 +42,7 @@ ways to catch this are supported:
 1. **Root folder API check (recommended, on by default)** - the built-in
    "Root folders accessible" check calls two of the target app's own API
    endpoints, both from *its* point of view, needing **no extra volume
-   mounts** on the HealthChecker container at all:
+   mounts** on the Checkarr container at all:
    - `/api/v3/rootfolder` for the `accessible` flag - catches a mount point
      that's gone entirely.
    - `/api/v3/filesystem` (the same endpoint the app's own "Add Root Folder"
@@ -57,18 +58,18 @@ ways to catch this are supported:
    - useful for a specific subfolder you want to watch independently. Takes
    a single required field, **Path in `<app>` container**, exactly as that
    app itself sees it. Still no volume mount needed - the app does the
-   looking, not HealthChecker.
+   looking, not Checkarr.
 3. **`filesystem_path` (direct, requires a bind mount)** - for services with
    no such browse API (anything that isn't Radarr/Sonarr/Lidarr/Whisparr).
    Has two path fields, because the path an app sees for a folder is
-   essentially never the same path HealthChecker sees for that same
+   essentially never the same path Checkarr sees for that same
    underlying host directory - each container maps its own volumes
    independently, and they can coincidentally collide (e.g. a torrent
    client's `/data` meaning something completely different to Radarr's
    `/data`):
-   - **Path in HealthChecker container** - the actual path this check tests.
+   - **Path in Checkarr container** - the actual path this check tests.
      For this to see anything meaningful, bind-mount the host path in
-     question into the HealthChecker container (read-only is fine), e.g. in
+     question into the Checkarr container (read-only is fine), e.g. in
      `docker-compose.yml`:
 
      ```yaml
@@ -216,6 +217,30 @@ and **Discard Changes** (reverts to what's actually saved, un-deleting
 anything you'd marked). Switching tabs or triggering other actions
 elsewhere on the page won't lose your pending edits; only Save or Discard
 clears them, and leaving the page with changes pending prompts you first.
+
+## Dashboard layouts
+
+Every service card has a drag handle in its bottom-right corner (like a
+resizable window) - drag it to make the card wider or taller. Cards snap to
+an invisible grid and can't go below the default 16x10 grid-unit size; drag
+outward to make a card larger so you can fit more of its checks without
+scrolling. If a card ends up shorter than its check list needs, the checks
+inside it scroll independently while the card's header and buttons stay put.
+
+Sizes save automatically as soon as you release the drag - no separate Save
+step. The dropdown in the top bar next to **+ New** holds your saved
+layouts:
+
+- **+ New** - saves the dashboard's current card sizes as a new layout (you
+  pick a name) and switches to it.
+- **Rename** - renames the layout currently selected.
+- **Delete** - deletes the layout currently selected; if it was the active
+  one, another saved layout takes its place automatically (there's always at
+  least one).
+- Pick any layout from the dropdown to switch the dashboard to it instantly.
+
+The public dashboard mirrors whichever layout is active - same card sizes,
+same grid - but is read-only there: no drag handles, no dropdown.
 
 ## Public dashboard
 

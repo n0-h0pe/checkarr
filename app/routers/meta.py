@@ -83,7 +83,7 @@ CHECK_TYPE_META = [
         "fields": [
             {
                 "key": "healthchecker_path",
-                "label": "Path in HealthChecker container",
+                "label": "Path in Checkarr container",
                 "kind": "text",
                 "default": "",
             },

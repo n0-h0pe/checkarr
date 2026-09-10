@@ -9,7 +9,7 @@ from fastapi.templating import Jinja2Templates
 from . import scheduler as scheduler_module
 from .config import settings
 from .database import init_db
-from .routers import checks_bulk, meta, notifications, plex_auth, services, status
+from .routers import checks_bulk, dashboard_layouts, meta, notifications, plex_auth, services, status
 from .security import require_auth
 
 logging.basicConfig(level=settings.log_level)
@@ -20,12 +20,12 @@ logger = logging.getLogger("healthchecker")
 async def lifespan(app: FastAPI):
     init_db()
     scheduler_module.start()
-    logger.info("HealthChecker started - polling every %ss by default", settings.default_poll_interval_seconds)
+    logger.info("Checkarr started - polling every %ss by default", settings.default_poll_interval_seconds)
     yield
     scheduler_module.shutdown()
 
 
-app = FastAPI(title="Media Estate HealthChecker", lifespan=lifespan)
+app = FastAPI(title="Checkarr", lifespan=lifespan)
 
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 templates = Jinja2Templates(directory="app/templates")
@@ -36,6 +36,7 @@ app.include_router(notifications.router)
 app.include_router(meta.router)
 app.include_router(plex_auth.router)
 app.include_router(checks_bulk.router)
+app.include_router(dashboard_layouts.router)
 
 
 @app.get("/", response_class=HTMLResponse, dependencies=[Depends(require_auth)])

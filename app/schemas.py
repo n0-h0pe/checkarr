@@ -192,3 +192,30 @@ class CheckBulkUpdateRequest(BaseModel):
 class CheckBulkUpdateResponse(BaseModel):
     updated: list[CheckDefinitionOut]
     skipped_ids: list[int] = Field(default_factory=list)
+
+
+class DashboardLayoutOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    name: str
+    sizes: dict[str, Any]
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
+
+
+class DashboardLayoutSummary(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    name: str
+    is_active: bool
+
+
+class DashboardLayoutCreate(BaseModel):
+    name: str
+    sizes: dict[str, Any] = Field(default_factory=dict)
+
+
+class DashboardLayoutUpdate(BaseModel):
+    name: str | None = None
+    sizes: dict[str, Any] | None = None

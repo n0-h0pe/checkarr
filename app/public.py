@@ -13,10 +13,10 @@ from sqlalchemy.orm import Session
 
 from . import schemas
 from .database import get_db
-from .queries import get_history, get_notifications, get_service_statuses
+from .queries import get_history, get_notifications, get_or_create_active_layout, get_service_statuses
 from .routers.meta import get_meta
 
-public_app = FastAPI(title="Media Estate Status", docs_url=None, redoc_url=None, openapi_url=None)
+public_app = FastAPI(title="Checkarr Status", docs_url=None, redoc_url=None, openapi_url=None)
 public_app.mount("/static", StaticFiles(directory="app/static"), name="static")
 templates = Jinja2Templates(directory="app/templates")
 
@@ -50,6 +50,11 @@ def notifications(
 @public_app.get("/api/meta")
 def meta():
     return get_meta()
+
+
+@public_app.get("/api/dashboard-layouts/active", response_model=schemas.DashboardLayoutOut)
+def active_layout(db: Session = Depends(get_db)):
+    return get_or_create_active_layout(db)
 
 
 @public_app.get("/", response_class=HTMLResponse)
