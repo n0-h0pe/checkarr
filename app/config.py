@@ -1,4 +1,3 @@
-import os
 from pathlib import Path
 
 from pydantic_settings import BaseSettings
@@ -13,6 +12,9 @@ class Settings(BaseSettings):
     auth_username: str | None = None
     auth_password: str | None = None
     log_level: str = "INFO"
+    port: int = 8080
+    public_dashboard_enabled: bool = True
+    public_port: int = 8090
 
     model_config = {"env_prefix": "HC_"}
 

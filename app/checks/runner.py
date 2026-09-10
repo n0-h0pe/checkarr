@@ -8,7 +8,8 @@ from .filesystem_check import check_filesystem_path
 from .http_check import check_http_200, check_keyword_match
 from .media_server_check import check_jellyfin_health, check_plex_identity, check_plex_remote_access
 
-ARR_TYPES = {"radarr", "sonarr", "prowlarr"}
+ARR_TYPES = {"radarr", "sonarr", "prowlarr", "lidarr", "whisparr"}
+ROOT_FOLDER_TYPES = {"radarr", "sonarr", "lidarr", "whisparr"}
 
 # Checks that run once against a specific local/remote URL - the poller runs
 # these once per configured target (local, remote, or both).
@@ -68,7 +69,7 @@ def default_checks_for_service_type(service_type: str) -> list[dict]:
             {"name": "API status", "type": "arr_system_status", "config": {}, "is_builtin": True},
             {"name": "System health / notifications", "type": "arr_health", "config": {}, "is_builtin": True},
         ]
-    if service_type in {"radarr", "sonarr"}:
+    if service_type in ROOT_FOLDER_TYPES:
         checks.append(
             {"name": "Root folders accessible", "type": "arr_root_folder", "config": {}, "is_builtin": True}
         )

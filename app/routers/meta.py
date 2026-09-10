@@ -2,8 +2,28 @@ from fastapi import APIRouter, Depends
 
 from ..schemas import SERVICE_TYPES
 from ..security import require_auth
+from ..version import BUILD_DATE, VERSION
 
 router = APIRouter(prefix="/api/meta", tags=["meta"], dependencies=[Depends(require_auth)])
+
+_ICON_BASE = "https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/svg"
+
+# Real app logos (walkxcode/dashboard-icons, the icon set behind Homarr/
+# Homepage) rather than emoji. "generic" has none on purpose - falls back to
+# a plain glyph client-side rather than picking a mismatched real logo.
+SERVICE_TYPE_ICONS = {
+    "radarr": f"{_ICON_BASE}/radarr.svg",
+    "sonarr": f"{_ICON_BASE}/sonarr.svg",
+    "prowlarr": f"{_ICON_BASE}/prowlarr.svg",
+    "lidarr": f"{_ICON_BASE}/lidarr.svg",
+    "whisparr": f"{_ICON_BASE}/whisparr.svg",
+    "chaptarr": f"{_ICON_BASE}/chaptarr.svg",
+    "plex": f"{_ICON_BASE}/plex.svg",
+    "jellyfin": f"{_ICON_BASE}/jellyfin.svg",
+    "qbittorrent": f"{_ICON_BASE}/qbittorrent.svg",
+    "deluge": f"{_ICON_BASE}/deluge.svg",
+    "rtorrent": f"{_ICON_BASE}/rutorrent.svg",  # rTorrent has no web UI of its own - this is its usual ruTorrent frontend
+}
 
 CHECK_TYPE_META = [
     {
@@ -60,13 +80,13 @@ CHECK_TYPE_META = [
     {
         "type": "arr_system_status",
         "label": "API reachable (System Status)",
-        "applies_to": ["radarr", "sonarr", "prowlarr"],
+        "applies_to": ["radarr", "sonarr", "prowlarr", "lidarr", "whisparr"],
         "fields": [],
     },
     {
         "type": "arr_root_folder",
-        "label": "Root folders accessible (detects unmounted drives)",
-        "applies_to": ["radarr", "sonarr"],
+        "label": "Root folders accessible and populated (detects unmounted/empty drives)",
+        "applies_to": ["radarr", "sonarr", "lidarr", "whisparr"],
         "fields": [
             {
                 "key": "min_free_bytes",
@@ -79,7 +99,7 @@ CHECK_TYPE_META = [
     {
         "type": "arr_health",
         "label": "System health / notifications feed",
-        "applies_to": ["radarr", "sonarr", "prowlarr"],
+        "applies_to": ["radarr", "sonarr", "prowlarr", "lidarr", "whisparr"],
         "fields": [],
     },
     {
@@ -112,4 +132,9 @@ CHECK_TYPE_META = [
 
 @router.get("")
 def get_meta():
-    return {"service_types": SERVICE_TYPES, "check_types": CHECK_TYPE_META}
+    return {
+        "service_types": SERVICE_TYPES,
+        "check_types": CHECK_TYPE_META,
+        "service_type_icons": SERVICE_TYPE_ICONS,
+        "build": {"version": VERSION, "build_date": BUILD_DATE},
+    }

@@ -10,6 +10,8 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app ./app
+COPY VERSION ./VERSION
+RUN date -u +"%Y-%m-%d %H:%M UTC" > ./BUILD_DATE
 
 RUN mkdir -p /config
 
@@ -19,9 +21,9 @@ RUN mkdir -p /config
 # key to it. Low-risk tradeoff for a homelab monitoring tool with no
 # untrusted input execution.
 
-EXPOSE 8080
+EXPOSE 8080 8090
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
     CMD python -c "import urllib.request as u; u.urlopen('http://127.0.0.1:8080/healthz', timeout=3)" || exit 1
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080"]
+CMD ["python", "-m", "app.run"]

@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Media Estate Status</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body class="public-page">
+  {% if page == "dashboard" %}
+  <main>
+    <div class="summary-pill" id="summary-pill" style="padding: 10px 4px 0 4px;"></div>
+    <div class="cards-grid" id="dashboard-grid"></div>
+  </main>
+  {% elif page == "history" %}
+  <main>
+    <div class="panel">
+      <div class="panel-header">
+        <h2>Check history</h2>
+        <div style="display:flex; gap:8px;">
+          <select id="history-service"></select>
+          <select id="history-hours">
+            <option value="6">Last 6h</option>
+            <option value="24" selected>Last 24h</option>
+            <option value="72">Last 3 days</option>
+            <option value="168">Last 7 days</option>
+          </select>
+        </div>
+      </div>
+      <table>
+        <thead><tr><th>Time</th><th>Check</th><th>Status</th><th>Response</th><th>Message</th></tr></thead>
+        <tbody id="history-body"></tbody>
+      </table>
+    </div>
+  </main>
+  {% elif page == "notifications" %}
+  <main>
+    <div class="panel">
+      <div class="panel-header">
+        <h2>Consolidated notifications</h2>
+        <label class="field checkbox" style="margin:0">
+          <input type="checkbox" id="show-resolved">
+          <span>Show resolved</span>
+        </label>
+      </div>
+      <div id="notifications-list"></div>
+    </div>
+  </main>
+  {% endif %}
+
+  {% if page == "dashboard" %}
+  <div class="public-footer-links">
+    <a href="/history">history</a>
+    <a href="/notifications">notifications</a>
+  </div>
+  {% endif %}
+
+  <script>window.PUBLIC_PAGE = "{{ page }}";</script>
+  <script src="/static/js/common.js"></script>
+  <script src="/static/js/public.js"></script>
+</body>
+</html>
