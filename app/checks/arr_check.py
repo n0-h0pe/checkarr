@@ -46,20 +46,19 @@ async def check_system_status(
     return CheckOutcome(STATUS_OK, f"API reachable, version {version}", elapsed)
 
 
-async def _is_folder_empty(
+async def _browse_folder(
     client: httpx.AsyncClient, base_url: str, api_key: str | None, service_type: str, path: str
-) -> bool | None:
+) -> tuple[int, int] | None:
     """Browses a path via the same filesystem API Radarr/Sonarr's own "Add
     Root Folder" folder picker uses (GET .../filesystem?path=...) - so
-    "empty" is judged from the service's own point of view, not the health
-    checker's. Catches the case `accessible: true` misses: a mount point
-    that exists and is writable but whose backing share (e.g. an SMB share
-    added in Unraid) mounted without actually populating, leaving Radarr/
-    Sonarr staring at a technically-valid but empty directory.
+    directory contents are judged from the service's own point of view, not
+    the health checker's, and no bind-mount is needed on this container at
+    all. Works for any path the app can see, not just its configured root
+    folders.
 
-    Returns None (inconclusive - never fails the check on its own) if the
-    browse call itself errors; some very old Servarr versions may also lack
-    this endpoint.
+    Returns (directory_count, file_count), or None (inconclusive - never
+    fails a check on its own) if the browse call itself errors; some very
+    old Servarr versions may also lack this endpoint.
     """
     url = base_url.rstrip("/") + _api_base(service_type) + "/filesystem"
     try:
@@ -76,7 +75,7 @@ async def _is_folder_empty(
         return None
     directories = data.get("directories") or []
     files = data.get("files") or []
-    return not directories and not files
+    return len(directories), len(files)
 
 
 async def check_root_folders(
@@ -126,7 +125,8 @@ async def check_root_folders(
             continue
         if min_free_bytes is not None and (f.get("freeSpace") or 0) < min_free_bytes:
             low_space.append(path)
-        if await _is_folder_empty(client, base_url, api_key, service_type, path):
+        counts = await _browse_folder(client, base_url, api_key, service_type, path)
+        if counts is not None and counts == (0, 0):
             empty.append(path)
 
     elapsed = (time.perf_counter() - start) * 1000
@@ -148,6 +148,46 @@ async def check_root_folders(
             elapsed,
         )
     return CheckOutcome(STATUS_OK, f"All {len(folders)} root folder(s) accessible and populated", elapsed)
+
+
+async def check_filesystem_path_api(
+    client: httpx.AsyncClient, base_url: str, api_key: str | None, service_type: str, config: dict
+) -> CheckOutcome:
+    """Checks any path exists and is non-empty using the target app's own
+    filesystem-browse API - the same one its "Add Root Folder" picker uses.
+
+    Unlike the generic `filesystem_path` check, this needs only a path as
+    Radarr/Sonarr/etc. themselves see it: no bind-mount on the HealthChecker
+    container at all, because the app is doing the looking, not us. Use this
+    for a path that isn't one of the app's configured root folders (those
+    are already covered by the "Root folders accessible" check) - e.g. a
+    specific subfolder you want to keep an eye on independently.
+    """
+    path = config.get("path")
+    min_entries = config.get("min_entries", 1)
+    if not path:
+        return CheckOutcome(STATUS_FAIL, f"No 'Path in {service_type} container' configured", None)
+
+    start = time.perf_counter()
+    counts = await _browse_folder(client, base_url, api_key, service_type, path)
+    elapsed = (time.perf_counter() - start) * 1000
+
+    if counts is None:
+        return CheckOutcome(
+            STATUS_FAIL,
+            f"Could not browse {path} via {service_type}'s API - check the path exists and the API key is valid",
+            elapsed,
+        )
+
+    directories, files = counts
+    total = directories + files
+    if total < min_entries:
+        return CheckOutcome(
+            STATUS_FAIL,
+            f"{path} has only {directories} folder(s) and {files} file(s) - possible unmounted/failed drive",
+            elapsed,
+        )
+    return CheckOutcome(STATUS_OK, f"{path} accessible with {directories} folder(s) and {files} file(s)", elapsed)
 
 
 _SEVERITY_MAP = {"ok": "ok", "notice": "notice", "warning": "warning", "error": "error"}

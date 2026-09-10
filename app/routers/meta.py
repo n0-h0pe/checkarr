@@ -59,7 +59,7 @@ CHECK_TYPE_META = [
     },
     {
         "type": "filesystem_path",
-        "label": "Filesystem path check (requires volume mount)",
+        "label": "Filesystem path check via bind mount (for services with no browse API)",
         "applies_to": SERVICE_TYPES,
         "fields": [
             {
@@ -94,6 +94,15 @@ CHECK_TYPE_META = [
                 "kind": "number",
                 "default": None,
             }
+        ],
+    },
+    {
+        "type": "arr_filesystem_path",
+        "label": "Filesystem path check via API (no volume mount needed)",
+        "applies_to": ["radarr", "sonarr", "lidarr", "whisparr"],
+        "fields": [
+            {"key": "path", "label": "Path in {service} container", "kind": "text", "default": ""},
+            {"key": "min_entries", "label": "Minimum entries expected", "kind": "number", "default": 1},
         ],
     },
     {

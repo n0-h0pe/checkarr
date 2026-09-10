@@ -257,7 +257,12 @@ function renderDynamicFields(svc, checkType, existingConfig = {}) {
 
   if (checkType === "filesystem_path") {
     container.appendChild(
-      el("div", { class: "field hint", text: "Note: 'Path in HealthChecker container' must be bind-mounted into this container to be checked - it's almost never the same path the target app uses internally. Prefer the *arr Root Folder check when available - it needs no extra mounts and also detects a mount that's present but empty." })
+      el("div", { class: "field hint", text: "Note: 'Path in HealthChecker container' must be bind-mounted into this container to be checked - it's almost never the same path the target app uses internally. For Radarr/Sonarr/Lidarr/Whisparr, prefer 'Filesystem path check via API' instead (below in this list) - it needs no volume mount at all." })
+    );
+  }
+  if (checkType === "arr_filesystem_path") {
+    container.appendChild(
+      el("div", { class: "field hint", text: "Browses this path through the app's own API, exactly like its 'Add Root Folder' picker does - no volume mount needed on HealthChecker. For a folder already configured as a root folder, the 'Root folders accessible' check already covers this; use this for any other path you want to watch independently." })
     );
   }
   if (checkType === "plex_remote_access") {

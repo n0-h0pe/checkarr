@@ -3,7 +3,7 @@ import httpx
 from ..models import CheckDefinition, Service
 from ..security import decrypt_secret
 from .base import STATUS_FAIL, CheckOutcome
-from .arr_check import check_health, check_root_folders, check_system_status
+from .arr_check import check_filesystem_path_api, check_health, check_root_folders, check_system_status
 from .filesystem_check import check_filesystem_path
 from .http_check import check_http_200, check_keyword_match
 from .media_server_check import check_jellyfin_health, check_plex_identity, check_plex_remote_access
@@ -19,6 +19,7 @@ TARGET_SCOPED_TYPES = {
     "arr_system_status",
     "arr_root_folder",
     "arr_health",
+    "arr_filesystem_path",
     "plex_identity",
     "jellyfin_health",
 }
@@ -48,6 +49,8 @@ async def run_check(
             return await check_root_folders(client, base_url, api_key, service.type, config)
         if ctype == "arr_health":
             return await check_health(client, base_url, api_key, service.type, config)
+        if ctype == "arr_filesystem_path":
+            return await check_filesystem_path_api(client, base_url, api_key, service.type, config)
         if ctype == "plex_identity":
             return await check_plex_identity(client, base_url, api_key, config)
         if ctype == "jellyfin_health":
