@@ -23,6 +23,8 @@ SERVICE_TYPE_ICONS = {
     "qbittorrent": f"{_ICON_BASE}/qbittorrent.svg",
     "deluge": f"{_ICON_BASE}/deluge.svg",
     "rtorrent": f"{_ICON_BASE}/rutorrent.svg",  # rTorrent has no web UI of its own - this is its usual ruTorrent frontend
+    "overseerr": f"{_ICON_BASE}/overseerr.svg",
+    "jellyseerr": f"{_ICON_BASE}/jellyseerr.svg",
 }
 
 # Used to autofill the Name field and the Local address placeholder when a
@@ -41,6 +43,8 @@ SERVICE_TYPE_DEFAULTS = {
     "qbittorrent": {"name": "qBittorrent", "port": 8080},
     "deluge": {"name": "Deluge", "port": 8112},
     "rtorrent": {"name": "rTorrent", "port": None},
+    "overseerr": {"name": "Overseerr", "port": 5055},
+    "jellyseerr": {"name": "Jellyseerr", "port": 5055},
     "generic": {"name": "", "port": None},
 }
 
@@ -113,6 +117,21 @@ CHECK_TYPE_META = [
                 "kind": "number",
                 "default": None,
             }
+        ],
+    },
+    {
+        "type": "arr_disk_space",
+        "label": "Free disk space via API",
+        "applies_to": ["radarr", "sonarr", "lidarr", "whisparr"],
+        "fields": [
+            {
+                "key": "path",
+                "label": "Path to check (optional, default: worst of every disk {service} reports on)",
+                "kind": "text",
+                "default": "",
+            },
+            {"key": "warn_percent", "label": "Warn below % free", "kind": "number", "default": 10},
+            {"key": "fail_percent", "label": "Fail below % free", "kind": "number", "default": 3},
         ],
     },
     {
@@ -247,6 +266,18 @@ CHECK_TYPE_META = [
             {"key": "min_entries", "label": "Minimum entries expected", "kind": "number", "default": 1},
             {"key": "use_tls", "label": "Use FTPS (TLS)", "kind": "checkbox", "default": False},
         ],
+    },
+    {
+        "type": "overseerr_status",
+        "label": "API reachable (Status)",
+        "applies_to": ["overseerr", "jellyseerr"],
+        "fields": [],
+    },
+    {
+        "type": "overseerr_tmdb_status",
+        "label": "TMDB reachable (the movie/TV metadata API {service} depends on)",
+        "applies_to": ["overseerr", "jellyseerr"],
+        "fields": [],
     },
 ]
 

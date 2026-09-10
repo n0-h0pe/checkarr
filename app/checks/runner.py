@@ -3,7 +3,13 @@ import httpx
 from ..models import CheckDefinition, Service
 from ..security import decrypt_secret
 from .base import STATUS_FAIL, CheckOutcome
-from .arr_check import check_filesystem_path_api, check_health, check_root_folders, check_system_status
+from .arr_check import (
+    check_arr_disk_space,
+    check_filesystem_path_api,
+    check_health,
+    check_root_folders,
+    check_system_status,
+)
 from .filesystem_check import check_filesystem_path
 from .ftp_check import check_ftp_path
 from .http_check import check_http_200, check_keyword_match
@@ -14,6 +20,7 @@ from .media_server_check import (
     check_plex_identity,
     check_plex_remote_access,
 )
+from .overseerr_check import check_overseerr_status, check_overseerr_tmdb_status
 from .torrent_client_check import (
     check_deluge_disk_space,
     check_deluge_login,
@@ -24,6 +31,7 @@ from .torrent_client_check import (
 
 ARR_TYPES = {"radarr", "sonarr", "prowlarr", "lidarr", "whisparr"}
 ROOT_FOLDER_TYPES = {"radarr", "sonarr", "lidarr", "whisparr"}
+OVERSEERR_TYPES = {"overseerr", "jellyseerr"}
 
 # Checks that run once against a specific local/remote URL - the poller runs
 # these once per configured target (local, remote, or both).
@@ -32,6 +40,7 @@ TARGET_SCOPED_TYPES = {
     "keyword_match",
     "arr_system_status",
     "arr_root_folder",
+    "arr_disk_space",
     "arr_health",
     "arr_filesystem_path",
     "plex_identity",
@@ -43,6 +52,8 @@ TARGET_SCOPED_TYPES = {
     "qbittorrent_disk_space",
     "deluge_disk_space",
     "rtorrent_rpc_status",
+    "overseerr_status",
+    "overseerr_tmdb_status",
 }
 
 # Checks that don't care which URL is configured - the poller runs these
@@ -83,6 +94,8 @@ async def run_check(
             return await check_system_status(client, base_url, api_key, service.type, config)
         if ctype == "arr_root_folder":
             return await check_root_folders(client, base_url, api_key, service.type, config)
+        if ctype == "arr_disk_space":
+            return await check_arr_disk_space(client, base_url, api_key, service.type, config)
         if ctype == "arr_health":
             return await check_health(client, base_url, api_key, service.type, config)
         if ctype == "arr_filesystem_path":
@@ -110,6 +123,10 @@ async def run_check(
             return await check_deluge_disk_space(client, base_url, api_key, config)
         if ctype == "rtorrent_rpc_status":
             return await check_rtorrent_rpc_status(client, base_url, config, auth=basic_auth)
+        if ctype == "overseerr_status":
+            return await check_overseerr_status(client, base_url, api_key, config)
+        if ctype == "overseerr_tmdb_status":
+            return await check_overseerr_tmdb_status(client, base_url, api_key, config)
         return CheckOutcome(STATUS_FAIL, f"Unknown check type '{ctype}'", None)
     except Exception as exc:  # noqa: BLE001 - a broken check must not kill the poll loop
         return CheckOutcome(STATUS_FAIL, f"Check raised an unexpected error: {exc}", None)
@@ -129,6 +146,9 @@ def default_checks_for_service_type(service_type: str) -> list[dict]:
     if service_type in ROOT_FOLDER_TYPES:
         checks.append(
             {"name": "Root folders accessible", "type": "arr_root_folder", "config": {}, "is_builtin": True}
+        )
+        checks.append(
+            {"name": "Free disk space", "type": "arr_disk_space", "config": {}, "is_builtin": True}
         )
     if service_type == "plex":
         checks.append({"name": "Plex identity", "type": "plex_identity", "config": {}, "is_builtin": True})
@@ -151,4 +171,7 @@ def default_checks_for_service_type(service_type: str) -> list[dict]:
         checks.append({"name": "Free disk space", "type": "deluge_disk_space", "config": {}, "is_builtin": True})
     if service_type == "rtorrent":
         checks.append({"name": "XML-RPC reachable", "type": "rtorrent_rpc_status", "config": {}, "is_builtin": True})
+    if service_type in OVERSEERR_TYPES:
+        checks.append({"name": "API status", "type": "overseerr_status", "config": {}, "is_builtin": True})
+        checks.append({"name": "TMDB reachable", "type": "overseerr_tmdb_status", "config": {}, "is_builtin": True})
     return checks

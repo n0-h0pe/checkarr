@@ -2,15 +2,15 @@
 
 A self-hosted dashboard that periodically polls your media stack (Radarr,
 Sonarr, Lidarr, Whisparr, Chaptarr, Prowlarr, Plex, Jellyfin, qBittorrent,
-Deluge, rTorrent, or any other HTTP service) and shows one consolidated view
-of what's healthy, what's degraded, and why.
+Deluge, rTorrent, Overseerr, Jellyseerr, or any other HTTP service) and
+shows one consolidated view of what's healthy, what's degraded, and why.
 
 ## Features
 
 - Polls each service on its own schedule (default every 5 minutes, configurable globally, per-service, and per-check).
 - Local and remote addresses: give a service either address, or both. With both set, the Web UI check runs against each (so you know if the reverse-proxied path breaks even when the app itself is fine on the LAN); every other check runs against local only, to avoid needlessly doubling up API-heavy checks - opt into running everything against both with a per-service toggle. See "Adding a service" below.
 - Built-in checks: HTTP 200 web UI reachability, *arr-family API status, root-folder accessibility **and population** (drive/mount detection - see below), each app's own system health feed, and for Plex, Remote Access status.
-- Fully configurable: add your own checks per service (custom HTTP path/status/keyword checks, a filesystem or FTP existence check, or torrent-client free disk space).
+- Fully configurable: add your own checks per service (custom HTTP path/status/keyword checks, a filesystem or FTP existence check, or free disk space for the *arr apps and torrent clients).
 - Consolidates the *arr apps' own "System > Status" health notifications (indexer down, missing files, low disk space, etc.) into one Notifications tab, with automatic resolve-tracking.
 - A second, restricted read-only dashboard on its own port - no settings, no API keys, nothing mutable - safe to expose externally. See "Public dashboard" below.
 - Real app icons (not emoji), and a version/build date in the header so you can tell at a glance whether you're running the image you think you are.
@@ -114,9 +114,10 @@ below applies. With **both** set:
 
 The credential field(s) shown change based on the service type:
 
-- **Radarr/Sonarr/Lidarr/Whisparr/Prowlarr/Chaptarr/Generic** - a single
-  **API key** field (Settings > General > API Key for the *arr apps). Only
-  needed for authenticated checks.
+- **Radarr/Sonarr/Lidarr/Whisparr/Prowlarr/Chaptarr/Overseerr/Jellyseerr/
+  Generic** - a single **API key** field (Settings > General > API Key for
+  the *arr apps; Settings > General > API Key for Overseerr/Jellyseerr).
+  Only needed for authenticated checks.
 - **Jellyfin** - an **API key** field (Dashboard > API Keys), plus optional
   **Admin username** + **Admin password** fields. The API key alone covers
   the basic health check, but some admin-only endpoints (library scanning,
@@ -145,7 +146,7 @@ poll interval override (see below).
 
 | Type | Integration depth |
 |---|---|
-| Radarr, Sonarr | Full: web UI, API status, root-folder accessibility + population, health/notifications feed, ad-hoc path checks via API |
+| Radarr, Sonarr | Full: web UI, API status, root-folder accessibility + population, free disk space, health/notifications feed, ad-hoc path checks via API |
 | Lidarr, Whisparr | Same as Radarr/Sonarr - both are Servarr-family apps with the same API shape (Lidarr on API v1, Whisparr on v3) |
 | Prowlarr | Web UI, API status, health/notifications feed (no root folders to check) |
 | Plex | Web UI (`/web/index.html`), `/identity` liveness, Remote Access status (plex.tv + plex.direct reachability), library/path checks via API (see "Scanning libraries automatically") |
@@ -154,6 +155,7 @@ poll interval override (see below).
 | qBittorrent | Web UI + real login verification (Username/Password against the WebUI API) + free disk space via API |
 | Deluge | Web UI + real login verification (Password only) + free disk space via API |
 | rTorrent | Web UI, pointed at whatever fronts it - rTorrent itself has no HTTP UI, so this is really monitoring its usual **ruTorrent** frontend (hence the ruTorrent icon). Username/Password apply as HTTP Basic Auth. Also speaks its XML-RPC interface directly for a reachability check - see "rTorrent's XML-RPC endpoint" below. |
+| Overseerr, Jellyseerr | Web UI, API status, and a check that TMDB (the metadata API both depend on for movie/TV data) is reachable through the app - see "Overseerr/Jellyseerr" below. Jellyseerr is an API-compatible fork of Overseerr, so both get identical checks. |
 | Generic | Web UI checks only - for anything else |
 
 Any service (regardless of type) can also have `filesystem_path`,
@@ -178,6 +180,7 @@ a library): it skips any path that already has a check.
 | `filesystem_path` | any | Checks a path exists and has a minimum number of entries (see above) |
 | `arr_system_status` | Radarr/Sonarr/Lidarr/Whisparr/Prowlarr | Confirms the API is reachable and the API key is valid |
 | `arr_root_folder` | Radarr/Sonarr/Lidarr/Whisparr | Flags any root folder reported as inaccessible, empty-from-the-app's-own-view, or below a free-space threshold - see "Detecting unmounted/failed drives" above |
+| `arr_disk_space` | Radarr/Sonarr/Lidarr/Whisparr | Free disk space via the app's own API, as a percentage of total capacity - see "Disk space" below |
 | `arr_filesystem_path` | Radarr/Sonarr/Lidarr/Whisparr | Same empty/populated check as `arr_root_folder`, but for an arbitrary path you specify rather than the app's configured root folders - no volume mount needed |
 | `arr_health` | Radarr/Sonarr/Lidarr/Whisparr/Prowlarr | Pulls the app's own health/notifications feed into this dashboard |
 | `plex_identity` | Plex | Hits Plex's unauthenticated `/identity` endpoint |
@@ -187,28 +190,41 @@ a library): it skips any path that already has a check.
 | `jellyfin_filesystem_path` | Jellyfin | Checks a path exists and is non-empty via Jellyfin's `/Environment/DirectoryContents` API - no volume mount needed. Admin-only endpoint - see "Credentials" above if the API key gets rejected here. |
 | `qbittorrent_login` | qBittorrent | Confirms the configured Username/Password actually logs in via the WebUI API; a no-op OK if neither is set |
 | `deluge_login` | Deluge | Confirms the configured Password actually logs in via the WebUI JSON-RPC API; a no-op OK if not set |
-| `qbittorrent_disk_space` | qBittorrent | Free space on qBittorrent's default save path via its WebUI API - see "Torrent client disk space" below |
-| `deluge_disk_space` | Deluge | Free space at a path (default: Deluge's own download location) via its JSON-RPC API - see "Torrent client disk space" below |
+| `qbittorrent_disk_space` | qBittorrent | Free space on qBittorrent's default save path via its WebUI API - see "Disk space" below |
+| `deluge_disk_space` | Deluge | Free space at a path (default: Deluge's own download location) via its JSON-RPC API - see "Disk space" below |
 | `rtorrent_rpc_status` | rTorrent | Confirms rTorrent's XML-RPC interface is reachable at a configured URL Path - see "rTorrent's XML-RPC endpoint" below |
 | `ftp_path` | any | Checks a path exists and has a minimum number of entries, like `filesystem_path`, but over FTP/FTPS against its own host/port/credentials instead of a bind mount |
+| `overseerr_status` | Overseerr, Jellyseerr | Confirms the API is reachable and the API key is valid |
+| `overseerr_tmdb_status` | Overseerr, Jellyseerr | Confirms TMDB (the movie/TV metadata API the app depends on) is reachable through it - see "Overseerr/Jellyseerr" below |
 
-### Torrent client disk space
+### Disk space
 
-qBittorrent and Deluge both added as default checks on new services. Both
-APIs report how much space is *free*, but not the disk's *total* capacity,
-so there's nothing to compute a percentage against until you tell the check
-what the disk's total size is:
+`arr_disk_space` (Radarr/Sonarr/Lidarr/Whisparr) and `qbittorrent_disk_space`
+/`deluge_disk_space` all report free space as a percentage of total
+capacity, with the same two adjustable thresholds in the Add/Edit check
+panel: **Warn below % free** (default 10) and **Fail below % free**
+(default 3). All are added as default checks on new services of their type.
 
-- **Total disk size (GB)** - optional. Leave it blank and the check just
-  reports the free space with no threshold applied (still useful at a
-  glance). Fill it in once (it rarely changes) and the check switches to
-  percentage-based thresholds:
-- **Warn below % free** (default 10) / **Fail below % free** (default 3) -
-  both adjustable per check in the Add/Edit check panel.
+They differ in where the numbers come from:
+
+- **`arr_disk_space`** reads both free *and* total space straight from
+  Radarr/Sonarr/Lidarr/Whisparr's own `/diskspace` API - the same data
+  their own Settings > Media Management page shows - so the percentage
+  thresholds work immediately with nothing to fill in. Leave **Path** blank
+  to check every disk the app reports on and flag whichever is lowest, or
+  set it to watch just one.
+- **`qbittorrent_disk_space`**/**`deluge_disk_space`** only get *free* space
+  from their APIs, not the disk's total capacity, so there's nothing to
+  compute a percentage against until you fill in **Total disk size (GB)**
+  yourself (it rarely changes). Leave it blank and the check just reports
+  the free space with no threshold applied - still useful at a glance.
+
+None of these show the generic **Alert level** field in Add/Edit check - it
+would only conflict with (or accidentally downgrade) the warn/fail decision
+these checks already make from their own thresholds.
 
 rTorrent has no equivalent - its XML-RPC interface has no disk-space method,
-unlike qBittorrent/Deluge's own APIs, so no disk-space check is offered for
-it.
+unlike the others' own APIs, so no disk-space check is offered for it.
 
 ### rTorrent's XML-RPC endpoint
 
@@ -225,6 +241,25 @@ be auto-detected, so it's worth checking if this fails with a 404:
 
 Uses the service's Username/Password as HTTP Basic Auth, same as its Web UI
 check.
+
+### Overseerr/Jellyseerr
+
+Two default checks, both using the standard **Alert level** Fail/Warn
+toggle like most checks (unlike the disk-space checks above, there's no
+built-in severity logic to conflict with):
+
+- **`overseerr_status`** - the app itself is up and the API key works
+  (GET `/api/v1/status`).
+- **`overseerr_tmdb_status`** - TMDB, the external movie/TV metadata API
+  both Overseerr and Jellyseerr depend on for basically everything they
+  show, is reachable. There's no dedicated "test TMDB" endpoint, so this
+  calls the same trending-movies endpoint the app's own homepage does on
+  every load (GET `/api/v1/discover/trending`) - a failure here usually
+  points at TMDB or connectivity, not the app itself, which is why it's a
+  separate check from Status above.
+
+Jellyseerr is Overseerr's Jellyfin-focused fork and shares an identical API,
+so both get the exact same checks.
 
 ### Per-check poll interval
 
@@ -245,7 +280,7 @@ Jellyfin library shouldn't necessarily page you the same way a dead mount
 should) - it never touches an already-OK or already-WARN result, and it
 applies to every check type, not just filesystem checks (except the torrent
 client disk-space checks, whose own warn/fail % thresholds already decide
-this - see "Torrent client disk space" above). Both Enable and Alert level
+this - see "Disk space" above). Both Enable and Alert level
 are also editable the normal way via Edit, kept in sync
 either way; the minimum-entries count for filesystem checks lives in Edit
 only, not the table, to keep the row compact.

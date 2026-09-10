@@ -4,6 +4,8 @@ import httpx
 
 from .base import STATUS_FAIL, STATUS_OK, STATUS_WARN, CheckOutcome, NotificationItem, build_headers
 
+GIB = 1024 ** 3
+
 # All Servarr-family apps expose a structurally identical REST API, just at
 # different version prefixes. Radarr/Sonarr are on v3; Whisparr is a Radarr
 # fork so shares v3. Prowlarr and Lidarr are still on v1.
@@ -148,6 +150,73 @@ async def check_root_folders(
             elapsed,
         )
     return CheckOutcome(STATUS_OK, f"All {len(folders)} root folder(s) accessible and populated", elapsed)
+
+
+async def check_arr_disk_space(
+    client: httpx.AsyncClient, base_url: str, api_key: str | None, service_type: str, config: dict
+) -> CheckOutcome:
+    """Free disk space via the app's own dedicated /diskspace API - unlike
+    /rootfolder (which check_root_folders above reads for its absolute-bytes
+    threshold), this endpoint reports both free AND total capacity per
+    monitored mount, so percentage thresholds work directly from the API
+    with nothing to fill in manually (unlike the torrent client disk-space
+    checks, whose APIs only ever report free bytes).
+
+    Checks every disk the app reports on and flags the worst one, unless
+    `path` narrows it to a single mount - same "just works with no config"
+    default as the built-in Root folders accessible check.
+    """
+    path_filter = (config.get("path") or "").strip() or None
+    warn_percent = config.get("warn_percent", 10)
+    fail_percent = config.get("fail_percent", 3)
+
+    url = base_url.rstrip("/") + _api_base(service_type) + "/diskspace"
+    start = time.perf_counter()
+    try:
+        resp = await client.get(url, headers=build_headers(api_key))
+    except httpx.RequestError as exc:
+        elapsed = (time.perf_counter() - start) * 1000
+        return CheckOutcome(STATUS_FAIL, f"API request to {url} failed: {exc}", elapsed)
+    elapsed = (time.perf_counter() - start) * 1000
+
+    if resp.status_code == 401:
+        return CheckOutcome(STATUS_FAIL, "API key rejected (HTTP 401)", elapsed)
+    if resp.status_code != 200:
+        return CheckOutcome(STATUS_FAIL, f"Disk space API returned HTTP {resp.status_code}", elapsed)
+
+    try:
+        entries = resp.json()
+    except ValueError:
+        return CheckOutcome(STATUS_FAIL, "Disk space API returned invalid JSON", elapsed)
+
+    if path_filter:
+        entries = [e for e in entries if e.get("path") == path_filter]
+        if not entries:
+            return CheckOutcome(STATUS_FAIL, f"No disk space entry found for path '{path_filter}'", elapsed)
+    if not entries:
+        return CheckOutcome(STATUS_WARN, "No monitored disks reported", elapsed)
+
+    worst, worst_percent = None, None
+    for e in entries:
+        total = e.get("totalSpace") or 0
+        percent = (e.get("freeSpace") or 0) / total * 100 if total else 100.0
+        if worst_percent is None or percent < worst_percent:
+            worst, worst_percent = e, percent
+
+    free_gb = (worst.get("freeSpace") or 0) / GIB
+    total_gb = (worst.get("totalSpace") or 0) / GIB
+    label = worst.get("path") or worst.get("label") or "disk"
+    worst_of = f" (worst of {len(entries)} monitored disks)" if len(entries) > 1 else ""
+
+    if worst_percent < fail_percent:
+        status = STATUS_FAIL
+    elif worst_percent < warn_percent:
+        status = STATUS_WARN
+    else:
+        status = STATUS_OK
+    return CheckOutcome(
+        status, f"{label}: {free_gb:.1f} GB free ({worst_percent:.1f}% of {total_gb:.0f} GB){worst_of}", elapsed
+    )
 
 
 async def check_filesystem_path_api(

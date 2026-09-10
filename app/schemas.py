@@ -15,6 +15,8 @@ SERVICE_TYPES = [
     "qbittorrent",
     "deluge",
     "rtorrent",
+    "overseerr",
+    "jellyseerr",
     "generic",
 ]
 CHECK_TYPES = [
@@ -23,6 +25,7 @@ CHECK_TYPES = [
     "filesystem_path",
     "arr_system_status",
     "arr_root_folder",
+    "arr_disk_space",
     "arr_health",
     "arr_filesystem_path",
     "plex_identity",
@@ -36,6 +39,8 @@ CHECK_TYPES = [
     "deluge_disk_space",
     "rtorrent_rpc_status",
     "ftp_path",
+    "overseerr_status",
+    "overseerr_tmdb_status",
 ]
 
 
