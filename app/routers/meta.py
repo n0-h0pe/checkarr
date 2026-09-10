@@ -185,6 +185,69 @@ CHECK_TYPE_META = [
         "applies_to": ["deluge"],
         "fields": [],
     },
+    {
+        "type": "qbittorrent_disk_space",
+        "label": "Free disk space via API",
+        "applies_to": ["qbittorrent"],
+        "fields": [
+            {
+                "key": "total_disk_gb",
+                "label": "Total disk size (GB) - optional, enables the % thresholds below",
+                "kind": "number",
+                "default": None,
+            },
+            {"key": "warn_percent", "label": "Warn below % free", "kind": "number", "default": 10},
+            {"key": "fail_percent", "label": "Fail below % free", "kind": "number", "default": 3},
+        ],
+    },
+    {
+        "type": "deluge_disk_space",
+        "label": "Free disk space via API",
+        "applies_to": ["deluge"],
+        "fields": [
+            {
+                "key": "path",
+                "label": "Path to check (optional, defaults to Deluge's download location)",
+                "kind": "text",
+                "default": "",
+            },
+            {
+                "key": "total_disk_gb",
+                "label": "Total disk size (GB) - optional, enables the % thresholds below",
+                "kind": "number",
+                "default": None,
+            },
+            {"key": "warn_percent", "label": "Warn below % free", "kind": "number", "default": 10},
+            {"key": "fail_percent", "label": "Fail below % free", "kind": "number", "default": 3},
+        ],
+    },
+    {
+        "type": "rtorrent_rpc_status",
+        "label": "XML-RPC endpoint reachable",
+        "applies_to": ["rtorrent"],
+        "fields": [
+            {
+                "key": "rpc_path",
+                "label": "URL Path to the XML-RPC endpoint",
+                "kind": "text",
+                "default": "/RPC2",
+            },
+        ],
+    },
+    {
+        "type": "ftp_path",
+        "label": "Path exists and is populated, via FTP/FTPS",
+        "applies_to": SERVICE_TYPES,
+        "fields": [
+            {"key": "host", "label": "FTP host", "kind": "text", "default": ""},
+            {"key": "port", "label": "Port", "kind": "number", "default": 21},
+            {"key": "username", "label": "Username (optional, default: anonymous)", "kind": "text", "default": ""},
+            {"key": "password", "label": "Password (optional)", "kind": "password", "default": ""},
+            {"key": "path", "label": "Remote path to check", "kind": "text", "default": ""},
+            {"key": "min_entries", "label": "Minimum entries expected", "kind": "number", "default": 1},
+            {"key": "use_tls", "label": "Use FTPS (TLS)", "kind": "checkbox", "default": False},
+        ],
+    },
 ]
 
 

@@ -10,7 +10,7 @@ of what's healthy, what's degraded, and why.
 - Polls each service on its own schedule (default every 5 minutes, configurable globally, per-service, and per-check).
 - Local and remote addresses: give a service either address, or both. With both set, the Web UI check runs against each (so you know if the reverse-proxied path breaks even when the app itself is fine on the LAN); every other check runs against local only, to avoid needlessly doubling up API-heavy checks - opt into running everything against both with a per-service toggle. See "Adding a service" below.
 - Built-in checks: HTTP 200 web UI reachability, *arr-family API status, root-folder accessibility **and population** (drive/mount detection - see below), each app's own system health feed, and for Plex, Remote Access status.
-- Fully configurable: add your own checks per service (custom HTTP path/status/keyword checks, or a filesystem existence check).
+- Fully configurable: add your own checks per service (custom HTTP path/status/keyword checks, a filesystem or FTP existence check, or torrent-client free disk space).
 - Consolidates the *arr apps' own "System > Status" health notifications (indexer down, missing files, low disk space, etc.) into one Notifications tab, with automatic resolve-tracking.
 - A second, restricted read-only dashboard on its own port - no settings, no API keys, nothing mutable - safe to expose externally. See "Public dashboard" below.
 - Real app icons (not emoji), and a version/build date in the header so you can tell at a glance whether you're running the image you think you are.
@@ -144,13 +144,13 @@ poll interval override (see below).
 | Plex | Web UI (`/web/index.html`), `/identity` liveness, Remote Access status (plex.tv + plex.direct reachability), library/path checks via API (see "Scanning libraries automatically") |
 | Jellyfin | Web UI, `/health` endpoint, library/path checks via API (admin key required - see below) |
 | Chaptarr | Web UI only for now - I couldn't verify its API shape, so it isn't assumed to be Servarr-compatible. Add `http_200`/`keyword_match` custom checks as needed; let me know if it does follow the Servarr API and I'll wire up full support. |
-| qBittorrent | Web UI + real login verification (Username/Password against the WebUI API) |
-| Deluge | Web UI + real login verification (Password only) |
-| rTorrent | Web UI, pointed at whatever fronts it - rTorrent itself has no HTTP UI, so this is really monitoring its usual **ruTorrent** frontend (hence the ruTorrent icon). Username/Password apply as HTTP Basic Auth. |
+| qBittorrent | Web UI + real login verification (Username/Password against the WebUI API) + free disk space via API |
+| Deluge | Web UI + real login verification (Password only) + free disk space via API |
+| rTorrent | Web UI, pointed at whatever fronts it - rTorrent itself has no HTTP UI, so this is really monitoring its usual **ruTorrent** frontend (hence the ruTorrent icon). Username/Password apply as HTTP Basic Auth. Also speaks its XML-RPC interface directly for a reachability check - see "rTorrent's XML-RPC endpoint" below. |
 | Generic | Web UI checks only - for anything else |
 
-Any service (regardless of type) can also have `filesystem_path` or
-`keyword_match` checks added manually.
+Any service (regardless of type) can also have `filesystem_path`,
+`keyword_match`, or `ftp_path` checks added manually.
 
 ## Scanning libraries automatically
 
@@ -180,6 +180,44 @@ a library): it skips any path that already has a check.
 | `jellyfin_filesystem_path` | Jellyfin | Checks a path exists and is non-empty via Jellyfin's `/Environment/DirectoryContents` API - no volume mount needed. Needs an administrator API key. |
 | `qbittorrent_login` | qBittorrent | Confirms the configured Username/Password actually logs in via the WebUI API; a no-op OK if neither is set |
 | `deluge_login` | Deluge | Confirms the configured Password actually logs in via the WebUI JSON-RPC API; a no-op OK if not set |
+| `qbittorrent_disk_space` | qBittorrent | Free space on qBittorrent's default save path via its WebUI API - see "Torrent client disk space" below |
+| `deluge_disk_space` | Deluge | Free space at a path (default: Deluge's own download location) via its JSON-RPC API - see "Torrent client disk space" below |
+| `rtorrent_rpc_status` | rTorrent | Confirms rTorrent's XML-RPC interface is reachable at a configured URL Path - see "rTorrent's XML-RPC endpoint" below |
+| `ftp_path` | any | Checks a path exists and has a minimum number of entries, like `filesystem_path`, but over FTP/FTPS against its own host/port/credentials instead of a bind mount |
+
+### Torrent client disk space
+
+qBittorrent and Deluge both added as default checks on new services. Both
+APIs report how much space is *free*, but not the disk's *total* capacity,
+so there's nothing to compute a percentage against until you tell the check
+what the disk's total size is:
+
+- **Total disk size (GB)** - optional. Leave it blank and the check just
+  reports the free space with no threshold applied (still useful at a
+  glance). Fill it in once (it rarely changes) and the check switches to
+  percentage-based thresholds:
+- **Warn below % free** (default 10) / **Fail below % free** (default 3) -
+  both adjustable per check in the Add/Edit check panel.
+
+rTorrent has no equivalent - its XML-RPC interface has no disk-space method,
+unlike qBittorrent/Deluge's own APIs, so no disk-space check is offered for
+it.
+
+### rTorrent's XML-RPC endpoint
+
+rTorrent has no web UI or REST API of its own - `rtorrent_rpc_status` (added
+as a default check on new rTorrent services) speaks its XML-RPC interface
+directly instead, the same protocol its usual **ruTorrent** frontend uses
+under the hood. The **URL Path** to that endpoint varies by setup and can't
+be auto-detected, so it's worth checking if this fails with a 404:
+
+- Plain `/RPC2` (the default) for a bare XML-RPC-over-HTTP bridge.
+- Something under ruTorrent's plugins directory when fronted by it -
+  commonly `/rutorrent/plugins/httprpc/action.php` for the httprpc plugin,
+  or `[path to ruTorrent]/plugins/rpc/rpc.php` for older setups.
+
+Uses the service's Username/Password as HTTP Basic Auth, same as its Web UI
+check.
 
 ### Per-check poll interval
 

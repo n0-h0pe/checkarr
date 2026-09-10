@@ -707,6 +707,16 @@ function renderDynamicFields(svc, checkType, existingConfig = {}) {
     if (value === undefined || value === null) value = f.default ?? "";
 
     const label = f.label.replace("{service}", svc.type);
+
+    if (f.kind === "checkbox") {
+      const input = el("input", { type: "checkbox", id: `chk-field-${f.key}` });
+      input.checked = !!value;
+      container.appendChild(
+        el("div", { class: "field checkbox" }, [input, el("label", { for: `chk-field-${f.key}`, text: label })])
+      );
+      continue;
+    }
+
     const fieldWrap = el("div", { class: "field" }, [el("label", { text: label })]);
     let input;
     if (f.kind === "select") {
@@ -715,6 +725,8 @@ function renderDynamicFields(svc, checkType, existingConfig = {}) {
       input.value = value;
     } else if (f.kind === "number") {
       input = el("input", { type: "number", id: `chk-field-${f.key}`, value: value });
+    } else if (f.kind === "password") {
+      input = el("input", { type: "password", id: `chk-field-${f.key}`, value: value, autocomplete: "new-password" });
     } else {
       input = el("input", { type: "text", id: `chk-field-${f.key}`, value: value });
     }
@@ -752,6 +764,21 @@ function renderDynamicFields(svc, checkType, existingConfig = {}) {
       el("div", { class: "field hint", text: "Verifies the Username/Password (or just Password for Deluge) configured above actually logs in. Reports OK without checking anything if no credentials are set." })
     );
   }
+  if (checkType === "qbittorrent_disk_space" || checkType === "deluge_disk_space") {
+    container.appendChild(
+      el("div", { class: "field hint", text: "The API only reports how much space is free, not the disk's total size, so there's nothing to compute a percentage against until you fill in 'Total disk size' - leave it blank to just see the free space reported with no threshold applied." })
+    );
+  }
+  if (checkType === "rtorrent_rpc_status") {
+    container.appendChild(
+      el("div", { class: "field hint", text: "rTorrent has no web UI or API of its own - this speaks its XML-RPC interface directly, so the path varies by setup: plain /RPC2 for a bare XML-RPC-over-HTTP bridge, or something under ruTorrent's plugins directory when fronted by it - commonly /rutorrent/plugins/httprpc/action.php for the httprpc plugin, or [path to ruTorrent]/plugins/rpc/rpc.php for older setups. If this fails with a 404, that's almost always the fix. Uses the Username/Password above as HTTP Basic Auth, same as the Web UI check." })
+    );
+  }
+  if (checkType === "ftp_path") {
+    container.appendChild(
+      el("div", { class: "field hint", text: "Connects to its own FTP host/port/credentials above, independent of this service's local/remote address - for a NAS or share exposed over FTP rather than one bind-mounted into this container. Same existence/population check as the filesystem path check, just reached over FTP." })
+    );
+  }
 }
 
 async function submitCheckForm(ev) {
@@ -770,6 +797,8 @@ async function submitCheckForm(ev) {
       config[f.key] = val.split(",").map((s) => parseInt(s.trim(), 10)).filter((n) => !isNaN(n));
     } else if (f.kind === "number") {
       config[f.key] = val === "" ? null : Number(val);
+    } else if (f.kind === "checkbox") {
+      config[f.key] = input.checked;
     } else {
       config[f.key] = val;
     }

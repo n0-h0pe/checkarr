@@ -32,6 +32,10 @@ CHECK_TYPES = [
     "jellyfin_filesystem_path",
     "qbittorrent_login",
     "deluge_login",
+    "qbittorrent_disk_space",
+    "deluge_disk_space",
+    "rtorrent_rpc_status",
+    "ftp_path",
 ]
 
 
