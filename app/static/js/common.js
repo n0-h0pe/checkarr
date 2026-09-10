@@ -75,6 +75,32 @@ function statusLabel(s) {
   return { ok: "OK", warn: "Warning", fail: "Failing", unknown: "Unknown", disabled: "Disabled" }[s] || s;
 }
 
+// A short (a handful of characters) stand-in for a check's full message, for
+// screens too narrow to show both a check's name and its full message on
+// one line (see .msg-short/.msg-full in style.css) - a quick pattern match
+// against common message shapes rather than a real per-check-type summary,
+// so it degrades to just the plain status word for anything it doesn't
+// recognize instead of guessing wrong.
+function shortCheckSummary(checkType, status, message) {
+  const label = { ok: "OK", warn: "Warn", fail: "Fail", unknown: "?", disabled: "Off" }[status] || status;
+  const msg = message || "";
+
+  const httpMatch = msg.match(/HTTP (\d{3})/);
+  if (httpMatch) return `${httpMatch[1]} ${label}`;
+
+  if (/disk_space/.test(checkType)) {
+    const pctMatch = msg.match(/([\d.]+)%\s+(?:free|of)/);
+    if (pctMatch) return `${pctMatch[1]}% free`;
+  }
+  if (/filesystem|root_folder|ftp_path/.test(checkType)) return `Files ${label}`;
+  if (/login/.test(checkType)) return `Login ${label}`;
+  if (/rpc_status/.test(checkType)) return `RPC ${label}`;
+  if (/tmdb_status/.test(checkType)) return `TMDB ${label}`;
+  if (/remote_access/.test(checkType)) return `Remote ${label}`;
+  if (/health/.test(checkType)) return `Health ${label}`;
+  return label;
+}
+
 function iconUrlFor(type) {
   const icons = state.meta && state.meta.service_type_icons;
   if (!icons) return "";
@@ -164,7 +190,13 @@ function computeCardLayout(statuses) {
   const entries = statuses.map((s) => {
     const id = s.service.id;
     const saved = sizes[String(id)];
-    const w = saved && Number.isFinite(saved.w) ? Math.max(MIN_CARD_W, saved.w) : DEFAULT_CARD_W;
+    // Clamped to totalCols (never below MIN_CARD_W, since totalCols itself
+    // never is) so a card widened on a big desktop window can't render
+    // wider than the actual screen on a narrow one - display-only, like the
+    // reflow above, so the saved width still comes back on a wide-enough
+    // screen untouched.
+    const savedW = saved && Number.isFinite(saved.w) ? Math.max(MIN_CARD_W, saved.w) : DEFAULT_CARD_W;
+    const w = Math.min(savedW, totalCols);
     const h = saved && Number.isFinite(saved.h) ? Math.max(MIN_CARD_H, saved.h) : DEFAULT_CARD_H;
     const hasPos = saved && Number.isFinite(saved.x) && Number.isFinite(saved.y);
     return {
@@ -254,8 +286,13 @@ function renderServiceCard(s, opts = {}, pos, positions) {
       ]),
     ])
   );
+  // Everything between the header and the action buttons lives in its own
+  // wrapper - it's what the mobile reorder overlay below covers/blurs, and
+  // keeping it separate from card-actions means Run now/History stay
+  // usable even while that overlay is up.
+  const body = el("div", { class: "card-body" });
   const addressLabel = [svc.local_url, svc.remote_url].filter(Boolean).join(" / ");
-  card.appendChild(
+  body.appendChild(
     el("div", { class: "card-sub" }, [
       `${svc.type} · ${addressLabel} · last checked ${relTime(s.last_checked)}`,
       s.active_notification_count > 0 ? el("span", { style: "color:var(--warn)" }, ` · ${s.active_notification_count} notification(s)`) : null,
@@ -263,7 +300,7 @@ function renderServiceCard(s, opts = {}, pos, positions) {
   );
 
   const strip = el("div", { class: "uptime-strip", id: `strip-${svc.id}` });
-  card.appendChild(strip);
+  body.appendChild(strip);
 
   const checksBox = el("div", { class: "card-checks" });
   for (const r of s.latest_results) {
@@ -273,14 +310,18 @@ function renderServiceCard(s, opts = {}, pos, positions) {
           el("span", { class: `dot ${r.status}` }),
           el("span", { class: "label", text: r.check_name }),
         ]),
-        el("div", { class: "msg", title: r.message, text: r.message }),
+        el("div", { class: "msg", title: r.message }, [
+          el("span", { class: "msg-full", text: r.message }),
+          el("span", { class: "msg-short", text: shortCheckSummary(r.check_type, r.status, r.message) }),
+        ]),
       ])
     );
   }
   if (s.latest_results.length === 0) {
     checksBox.appendChild(el("div", { class: "check-row" }, [el("span", { class: "text-dim", text: "No results yet" })]));
   }
-  card.appendChild(checksBox);
+  body.appendChild(checksBox);
+  card.appendChild(body);
 
   if (opts.interactive) {
     card.appendChild(
@@ -292,11 +333,92 @@ function renderServiceCard(s, opts = {}, pos, positions) {
   }
   if (opts.editable) {
     card.classList.add("card-editable");
-    attachResizeHandle(card, svc.id, pos, opts.onLayoutChange);
-    attachMoveHandle(card, svc.id, pos, positions, opts.onLayoutChange);
+    if (isMobileViewport()) {
+      attachMobileReorderControls(body, svc.id, positions, opts.onLayoutChange);
+    } else {
+      attachResizeHandle(card, svc.id, pos, opts.onLayoutChange);
+      attachMoveHandle(card, svc.id, pos, positions, opts.onLayoutChange);
+    }
   }
 
   return card;
+}
+
+// Below ~700px (same breakpoint as the CSS), there's only ever one card per
+// row anyway - free-form drag-to-move/resize stops being a meaningful
+// interaction (there's nowhere else on the row to drag to) and is fiddly on
+// a touchscreen besides, so edit mode switches to plain list reordering
+// instead. Matches the `main { max-width: 700px }`-ish breakpoint in
+// style.css, not a coincidence - keep them in sync if either changes.
+function isMobileViewport() {
+  return window.matchMedia("(max-width: 700px)").matches;
+}
+
+const REORDER_ICONS = {
+  top: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="5" x2="20" y2="5"/><polyline points="6,13 12,8 18,13"/><polyline points="6,19 12,14 18,19"/></svg>',
+  up: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6,15 12,9 18,15"/></svg>',
+  down: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6,9 12,15 18,9"/></svg>',
+  bottom: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="19" x2="20" y2="19"/><polyline points="6,11 12,16 18,11"/><polyline points="6,5 12,10 18,5"/></svg>',
+};
+
+function attachMobileReorderControls(cardBody, serviceId, positions, onLayoutChange) {
+  const overlay = el("div", { class: "card-reorder-overlay" });
+  const buttons = [
+    ["top", "Move to top"],
+    ["up", "Move up"],
+    ["down", "Move down"],
+    ["bottom", "Move to bottom"],
+  ];
+  for (const [action, title] of buttons) {
+    const btn = el("button", { type: "button", class: "reorder-btn", title });
+    btn.innerHTML = REORDER_ICONS[action];
+    btn.addEventListener("click", () => reorderCardMobile(serviceId, action, positions, onLayoutChange));
+    overlay.appendChild(btn);
+  }
+  cardBody.appendChild(overlay);
+}
+
+// Reorders by treating the dashboard as a plain top-to-bottom list (true on
+// mobile, where every card is already full-width): renumbers every card's Y
+// to match the new order, stacking each on the last one's bottom edge, and
+// forces every card to the same full width - "a list", not a freeform grid.
+// Saved through the same onLayoutChange/persistCardLayout path a desktop
+// drag uses, so it also stamps `columns` to the current (mobile) width,
+// same as any other edit - see computeCardLayout's big comment for why.
+function reorderCardMobile(serviceId, action, positions, onLayoutChange) {
+  const orderedIds = Array.from(positions.entries())
+    .sort((a, b) => a[1].y - b[1].y)
+    .map(([id]) => id);
+
+  const idx = orderedIds.indexOf(serviceId);
+  let newIdx = idx;
+  if (action === "top") newIdx = 0;
+  else if (action === "up") newIdx = Math.max(0, idx - 1);
+  else if (action === "down") newIdx = Math.min(orderedIds.length - 1, idx + 1);
+  else if (action === "bottom") newIdx = orderedIds.length - 1;
+  if (newIdx === idx) return;
+
+  orderedIds.splice(idx, 1);
+  orderedIds.splice(newIdx, 0, serviceId);
+
+  const totalCols = Number.isFinite(state.lastGridColumns) ? state.lastGridColumns : MIN_CARD_W;
+  const updates = [];
+  let y = 1;
+  for (const id of orderedIds) {
+    const p = positions.get(id);
+    p.x = 1;
+    p.y = y;
+    p.w = totalCols;
+    y += p.h;
+    updates.push({ id, patch: { x: p.x, y: p.y, w: p.w } });
+
+    const cardEl = $(`.card[data-service-id="${id}"]`);
+    if (cardEl) {
+      cardEl.style.gridColumn = `${p.x} / span ${p.w}`;
+      cardEl.style.gridRow = `${p.y} / span ${p.h}`;
+    }
+  }
+  onLayoutChange && onLayoutChange(updates);
 }
 
 // `onLayoutChange`, shared by both drag handlers below, always receives an

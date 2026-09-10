@@ -901,7 +901,15 @@ async function init() {
   $("#layout-delete-btn").addEventListener("click", deleteActiveLayout);
 
   let resizeTimer = null;
+  let lastViewportWidth = window.innerWidth;
   window.addEventListener("resize", () => {
+    // innerWidth only, not innerHeight - on mobile, scrolling shows/hides
+    // the browser's address bar, which changes innerHeight and fires this
+    // same event on every scroll. Reacting to that rebuilds the whole grid
+    // mid-scroll, which is what was causing the page to jump back to the
+    // top - nothing about the available column width actually changed.
+    if (window.innerWidth === lastViewportWidth) return;
+    lastViewportWidth = window.innerWidth;
     if (state.tab !== "dashboard" || layoutEditMode) return;
     clearTimeout(resizeTimer);
     resizeTimer = setTimeout(loadDashboardAdmin, 200);

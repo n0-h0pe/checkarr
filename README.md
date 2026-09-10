@@ -18,7 +18,7 @@ shows one consolidated view of what's healthy, what's degraded, and why.
 - For Plex, a "Sign in to Plex" button fills in the X-Plex-Token for you via Plex's own sign-in flow - no copying tokens out of your browser's dev tools.
 - Quick-edit controls on every check's row in Settings (Enabled, and for Plex/Jellyfin path checks, the empty-path severity and minimum-entries count) - no need to open Edit for a one-field change. These stage locally with an obvious "unsaved changes" banner and explicit Save/Discard, so a stray click can't silently change what's being monitored.
 - An "Edit layout" mode for the dashboard: drag cards anywhere and resize them from the corner, snapped to an invisible grid, saved as named/switchable layouts that adapt to how wide your window is. See "Dashboard layouts" below.
-- A responsive layout on every page - the dashboard, Settings, History, and Notifications all adapt down to a phone-width screen, admin and public alike.
+- A responsive layout on every page - the dashboard, Settings, History, and Notifications all adapt down to a phone-width screen, admin and public alike. On a card too narrow to show a check's full result message, that message shortens to something like "200 OK" or "Files OK" instead of just clipping mid-sentence.
 - API keys are encrypted at rest (Fernet/AES) and never echoed back to the browser.
 - Historic results stored in SQLite, with a History tab and per-service uptime strip on the dashboard.
 - Single Docker container: web GUI + API + scheduler + database, no external dependencies.
@@ -326,6 +326,14 @@ While editing:
   the default 16x10 grid-unit size. If a card ends up shorter than its check
   list needs, the checks inside it scroll independently while the card's
   header and buttons stay put.
+
+On a phone-width screen, editing looks different: there's only ever one
+card per row there anyway, so free-form drag-and-drop gives way to plain
+list reordering. Each card shows **Move to top / up / down / to bottom**
+buttons over its (blurred) check list instead of a drag handle - no
+resizing, just reordering the list. This still saves through the exact
+same mechanism as a desktop drag, so it also remembers it was edited at a
+phone-sized width, the same as any other edit does (see below).
 
 The dashboard isn't limited to three cards per row - it uses the full width
 of the browser window, so how many fit side by side just depends on their

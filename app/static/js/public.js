@@ -9,7 +9,12 @@ async function init() {
     loadDashboard(); // interactive/editable default to falsy - no Run now, no drag/resize
     setInterval(loadDashboard, 30000);
     let resizeTimer = null;
+    let lastViewportWidth = window.innerWidth;
     window.addEventListener("resize", () => {
+      // innerWidth only - see the matching comment in app.js's resize
+      // listener for why (mobile address-bar show/hide on scroll).
+      if (window.innerWidth === lastViewportWidth) return;
+      lastViewportWidth = window.innerWidth;
       clearTimeout(resizeTimer);
       resizeTimer = setTimeout(loadDashboard, 200);
     });

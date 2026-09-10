@@ -174,11 +174,51 @@ body.wide-main main { max-width: none; }
   outline-color: var(--accent);
 }
 
+/* Mobile edit mode: plain list reordering instead of free-form drag (see
+   isMobileViewport/attachMobileReorderControls in common.js) - covers just
+   .card-body (sub-line/uptime/checks), blurring it, with big Move to top/
+   up/down/bottom buttons on top. Only ever created by JS on a narrow
+   screen, so this isn't gated behind the mobile media query itself. */
+.card-reorder-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: rgba(15, 20, 25, .6);
+  backdrop-filter: blur(5px);
+  -webkit-backdrop-filter: blur(5px);
+  border-radius: var(--radius);
+  z-index: 6;
+}
+.reorder-btn {
+  width: 46px;
+  height: 46px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--bg-panel-alt);
+  border: 1px solid var(--border);
+  color: var(--text);
+}
+.reorder-btn:active { background: var(--accent); border-color: var(--accent); }
+
 .card-header {
   display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; flex: 0 0 auto;
 }
 .card-header .title { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 15px; min-width: 0; }
 .card-header .title span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Everything between the header and the action buttons (sub-line, uptime
+   strip, check list) - kept in its own flex-column wrapper, rather than
+   those being direct children of .card, so the mobile reorder overlay
+   below has exactly this region to cover/blur without touching the header
+   (still shows which card is which) or Run now/History (stay clickable). */
+.card-body { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; position: relative; }
+
 .card-sub { color: var(--text-dim); font-size: 12px; margin-bottom: 10px; flex: 0 0 auto; }
 
 .uptime-strip { display: flex; gap: 2px; margin: 10px 0; flex: 0 0 auto; }
@@ -199,6 +239,10 @@ body.wide-main main { max-width: none; }
 .check-row .name { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .check-row .name .label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .check-row .msg { color: var(--text-dim); font-size: 12px; flex: 1; text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* .msg-short is the abbreviated form ("200 OK", "Files OK") swapped in on
+   narrow screens - see the mobile block below - there's no room there for
+   both a check's name and its full message on one line. */
+.msg-short { display: none; }
 
 .card-actions { display: flex; gap: 8px; margin-top: 12px; flex: 0 0 auto; }
 
@@ -391,6 +435,18 @@ table th { color: var(--text-dim); font-weight: 600; font-size: 12px; text-trans
   .card { padding: 12px; margin: 5px; }
   .card-header .title { font-size: 14px; }
   .resize-handle { width: 30px; height: 30px; }
+
+  /* A check's name and its result compete for the same line here more than
+     anywhere else - swap the full message for a short stand-in (see
+     shortCheckSummary in common.js), and fade a too-long name into the
+     background instead of a hard ellipsis cut, since it's now butting up
+     against that short result rather than trailing off into empty space. */
+  .msg-full { display: none; }
+  .msg-short { display: inline; }
+  .check-row .name .label {
+    -webkit-mask-image: linear-gradient(to right, black 65%, transparent 100%);
+    mask-image: linear-gradient(to right, black 65%, transparent 100%);
+  }
 
   .panel { padding: 12px; }
   .panel-header { flex-wrap: wrap; gap: 8px; }
