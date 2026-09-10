@@ -9,6 +9,7 @@ def serialize_service(service: models.Service) -> schemas.ServiceOut:
         local_url=service.local_url,
         remote_url=service.remote_url,
         check_both_targets=bool(service.check_both_targets),
+        username=service.username,
         verify_ssl=service.verify_ssl,
         enabled=service.enabled,
         poll_interval_seconds=service.poll_interval_seconds,

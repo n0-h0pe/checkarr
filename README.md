@@ -14,6 +14,8 @@ of what's healthy, what's degraded, and why.
 - Consolidates the *arr apps' own "System > Status" health notifications (indexer down, missing files, low disk space, etc.) into one Notifications tab, with automatic resolve-tracking.
 - A second, restricted read-only dashboard on its own port - no settings, no API keys, nothing mutable - safe to expose externally. See "Public dashboard" below.
 - Real app icons (not emoji), and a version/build date in the header so you can tell at a glance whether you're running the image you think you are.
+- "Test connection" button in the Add/Edit service form - a quick green ✓/red ✕ per address before you even save, plus autofilled Name and a type-appropriate default port in the address placeholder when you pick a service type.
+- For Plex, a "Sign in to Plex" button fills in the X-Plex-Token for you via Plex's own sign-in flow - no copying tokens out of your browser's dev tools.
 - API keys are encrypted at rest (Fernet/AES) and never echoed back to the browser.
 - Historic results stored in SQLite, with a History tab and per-service uptime strip on the dashboard.
 - Single Docker container: web GUI + API + scheduler + database, no external dependencies.
@@ -82,8 +84,12 @@ ways to catch this are supported:
 
 ## Adding a service
 
-Settings tab -> "Add service". Pick a type (see "Supported services" below),
-and set a **local address**, a **remote address**, or both:
+Settings tab -> "Add service". Pick a type (see "Supported services" below) -
+this autofills the Name field and updates the Local address placeholder with
+that app's usual default port, and switches the credential field(s) to match
+(see below). Set a **local address**, a **remote address**, or both, then hit
+**"Test connection"** for an immediate green ✓/red ✕ per address before you
+even save:
 
 - **Local address** - direct/LAN URL (e.g. `http://radarr:7878`).
 - **Remote address** - public/reverse-proxied URL, if you have one (e.g.
@@ -102,29 +108,57 @@ below applies. With **both** set:
   both addresses instead, each shown as its own row on the dashboard and in
   history.
 
-Add an API key (Radarr/Sonarr/Lidarr/Whisparr/Prowlarr: Settings > General >
-API Key; Plex: your X-Plex-Token; Jellyfin: an API key from Dashboard > API
-Keys - only needed for authenticated checks). A sensible set of default
-checks is created automatically based on the type - add more from the
-service's expanded row, each with its own optional poll interval override
-(see below).
+### Credentials
+
+The credential field(s) shown change based on the service type:
+
+- **Radarr/Sonarr/Lidarr/Whisparr/Prowlarr/Jellyfin/Chaptarr/Generic** - a
+  single **API key** field (Settings > General > API Key for the *arr apps;
+  Jellyfin: Dashboard > API Keys). Only needed for authenticated checks.
+- **Plex** - the field is labeled **X-Plex-Token**. Click **"Sign in to
+  Plex"** next to it to get one without copying it out of your browser's dev
+  tools: it opens Plex's own sign-in page in a popup, and once you authorize
+  there the token is filled in automatically.
+- **qBittorrent** - **Username** + **Password**, verified against the WebUI's
+  real login API. Leave both blank if that instance has authentication
+  disabled.
+- **Deluge** - **Password** only (Deluge's WebUI has no username), same
+  real-login verification. Leave blank if disabled.
+- **rTorrent** - **Username** + **Password**, sent as HTTP Basic Auth on the
+  web UI check (rTorrent itself has no API; this covers a ruTorrent frontend
+  sitting behind htaccess-style auth). Leave blank if there's none.
+
+A sensible set of default checks is created automatically based on the
+type - add more from the service's expanded row, each with its own optional
+poll interval override (see below).
 
 ## Supported services
 
 | Type | Integration depth |
 |---|---|
-| Radarr, Sonarr | Full: web UI, API status, root-folder accessibility + population, health/notifications feed |
+| Radarr, Sonarr | Full: web UI, API status, root-folder accessibility + population, health/notifications feed, ad-hoc path checks via API |
 | Lidarr, Whisparr | Same as Radarr/Sonarr - both are Servarr-family apps with the same API shape (Lidarr on API v1, Whisparr on v3) |
 | Prowlarr | Web UI, API status, health/notifications feed (no root folders to check) |
-| Plex | Web UI, `/identity` liveness, Remote Access status (plex.tv + plex.direct reachability) |
-| Jellyfin | Web UI, `/health` endpoint |
+| Plex | Web UI (`/web/index.html`), `/identity` liveness, Remote Access status (plex.tv + plex.direct reachability), library/path checks via API (see "Scanning libraries automatically") |
+| Jellyfin | Web UI, `/health` endpoint, library/path checks via API (admin key required - see below) |
 | Chaptarr | Web UI only for now - I couldn't verify its API shape, so it isn't assumed to be Servarr-compatible. Add `http_200`/`keyword_match` custom checks as needed; let me know if it does follow the Servarr API and I'll wire up full support. |
-| qBittorrent, Deluge | Web UI only for now - both need session/cookie-based login rather than a simple API key, which isn't implemented yet. Set an address and use custom `http_200`/`keyword_match` checks in the meantime. |
-| rTorrent | Web UI only, pointed at whatever fronts it - rTorrent itself has no HTTP UI, so this is really monitoring its usual **ruTorrent** frontend (hence the ruTorrent icon) |
+| qBittorrent | Web UI + real login verification (Username/Password against the WebUI API) |
+| Deluge | Web UI + real login verification (Password only) |
+| rTorrent | Web UI, pointed at whatever fronts it - rTorrent itself has no HTTP UI, so this is really monitoring its usual **ruTorrent** frontend (hence the ruTorrent icon). Username/Password apply as HTTP Basic Auth. |
 | Generic | Web UI checks only - for anything else |
 
 Any service (regardless of type) can also have `filesystem_path` or
 `keyword_match` checks added manually.
+
+## Scanning libraries automatically
+
+For Plex and Jellyfin, instead of typing out `arr_filesystem_path`-style
+checks by hand for every library, click **"Scan libraries"** on the
+service's expanded row in Settings. It asks the service itself (via the same
+browse APIs as the checks below) what libraries and folders it has
+configured, and adds one filesystem check per folder automatically - no
+guessing paths, no bind mounts. Safe to click again later (e.g. after adding
+a library): it skips any path that already has a check.
 
 ## Available check types
 
@@ -139,7 +173,11 @@ Any service (regardless of type) can also have `filesystem_path` or
 | `arr_health` | Radarr/Sonarr/Lidarr/Whisparr/Prowlarr | Pulls the app's own health/notifications feed into this dashboard |
 | `plex_identity` | Plex | Hits Plex's unauthenticated `/identity` endpoint |
 | `plex_remote_access` | Plex | Checks plex.tv for this server's registered connections and actually tries to reach its public `plex.direct` address; reports OK (direct), degraded (relay-only), or failing (nothing registered). Needs the Plex token and outbound internet access. Polled every 10 minutes by default (see below) since it depends on an external API. |
+| `plex_filesystem_path` | Plex | Checks a path exists and is non-empty via Plex's own folder-browse API (the same one its "Add Library" picker uses) - no volume mount needed |
 | `jellyfin_health` | Jellyfin | Hits Jellyfin's `/health` endpoint |
+| `jellyfin_filesystem_path` | Jellyfin | Checks a path exists and is non-empty via Jellyfin's `/Environment/DirectoryContents` API - no volume mount needed. Needs an administrator API key. |
+| `qbittorrent_login` | qBittorrent | Confirms the configured Username/Password actually logs in via the WebUI API; a no-op OK if neither is set |
+| `deluge_login` | Deluge | Confirms the configured Password actually logs in via the WebUI JSON-RPC API; a no-op OK if not set |
 
 ### Per-check poll interval
 
@@ -184,6 +222,10 @@ entirely (then you don't need to publish port 8090 either).
   "Public dashboard" above.
 - Filesystem checks only ever read paths you've explicitly bind-mounted
   read-only; the container does not need write access to your media.
+- "Sign in to Plex" never sees your Plex password - it uses Plex's standard
+  PIN-based sign-in flow (the same mechanism apps like Overseerr use): this
+  app only ever receives the resulting token, via a popup hosted on plex.tv
+  itself.
 
 ## Upgrading
 

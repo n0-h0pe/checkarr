@@ -27,7 +27,11 @@ CHECK_TYPES = [
     "arr_filesystem_path",
     "plex_identity",
     "plex_remote_access",
+    "plex_filesystem_path",
     "jellyfin_health",
+    "jellyfin_filesystem_path",
+    "qbittorrent_login",
+    "deluge_login",
 ]
 
 
@@ -65,6 +69,7 @@ class ServiceBase(BaseModel):
     local_url: str | None = None
     remote_url: str | None = None
     check_both_targets: bool = False
+    username: str | None = None
     verify_ssl: bool = True
     enabled: bool = True
     poll_interval_seconds: int | None = None
@@ -88,6 +93,7 @@ class ServiceUpdate(BaseModel):
     clear_local_url: bool = False
     clear_remote_url: bool = False
     check_both_targets: bool | None = None
+    username: str | None = None
     api_key: str | None = None
     clear_api_key: bool = False
     verify_ssl: bool | None = None
@@ -138,3 +144,36 @@ class ServiceStatusOut(BaseModel):
     last_checked: datetime | None
     latest_results: list[CheckResultOut]
     active_notification_count: int
+
+
+class ConnectionTestRequest(BaseModel):
+    type: str
+    local_url: str | None = None
+    remote_url: str | None = None
+    api_key: str | None = None
+    username: str | None = None
+
+
+class ConnectionTestResult(BaseModel):
+    ok: bool
+    message: str
+
+
+class ConnectionTestResponse(BaseModel):
+    local: ConnectionTestResult | None = None
+    remote: ConnectionTestResult | None = None
+
+
+class PlexAuthStartResponse(BaseModel):
+    pin_id: int
+    code: str
+    auth_url: str
+
+
+class PlexAuthPollResponse(BaseModel):
+    token: str | None = None
+
+
+class LibraryScanResponse(BaseModel):
+    checks_created: list[CheckDefinitionOut]
+    paths_found: int

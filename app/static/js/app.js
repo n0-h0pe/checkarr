@@ -79,10 +79,24 @@ function renderServiceRow(svc) {
 
 function renderChecksPanel(svc) {
   const panel = el("div", { class: "checks-subpanel" });
+  const actions = [el("button", { class: "small primary", onclick: () => openCheckModal(svc) }, "+ Add check")];
+  if (svc.type === "plex" || svc.type === "jellyfin") {
+    actions.unshift(
+      el(
+        "button",
+        {
+          class: "small",
+          title: "Fetches this service's configured library folders and adds a filesystem check for each",
+          onclick: () => scanLibraries(svc),
+        },
+        "Scan libraries"
+      )
+    );
+  }
   panel.appendChild(
     el("div", { style: "display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;" }, [
       el("strong", { text: "Checks" }),
-      el("button", { class: "small primary", onclick: () => openCheckModal(svc) }, "+ Add check"),
+      el("div", { style: "display:flex; gap:6px;" }, actions),
     ])
   );
   if (svc.checks.length === 0) {
@@ -128,7 +142,63 @@ async function deleteCheck(svc, check) {
   }
 }
 
+async function scanLibraries(svc) {
+  let result;
+  try {
+    result = await api(`/api/services/${svc.id}/scan-libraries`, { method: "POST" });
+  } catch (e) {
+    toast("Library scan failed: " + e.message, true);
+    return;
+  }
+  if (result.checks_created.length === 0) {
+    toast(result.paths_found === 0 ? "No libraries found" : "All library paths already have a check");
+  } else {
+    toast(`Added ${result.checks_created.length} library check(s)`);
+  }
+  loadSettings();
+}
+
 // ---------- service modal ----------
+
+const CREDENTIAL_MODES = {
+  plex: { keyLabel: "X-Plex-Token", showUsername: false, showPlexSignin: true },
+  qbittorrent: { keyLabel: "Password", showUsername: true, showPlexSignin: false },
+  rtorrent: { keyLabel: "Password", showUsername: true, showPlexSignin: false },
+  deluge: { keyLabel: "Password", showUsername: true, showPlexSignin: false },
+};
+
+function credentialModeFor(type) {
+  return CREDENTIAL_MODES[type] || { keyLabel: "API key", showUsername: false, showPlexSignin: false };
+}
+
+function updateCredentialFieldsForType(type) {
+  const mode = credentialModeFor(type);
+  $("#svc-key-label").childNodes[0].textContent = mode.keyLabel + " ";
+  $("#svc-username-field").hidden = !mode.showUsername;
+  $("#svc-plex-signin").hidden = !mode.showPlexSignin;
+}
+
+function applyServiceTypeDefaults(type, { autofillName } = {}) {
+  const defaults = (state.meta.service_type_defaults && state.meta.service_type_defaults[type]) || {};
+  const nameInput = $("#svc-name");
+  const prevAutofill = nameInput.dataset.autofillValue || "";
+  if (autofillName && (nameInput.value === "" || nameInput.value === prevAutofill)) {
+    nameInput.value = defaults.name || "";
+  }
+  nameInput.dataset.autofillValue = defaults.name || "";
+
+  const localInput = $("#svc-local-url");
+  localInput.placeholder = defaults.port ? `http://${type}:${defaults.port}` : `http://${type}`;
+}
+
+function resetConnStatus() {
+  for (const which of ["local", "remote"]) {
+    const node = $(`#svc-${which}-status`);
+    node.className = "conn-status";
+    node.textContent = "";
+    node.title = "";
+  }
+}
 
 function openServiceModal(svc = null) {
   $("#service-modal-title").textContent = svc ? "Edit service" : "Add service";
@@ -137,12 +207,14 @@ function openServiceModal(svc = null) {
   $("#svc-local-url").value = svc && svc.local_url ? svc.local_url : "";
   $("#svc-remote-url").value = svc && svc.remote_url ? svc.remote_url : "";
   $("#svc-check-both").checked = svc ? !!svc.check_both_targets : false;
+  $("#svc-username").value = svc && svc.username ? svc.username : "";
   $("#svc-key").value = "";
-  $("#svc-key-hint").textContent = svc && svc.has_api_key ? "(key already set - leave blank to keep)" : "";
+  $("#svc-key-hint").textContent = svc && svc.has_api_key ? "(already set - leave blank to keep)" : "";
   $("#svc-interval").value = svc && svc.poll_interval_seconds ? svc.poll_interval_seconds : "";
   $("#svc-verify-ssl").checked = svc ? svc.verify_ssl : true;
   $("#svc-enabled").checked = svc ? svc.enabled : true;
   $("#svc-notes").value = svc && svc.notes ? svc.notes : "";
+  resetConnStatus();
 
   const typeSelect = $("#svc-type");
   typeSelect.innerHTML = "";
@@ -150,13 +222,111 @@ function openServiceModal(svc = null) {
     typeSelect.appendChild(el("option", { value: t, text: t }));
   }
   typeSelect.disabled = !!svc;
+  const initialType = svc ? svc.type : typeSelect.options[0]?.value;
   if (svc) typeSelect.value = svc.type;
+
+  typeSelect.onchange = () => {
+    applyServiceTypeDefaults(typeSelect.value, { autofillName: true });
+    updateCredentialFieldsForType(typeSelect.value);
+  };
+  if (initialType) {
+    // typeSelect is disabled while editing, so onchange (and thus autofill)
+    // can never fire mid-edit - autofillName only ever applies when adding.
+    applyServiceTypeDefaults(initialType, { autofillName: !svc });
+    updateCredentialFieldsForType(initialType);
+  }
 
   $("#service-modal").classList.remove("hidden");
 }
 
 function closeServiceModal() {
   $("#service-modal").classList.add("hidden");
+}
+
+// ---------- test connection ----------
+
+function setConnStatus(which, cls, text, title) {
+  const node = $(`#svc-${which}-status`);
+  node.className = "conn-status" + (cls ? ` ${cls}` : "");
+  node.textContent = text;
+  node.title = title || "";
+}
+
+async function testServiceConnection() {
+  const type = $("#svc-type").value;
+  const localUrl = $("#svc-local-url").value.trim();
+  const remoteUrl = $("#svc-remote-url").value.trim();
+  if (!localUrl && !remoteUrl) {
+    toast("Enter a Local or Remote address first", true);
+    return;
+  }
+  if (localUrl) setConnStatus("local", "pending", "…");
+  if (remoteUrl) setConnStatus("remote", "pending", "…");
+
+  let result;
+  try {
+    result = await api("/api/services/test-connection", {
+      method: "POST",
+      body: JSON.stringify({
+        type,
+        local_url: localUrl || null,
+        remote_url: remoteUrl || null,
+        api_key: $("#svc-key").value || null,
+      }),
+    });
+  } catch (e) {
+    toast("Test failed: " + e.message, true);
+    resetConnStatus();
+    return;
+  }
+
+  if (result.local) setConnStatus("local", result.local.ok ? "ok" : "fail", result.local.ok ? "✓" : "✕", result.local.message);
+  if (result.remote) setConnStatus("remote", result.remote.ok ? "ok" : "fail", result.remote.ok ? "✓" : "✕", result.remote.message);
+}
+
+// ---------- Plex sign-in ----------
+
+let plexAuthTimer = null;
+
+async function startPlexSignIn() {
+  let data;
+  try {
+    data = await api("/api/plex-auth/start", { method: "POST" });
+  } catch (e) {
+    toast("Could not start Plex sign-in: " + e.message, true);
+    return;
+  }
+
+  const popup = window.open(data.auth_url, "plex-auth", "width=480,height=700");
+  if (!popup) {
+    toast("Popup blocked - allow popups for this site and try again", true);
+    return;
+  }
+
+  if (plexAuthTimer) clearInterval(plexAuthTimer);
+  const deadline = Date.now() + 3 * 60 * 1000;
+  plexAuthTimer = setInterval(async () => {
+    if (Date.now() > deadline) {
+      clearInterval(plexAuthTimer);
+      plexAuthTimer = null;
+      toast("Plex sign-in timed out", true);
+      return;
+    }
+    let res;
+    try {
+      res = await api(`/api/plex-auth/poll?pin_id=${data.pin_id}`);
+    } catch (e) {
+      return; // transient failure - keep polling
+    }
+    if (res.token) {
+      clearInterval(plexAuthTimer);
+      plexAuthTimer = null;
+      $("#svc-key").value = res.token;
+      $("#svc-key-hint").textContent = "(filled in from Plex sign-in)";
+      if (!popup.closed) popup.close();
+      toast("Signed in to Plex");
+    }
+  }, 2000);
 }
 
 async function submitServiceForm(ev) {
@@ -171,6 +341,7 @@ async function submitServiceForm(ev) {
   const payload = {
     name: $("#svc-name").value.trim(),
     check_both_targets: $("#svc-check-both").checked,
+    username: $("#svc-username").value.trim(),
     verify_ssl: $("#svc-verify-ssl").checked,
     enabled: $("#svc-enabled").checked,
     poll_interval_seconds: $("#svc-interval").value ? parseInt($("#svc-interval").value, 10) : null,
@@ -272,6 +443,21 @@ function renderDynamicFields(svc, checkType, existingConfig = {}) {
       el("div", { class: "field hint", text: "Queries plex.tv and your server's public plex.direct address - both need outbound internet access from this container. Runs against your saved Plex API key, not the local/remote address above." })
     );
   }
+  if (checkType === "plex_filesystem_path") {
+    container.appendChild(
+      el("div", { class: "field hint", text: "Browses this path through Plex's own API - no volume mount needed. Use \"Scan libraries\" above to add one of these per library automatically instead of typing paths by hand." })
+    );
+  }
+  if (checkType === "jellyfin_filesystem_path") {
+    container.appendChild(
+      el("div", { class: "field hint", text: "Browses this path through Jellyfin's own API - no volume mount needed. Needs an administrator API key. Use \"Scan libraries\" above to add one of these per library automatically instead of typing paths by hand." })
+    );
+  }
+  if (checkType === "qbittorrent_login" || checkType === "deluge_login") {
+    container.appendChild(
+      el("div", { class: "field hint", text: "Verifies the Username/Password (or just Password for Deluge) configured above actually logs in. Reports OK without checking anything if no credentials are set." })
+    );
+  }
 }
 
 async function submitCheckForm(ev) {
@@ -334,6 +520,8 @@ async function init() {
   $("#add-service-btn").addEventListener("click", () => openServiceModal());
   $("#service-cancel").addEventListener("click", closeServiceModal);
   $("#service-form").addEventListener("submit", submitServiceForm);
+  $("#svc-test-connection").addEventListener("click", testServiceConnection);
+  $("#svc-plex-signin").addEventListener("click", startPlexSignIn);
   $("#check-cancel").addEventListener("click", closeCheckModal);
   $("#check-form").addEventListener("submit", submitCheckForm);
   $("#show-resolved").addEventListener("change", loadNotifications);

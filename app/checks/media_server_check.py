@@ -1,7 +1,11 @@
+import base64
 import time
+import xml.etree.ElementTree as ET
+from urllib.parse import quote
 
 import httpx
 
+from ..plex_client import plex_tv_headers
 from .base import STATUS_FAIL, STATUS_OK, STATUS_WARN, CheckOutcome
 
 PLEX_TV_RESOURCES_URL = "https://plex.tv/api/v2/resources"
@@ -69,8 +73,8 @@ async def check_plex_remote_access(client: httpx.AsyncClient, api_key: str | Non
     try:
         resp = await client.get(
             PLEX_TV_RESOURCES_URL,
-            params={"includeHttps": 1, "includeRelay": 1, "X-Plex-Token": api_key},
-            headers={"Accept": "application/json"},
+            params={"includeHttps": 1, "includeRelay": 1},
+            headers=plex_tv_headers(api_key),
         )
     except httpx.RequestError as exc:
         elapsed = (time.perf_counter() - start) * 1000
@@ -125,3 +129,115 @@ async def check_plex_remote_access(client: httpx.AsyncClient, api_key: str | Non
         "Remote Access is only reachable via Plex Relay (direct connection failed) - streaming will be slower/limited",
         elapsed,
     )
+
+
+async def check_plex_filesystem_path(
+    client: httpx.AsyncClient, base_url: str, api_key: str | None, config: dict
+) -> CheckOutcome:
+    """Checks a path exists and is non-empty using Plex Media Server's own
+    filesystem-browse endpoint (GET /services/browse/<base64 path>) - the
+    same one Plex Web's "Browse for media folder" dialog uses when you add a
+    library. No bind-mount needed; Plex does the looking.
+
+    This endpoint isn't part of Plex's published API docs, but it's stable
+    enough that the widely-used python-plexapi library builds its browse()/
+    walk() helpers directly on it.
+    """
+    path = config.get("path")
+    min_entries = config.get("min_entries", 1)
+    if not path:
+        return CheckOutcome(STATUS_FAIL, "No 'Path in Plex container' configured", None)
+
+    b64_path = base64.b64encode(path.encode("utf-8")).decode("utf-8")
+    url = base_url.rstrip("/") + f"/services/browse/{quote(b64_path, safe='')}"
+    headers = {"X-Plex-Token": api_key} if api_key else {}
+
+    start = time.perf_counter()
+    try:
+        resp = await client.get(url, headers=headers, params={"includeFiles": 1})
+    except httpx.RequestError as exc:
+        elapsed = (time.perf_counter() - start) * 1000
+        return CheckOutcome(STATUS_FAIL, f"Could not browse {path} via Plex's API: {exc}", elapsed)
+    elapsed = (time.perf_counter() - start) * 1000
+
+    if resp.status_code == 401:
+        return CheckOutcome(STATUS_FAIL, "API key (X-Plex-Token) rejected (HTTP 401)", elapsed)
+    if resp.status_code != 200:
+        return CheckOutcome(
+            STATUS_FAIL,
+            f"Browsing {path} returned HTTP {resp.status_code} - check the path exists on the Plex server",
+            elapsed,
+        )
+
+    try:
+        root = ET.fromstring(resp.text)
+    except ET.ParseError:
+        return CheckOutcome(STATUS_FAIL, f"Browsing {path} returned unparseable data", elapsed)
+
+    directories = root.findall("Path")
+    files = root.findall("File")
+    total = len(directories) + len(files)
+    if total < min_entries:
+        return CheckOutcome(
+            STATUS_FAIL,
+            f"{path} has only {len(directories)} folder(s) and {len(files)} file(s) - possible unmounted/failed drive",
+            elapsed,
+        )
+    return CheckOutcome(STATUS_OK, f"{path} accessible with {len(directories)} folder(s) and {len(files)} file(s)", elapsed)
+
+
+async def check_jellyfin_filesystem_path(
+    client: httpx.AsyncClient, base_url: str, api_key: str | None, config: dict
+) -> CheckOutcome:
+    """Checks a path exists and is non-empty using Jellyfin's own
+    /Environment/DirectoryContents endpoint - the same one its server
+    dashboard's folder picker uses. No bind-mount needed.
+
+    Requires an *administrator* API key/token - this endpoint is
+    admin-only. A 403 here most likely means the configured key belongs to
+    a non-admin user.
+    """
+    path = config.get("path")
+    min_entries = config.get("min_entries", 1)
+    if not path:
+        return CheckOutcome(STATUS_FAIL, "No 'Path in Jellyfin container' configured", None)
+
+    url = base_url.rstrip("/") + "/Environment/DirectoryContents"
+    headers = {"X-Emby-Token": api_key} if api_key else {}
+
+    start = time.perf_counter()
+    try:
+        resp = await client.get(
+            url, headers=headers, params={"path": path, "includeFiles": "true", "includeDirectories": "true"}
+        )
+    except httpx.RequestError as exc:
+        elapsed = (time.perf_counter() - start) * 1000
+        return CheckOutcome(STATUS_FAIL, f"Could not browse {path} via Jellyfin's API: {exc}", elapsed)
+    elapsed = (time.perf_counter() - start) * 1000
+
+    if resp.status_code == 401:
+        return CheckOutcome(STATUS_FAIL, "API key rejected (HTTP 401)", elapsed)
+    if resp.status_code == 403:
+        return CheckOutcome(
+            STATUS_FAIL, "API key rejected (HTTP 403) - this endpoint needs an administrator account/key", elapsed
+        )
+    if resp.status_code != 200:
+        return CheckOutcome(
+            STATUS_FAIL,
+            f"Browsing {path} returned HTTP {resp.status_code} - check the path exists on the Jellyfin server",
+            elapsed,
+        )
+
+    try:
+        entries = resp.json()
+    except ValueError:
+        return CheckOutcome(STATUS_FAIL, f"Browsing {path} returned invalid JSON", elapsed)
+
+    if not isinstance(entries, list) or len(entries) < min_entries:
+        count = len(entries) if isinstance(entries, list) else 0
+        return CheckOutcome(
+            STATUS_FAIL,
+            f"{path} has only {count} entrie(s) - possible unmounted/failed drive",
+            elapsed,
+        )
+    return CheckOutcome(STATUS_OK, f"{path} accessible with {len(entries)} entrie(s)", elapsed)
