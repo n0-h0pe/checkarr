@@ -5,7 +5,7 @@ from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
-    data_dir: str = "/data"
+    data_dir: str = "/config"
     default_poll_interval_seconds: int = 300
     http_timeout_seconds: float = 10.0
     history_retention_days: int = 30
