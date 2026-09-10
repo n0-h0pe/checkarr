@@ -300,12 +300,12 @@ function renderServiceRow(svc) {
 
   const arrowBtn = el("button", { class: "small expand-arrow" }, isCollapsed ? ">" : "v");
   tr.appendChild(el("td", {}, arrowBtn));
-  tr.appendChild(el("td", { text: svc.name }));
-  tr.appendChild(el("td", {}, [typeIcon(svc.type), " " + svc.type]));
-  tr.appendChild(el("td", { text: svc.local_url || "-" }));
-  tr.appendChild(el("td", { text: svc.remote_url || "-" }));
-  tr.appendChild(el("td", { text: svc.poll_interval_seconds ? `${svc.poll_interval_seconds}s` : "default" }));
-  tr.appendChild(el("td", {}, el("span", { class: `badge ${svc.enabled ? "ok" : "disabled"}`, text: svc.enabled ? "enabled" : "disabled" })));
+  tr.appendChild(el("td", { "data-label": "Name", text: svc.name }));
+  tr.appendChild(el("td", { "data-label": "Type" }, el("span", {}, [typeIcon(svc.type), " " + svc.type])));
+  tr.appendChild(el("td", { "data-label": "Local", text: svc.local_url || "-" }));
+  tr.appendChild(el("td", { "data-label": "Remote", text: svc.remote_url || "-" }));
+  tr.appendChild(el("td", { "data-label": "Interval", text: svc.poll_interval_seconds ? `${svc.poll_interval_seconds}s` : "default" }));
+  tr.appendChild(el("td", { "data-label": "Status" }, el("span", { class: `badge ${svc.enabled ? "ok" : "disabled"}`, text: svc.enabled ? "enabled" : "disabled" })));
 
   const actions = el("div", { style: "display:flex; gap:6px;" }, [
     el("button", { class: "small", onclick: () => openServiceModal(svc) }, "Edit"),
@@ -375,7 +375,7 @@ function appendCheckGridRow(grid, svc, c) {
   const rowClass = pendingDelete ? "row-pending-delete" : "";
 
   grid.appendChild(
-    el("div", { class: rowClass }, el("input", {
+    el("div", { class: rowClass, "data-label": "Enable" }, el("input", {
       type: "checkbox",
       checked: c.enabled ? "checked" : null,
       disabled: pendingDelete ? "disabled" : null,
@@ -383,18 +383,18 @@ function appendCheckGridRow(grid, svc, c) {
     }))
   );
   grid.appendChild(
-    el("div", { class: rowClass }, el("span", { class: `badge ${c.enabled ? "ok" : "disabled"}`, text: c.type }))
+    el("div", { class: rowClass, "data-label": "Check type" }, el("span", { class: `badge ${c.enabled ? "ok" : "disabled"}`, text: c.type }))
   );
   grid.appendChild(
-    el("div", { class: `check-name-cell ${rowClass}`, title: c.name }, [
+    el("div", { class: `check-name-cell ${rowClass}`, "data-label": "Name", title: c.name }, el("span", {}, [
       c.name,
       c.interval_seconds ? el("span", { class: "text-dim", text: ` (every ${c.interval_seconds}s)` }) : null,
-    ])
+    ]))
   );
 
   const alertLevel = c.config.alert_level === "warn" ? "warn" : "fail";
   grid.appendChild(
-    el("div", { class: rowClass }, (() => {
+    el("div", { class: rowClass, "data-label": "Alert level" }, (() => {
       if (pendingDelete) return el("span", { class: "text-dim", text: "-" });
       if (NO_ALERT_LEVEL_TYPES.has(c.type)) {
         return el("span", { class: "text-dim", title: "This check's own Warn/Fail % thresholds decide this instead", text: "—" });

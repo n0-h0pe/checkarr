@@ -359,3 +359,116 @@ table th { color: var(--text-dim); font-weight: 600; font-size: 12px; text-trans
 
 .text-dim { color: var(--text-dim); }
 .mt-0 { margin-top: 0; }
+
+/* ---------- Mobile ---------- */
+@media (max-width: 700px) {
+  body { font-size: 13px; }
+
+  header.app-header {
+    flex-wrap: wrap;
+    gap: 10px;
+    padding: 10px 12px;
+  }
+  header.app-header h1 { font-size: 15px; }
+  .header-right { flex-wrap: wrap; gap: 8px; width: 100%; }
+  .layout-controls { flex-wrap: wrap; width: 100%; gap: 6px; }
+  .layout-controls select { flex: 1 1 auto; max-width: none; min-width: 90px; }
+  .summary-pill { flex-wrap: wrap; row-gap: 4px; }
+
+  nav.tabs {
+    padding: 6px 8px 0;
+    gap: 2px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  nav.tabs button { padding: 8px 12px; font-size: 13px; white-space: nowrap; flex-shrink: 0; }
+
+  main { padding: 10px 8px 40px; }
+
+  /* Dashboard cards: less padding to reclaim space on a narrow screen, and
+     a much bigger resize-handle hit target - 16px square is fine for a
+     mouse pointer but well under a touch target's usual minimum. */
+  .card { padding: 12px; margin: 5px; }
+  .card-header .title { font-size: 14px; }
+  .resize-handle { width: 30px; height: 30px; }
+
+  .panel { padding: 12px; }
+  .panel-header { flex-wrap: wrap; gap: 8px; }
+  .panel-header h2 { font-size: 14px; }
+
+  .modal-backdrop { padding: 0; align-items: stretch; }
+  .modal {
+    max-width: none;
+    min-height: 100%;
+    border-radius: 0;
+    padding: 16px;
+    padding-bottom: max(16px, env(safe-area-inset-bottom));
+  }
+
+  button, .btn { padding: 8px 12px; }
+
+  /* Responsive tables: each row stacks into label/value lines instead of
+     scrolling sideways - cells carrying a data-label (set in app.js/
+     common.js) get that label as a pseudo-element prefix; cells without one
+     (icon-only action buttons, the expand arrow, a service's whole nested
+     checks panel) are left as plain blocks. */
+  table thead { display: none; }
+  table, table tbody, table tr { display: block; width: 100%; }
+  table { border: none; }
+  table tr {
+    display: block;
+    border-bottom: 1px solid var(--border);
+    padding: 8px 0;
+  }
+  table tr:last-child { border-bottom: none; }
+  table td {
+    display: block;
+    border-bottom: none;
+    padding: 4px 0;
+    white-space: normal;
+  }
+  table td[data-label] {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+  }
+  table td[data-label]::before {
+    content: attr(data-label);
+    color: var(--text-dim);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: .03em;
+    flex-shrink: 0;
+  }
+
+  /* Same stacking approach for the checks-grid (a CSS Grid, not a <table> -
+     see its own comment above for why), plus a rule between each group of
+     5 cells (one check's row) since there's no <tr> border to lean on. */
+  .checks-grid { grid-template-columns: 1fr; row-gap: 2px; }
+  .checks-grid-header { display: none; }
+  .checks-grid > div:not(.checks-grid-header) {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    text-align: left;
+    white-space: normal;
+  }
+  .checks-grid > div[data-label]::before {
+    content: attr(data-label);
+    color: var(--text-dim);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: .03em;
+    flex-shrink: 0;
+  }
+  .checks-grid > div:nth-child(5n+1):not(.checks-grid-header) {
+    border-top: 1px solid var(--border);
+    margin-top: 8px;
+    padding-top: 10px;
+  }
+  .checks-grid .check-actions { justify-content: flex-end; }
+
+  .public-footer-links { position: static; justify-content: flex-end; padding: 8px 12px; }
+}

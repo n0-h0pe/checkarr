@@ -517,11 +517,11 @@ async function loadHistoryTab() {
   for (const r of rows) {
     body.appendChild(
       el("tr", {}, [
-        el("td", { text: fmtTime(r.timestamp) }),
-        el("td", { text: r.check_name }),
-        el("td", {}, el("span", { class: `badge ${r.status}`, text: r.status })),
-        el("td", { text: r.response_time_ms ? `${Math.round(r.response_time_ms)} ms` : "-" }),
-        el("td", { text: r.message }),
+        el("td", { "data-label": "Time", text: fmtTime(r.timestamp) }),
+        el("td", { "data-label": "Check", text: r.check_name }),
+        el("td", { "data-label": "Status" }, el("span", { class: `badge ${r.status}`, text: r.status })),
+        el("td", { "data-label": "Response", text: r.response_time_ms ? `${Math.round(r.response_time_ms)} ms` : "-" }),
+        el("td", { "data-label": "Message", text: r.message }),
       ])
     );
   }
