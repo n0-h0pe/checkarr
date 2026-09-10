@@ -20,14 +20,29 @@ function switchTab(tab) {
   if (tab === "settings") loadSettings();
 }
 
+let layoutEditMode = false;
+
 async function loadDashboardAdmin() {
   await loadDashboard({
     interactive: true,
+    editable: layoutEditMode,
     onRunNow: runNow,
     onHistory: (id) => { switchTab("history"); $("#history-service").value = id; loadHistoryTab(); },
     onLayoutChange: persistCardLayout,
   });
   loadLayoutList();
+}
+
+// Drag-to-move/resize only work while this is on - browsing the dashboard
+// day to day shouldn't risk bumping a card out of place by an accidental
+// drag. Not persisted: every page load starts back in plain view mode.
+function toggleLayoutEditMode() {
+  layoutEditMode = !layoutEditMode;
+  const btn = $("#layout-edit-btn");
+  btn.textContent = layoutEditMode ? "Done editing" : "Edit layout";
+  btn.classList.toggle("primary", layoutEditMode);
+  document.body.classList.toggle("layout-editing", layoutEditMode);
+  if (state.tab === "dashboard") loadDashboardAdmin();
 }
 
 async function runNow(serviceId) {
@@ -46,18 +61,23 @@ async function runNow(serviceId) {
 // `updates` is [{id, patch}], patch being a partial {w,h} and/or {x,y} -
 // each merged onto whatever's already saved for that service so a resize
 // doesn't clobber a saved position and vice versa. Always sent as one PUT
-// so a two-card swap (drag-to-move landing on another card) saves both
-// cards' new positions atomically instead of racing two separate requests.
+// so a multi-card cascade (drag-to-move pushing others out of the way)
+// saves every affected card's new position atomically instead of racing
+// separate requests against each other. Also stamps `columns` with however
+// wide the grid was just now, so the layout remembers the window width it
+// was edited at - see computeCardLayout in common.js for how that's used.
 async function persistCardLayout(updates) {
   if (!state.activeLayout || !state.activeLayout.id) return;
   const sizes = { ...state.activeLayout.sizes };
   for (const { id, patch } of updates) {
     sizes[String(id)] = { ...(sizes[String(id)] || {}), ...patch };
   }
+  const body = { sizes };
+  if (Number.isFinite(state.lastGridColumns)) body.columns = state.lastGridColumns;
   try {
     state.activeLayout = await api(`/api/dashboard-layouts/${state.activeLayout.id}`, {
       method: "PUT",
-      body: JSON.stringify({ sizes }),
+      body: JSON.stringify(body),
     });
   } catch (e) {
     toast("Could not save layout: " + e.message, true);
@@ -94,8 +114,9 @@ async function newLayoutFromCurrent() {
   const name = prompt("Name for the new layout:");
   if (!name) return;
   const sizes = state.activeLayout ? state.activeLayout.sizes : {};
+  const columns = state.lastGridColumns;
   try {
-    state.activeLayout = await api("/api/dashboard-layouts", { method: "POST", body: JSON.stringify({ name, sizes }) });
+    state.activeLayout = await api("/api/dashboard-layouts", { method: "POST", body: JSON.stringify({ name, sizes, columns }) });
   } catch (e) {
     toast("Could not create layout: " + e.message, true);
     return;
@@ -806,9 +827,17 @@ async function init() {
   $("#save-changes-btn-bottom").addEventListener("click", saveChanges);
   $("#discard-changes-btn-bottom").addEventListener("click", discardChanges);
   $("#layout-select").addEventListener("change", onLayoutSelectChange);
+  $("#layout-edit-btn").addEventListener("click", toggleLayoutEditMode);
   $("#layout-new-btn").addEventListener("click", newLayoutFromCurrent);
   $("#layout-rename-btn").addEventListener("click", renameActiveLayout);
   $("#layout-delete-btn").addEventListener("click", deleteActiveLayout);
+
+  let resizeTimer = null;
+  window.addEventListener("resize", () => {
+    if (state.tab !== "dashboard") return;
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(loadDashboardAdmin, 200);
+  });
 
   window.addEventListener("beforeunload", (e) => {
     if (pendingChangeCount() > 0) {

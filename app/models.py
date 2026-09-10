@@ -113,14 +113,20 @@ class DashboardLayout(Base):
     {"w": int, "h": int, "x": int, "y": int} in grid units - x/y are the
     card's 1-based grid-line position, omitted for a card that hasn't been
     manually placed yet (it's auto-packed into the remaining space on
-    render instead). Exactly one row has is_active=True at a time - that's
-    what the dashboard (admin and public) renders."""
+    render instead). `columns` is the grid-column count the browser window
+    was showing the last time this layout was edited - the frontend uses it
+    to tell "the window is narrower than this layout was arranged for, wrap
+    cards to fit" (a purely visual, unsaved re-flow) apart from "this is a
+    brand new layout with no width on record yet" (columns is None).
+    Exactly one row has is_active=True at a time - that's what the
+    dashboard (admin and public) renders."""
 
     __tablename__ = "dashboard_layouts"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     name: Mapped[str] = mapped_column(String(120), nullable=False)
     sizes: Mapped[dict] = mapped_column(JSON, default=dict)
+    columns: Mapped[int | None] = mapped_column(Integer, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)

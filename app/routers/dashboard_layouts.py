@@ -28,7 +28,7 @@ def get_active_layout(db: Session = Depends(get_db)):
 @router.post("", response_model=schemas.DashboardLayoutOut, status_code=201)
 def create_layout(payload: schemas.DashboardLayoutCreate, db: Session = Depends(get_db)):
     db.query(models.DashboardLayout).filter_by(is_active=True).update({"is_active": False})
-    layout = models.DashboardLayout(name=payload.name, sizes=payload.sizes, is_active=True)
+    layout = models.DashboardLayout(name=payload.name, sizes=payload.sizes, columns=payload.columns, is_active=True)
     db.add(layout)
     db.commit()
     db.refresh(layout)
@@ -52,6 +52,8 @@ def update_layout(layout_id: int, payload: schemas.DashboardLayoutUpdate, db: Se
         layout.name = payload.name
     if payload.sizes is not None:
         layout.sizes = payload.sizes
+    if payload.columns is not None:
+        layout.columns = payload.columns
     db.commit()
     db.refresh(layout)
     return layout

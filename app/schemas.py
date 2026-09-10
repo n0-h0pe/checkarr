@@ -199,6 +199,7 @@ class DashboardLayoutOut(BaseModel):
     id: int
     name: str
     sizes: dict[str, Any]
+    columns: int | None = None
     is_active: bool
     created_at: datetime
     updated_at: datetime
@@ -214,8 +215,10 @@ class DashboardLayoutSummary(BaseModel):
 class DashboardLayoutCreate(BaseModel):
     name: str
     sizes: dict[str, Any] = Field(default_factory=dict)
+    columns: int | None = None
 
 
 class DashboardLayoutUpdate(BaseModel):
     name: str | None = None
     sizes: dict[str, Any] | None = None
+    columns: int | None = None
