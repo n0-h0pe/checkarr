@@ -28,6 +28,13 @@ TARGET_SCOPED_TYPES = {
 # exactly once per poll regardless of how many targets are set.
 SERVICE_SCOPED_TYPES = {"filesystem_path", "plex_remote_access"}
 
+# When a service has both a local and a remote address but hasn't opted into
+# "run all checks against both", these target-scoped types still run against
+# both addresses by default - everything else in TARGET_SCOPED_TYPES runs
+# against local only. Reachability of the public/remote entry point is
+# useful to know even when you don't want to double up on API-heavy checks.
+ALWAYS_BOTH_TARGETS_TYPES = {"http_200"}
+
 
 async def run_check(
     client: httpx.AsyncClient, service: Service, check: CheckDefinition, base_url: str | None

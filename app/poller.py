@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 import httpx
 
 from .checks.base import NotificationItem
-from .checks.runner import SERVICE_SCOPED_TYPES, run_check
+from .checks.runner import ALWAYS_BOTH_TARGETS_TYPES, SERVICE_SCOPED_TYPES, run_check
 from .config import settings
 from .database import SessionLocal
 from .models import CheckDefinition, CheckResult, Notification, Service
@@ -70,13 +70,22 @@ async def poll_service(service_id: int) -> None:
         for check in due:
             if check.type in SERVICE_SCOPED_TYPES:
                 jobs.append((check, None, None))
-            elif targets:
-                for label, url in targets:
-                    jobs.append((check, label, url))
-            else:
+                continue
+            if not targets:
                 # Target-scoped check on a service with no address configured
                 # (shouldn't normally happen - validated at creation).
                 jobs.append((check, None, None))
+                continue
+
+            if suffix_targets and not service.check_both_targets and check.type not in ALWAYS_BOTH_TARGETS_TYPES:
+                # Default when both addresses are set: everything except the
+                # web UI check runs against the local address only.
+                selected = [t for t in targets if t[0] == "local"] or targets
+            else:
+                selected = targets
+
+            for label, url in selected:
+                jobs.append((check, label, url))
 
         try:
             async with httpx.AsyncClient(

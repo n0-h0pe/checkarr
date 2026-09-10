@@ -18,6 +18,7 @@ class Service(Base):
     type: Mapped[str] = mapped_column(String(30), nullable=False)  # radarr/sonarr/prowlarr/plex/jellyfin/generic
     local_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     remote_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    check_both_targets: Mapped[bool] = mapped_column(Boolean, default=False)
     api_key_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
     verify_ssl: Mapped[bool] = mapped_column(Boolean, default=True)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)

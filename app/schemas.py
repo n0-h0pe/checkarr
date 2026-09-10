@@ -64,6 +64,7 @@ class ServiceBase(BaseModel):
     type: str
     local_url: str | None = None
     remote_url: str | None = None
+    check_both_targets: bool = False
     verify_ssl: bool = True
     enabled: bool = True
     poll_interval_seconds: int | None = None
@@ -86,6 +87,7 @@ class ServiceUpdate(BaseModel):
     remote_url: str | None = None
     clear_local_url: bool = False
     clear_remote_url: bool = False
+    check_both_targets: bool | None = None
     api_key: str | None = None
     clear_api_key: bool = False
     verify_ssl: bool | None = None
