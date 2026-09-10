@@ -6,7 +6,7 @@
   <title>Checkarr Status</title>
   <link rel="stylesheet" href="/static/css/style.css">
 </head>
-<body class="public-page">
+<body class="public-page{{ ' wide-main' if page == 'dashboard' else '' }}">
   {% if page == "dashboard" %}
   <main>
     <div class="summary-pill" id="summary-pill" style="padding: 10px 4px 0 4px;"></div>

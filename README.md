@@ -17,7 +17,7 @@ of what's healthy, what's degraded, and why.
 - "Test connection" button in the Add/Edit service form - a quick green ✓/red ✕ per address before you even save, plus autofilled Name and a type-appropriate default port in the address placeholder when you pick a service type.
 - For Plex, a "Sign in to Plex" button fills in the X-Plex-Token for you via Plex's own sign-in flow - no copying tokens out of your browser's dev tools.
 - Quick-edit controls on every check's row in Settings (Enabled, and for Plex/Jellyfin path checks, the empty-path severity and minimum-entries count) - no need to open Edit for a one-field change. These stage locally with an obvious "unsaved changes" banner and explicit Save/Discard, so a stray click can't silently change what's being monitored.
-- Resizable dashboard cards, snapped to an invisible grid and saved as named, switchable layouts. See "Dashboard layouts" below.
+- Resizable, freely movable dashboard cards, snapped to an invisible grid and saved as named, switchable layouts. See "Dashboard layouts" below.
 - API keys are encrypted at rest (Fernet/AES) and never echoed back to the browser.
 - Historic results stored in SQLite, with a History tab and per-service uptime strip on the dashboard.
 - Single Docker container: web GUI + API + scheduler + database, no external dependencies.
@@ -227,9 +227,20 @@ outward to make a card larger so you can fit more of its checks without
 scrolling. If a card ends up shorter than its check list needs, the checks
 inside it scroll independently while the card's header and buttons stay put.
 
-Sizes save automatically as soon as you release the drag - no separate Save
-step. The dropdown in the top bar next to **+ New** holds your saved
-layouts:
+Drag a card by its title bar to move it anywhere on the grid - it snaps to
+the same invisible grid the resize handle uses. Drop it somewhere empty and
+it just moves there; drop it on top of another card and the two swap places;
+drop it somewhere that overlaps more than one other card and it snaps back
+instead, since there's no single sensible place to put it. The dashboard
+isn't limited to three cards per row - it uses the full width of the window,
+so how many fit side by side just depends on their sizes and your screen.
+
+Sizes and positions save automatically as soon as you release the drag - no
+separate Save step. A service you haven't dragged yet is placed
+automatically below whatever you have positioned, so newly added services
+never land on top of something you've already arranged.
+
+The dropdown in the top bar next to **+ New** holds your saved layouts:
 
 - **+ New** - saves the dashboard's current card sizes as a new layout (you
   pick a name) and switches to it.
@@ -240,7 +251,8 @@ layouts:
 - Pick any layout from the dropdown to switch the dashboard to it instantly.
 
 The public dashboard mirrors whichever layout is active - same card sizes,
-same grid - but is read-only there: no drag handles, no dropdown.
+same positions, same grid - but is read-only there: no drag handles, no
+dropdown.
 
 ## Public dashboard
 

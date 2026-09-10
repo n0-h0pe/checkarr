@@ -4,10 +4,11 @@
 
 const state = { meta: null, services: [], statuses: [], tab: "dashboard", activeLayout: null };
 
-// Dashboard tile grid: each track is one unit (px). A card's size is stored
-// as {w, h} in units and applied as `grid-column/row: span N`. No grid gap -
-// cards get their visual spacing from their own margin instead, so a drag
-// delta of exactly GRID_UNIT px always means exactly 1 unit, no gap math.
+// Dashboard tile grid: each track is one unit (px). A card's position/size
+// is stored as {x, y, w, h} in 1-based grid-line units and applied as
+// `grid-column: x / span w; grid-row: y / span h`. No grid gap - cards get
+// their visual spacing from their own margin instead, so a drag delta of
+// exactly GRID_UNIT px always means exactly 1 unit, no gap math.
 const GRID_UNIT = 20;
 const MIN_CARD_W = 16;
 const MIN_CARD_H = 10;
@@ -109,29 +110,84 @@ async function ensureActiveLayout(force = false) {
   if (force || !state.activeLayout) {
     try {
       state.activeLayout = await api("/api/dashboard-layouts/active");
-    } catch (_) { /* leave whatever we had, or null - sizeFor() falls back to defaults */ }
+    } catch (_) { /* leave whatever we had, or null - computeCardLayout() falls back to defaults */ }
   }
   return state.activeLayout;
 }
 
-function sizeFor(serviceId) {
+// Shelf-packs items left to right, wrapping to a new row of tracks whenever
+// the next item would overflow totalCols - used only for cards that don't
+// have a saved position yet (new services, or layouts saved before drag-to-
+// move existed), starting below `offsetY` so they never land on top of a
+// card that *does* have a saved position.
+function packShelves(items, totalCols, offsetY) {
+  const positions = new Map();
+  let cursorX = 1, cursorY = offsetY, shelfH = 0;
+  for (const it of items) {
+    if (cursorX !== 1 && cursorX + it.w - 1 > totalCols) {
+      cursorX = 1;
+      cursorY += shelfH;
+      shelfH = 0;
+    }
+    positions.set(it.id, { x: cursorX, y: cursorY });
+    cursorX += it.w;
+    shelfH = Math.max(shelfH, it.h);
+  }
+  return positions;
+}
+
+// Resolves every visible service's {x, y, w, h} for this render pass: saved
+// positions are honored as-is, anything unset is shelf-packed into the
+// remaining space. Returns a Map keyed by service id whose entry objects are
+// mutated in place by the drag handlers below, so sibling cards always see
+// each other's live (not just saved) position during a drag.
+function computeCardLayout(statuses) {
+  const grid = $("#dashboard-grid");
+  const width = (grid && grid.clientWidth) || Math.max(0, window.innerWidth - 48);
+  const totalCols = Math.max(MIN_CARD_W, Math.floor(width / GRID_UNIT));
   const sizes = (state.activeLayout && state.activeLayout.sizes) || {};
-  const s = sizes[String(serviceId)];
-  return {
-    w: s && Number.isFinite(s.w) ? Math.max(MIN_CARD_W, s.w) : DEFAULT_CARD_W,
-    h: s && Number.isFinite(s.h) ? Math.max(MIN_CARD_H, s.h) : DEFAULT_CARD_H,
-  };
+
+  const positions = new Map();
+  const unset = [];
+  let belowSaved = 1;
+  for (const s of statuses) {
+    const id = s.service.id;
+    const saved = sizes[String(id)];
+    const w = saved && Number.isFinite(saved.w) ? Math.max(MIN_CARD_W, saved.w) : DEFAULT_CARD_W;
+    const h = saved && Number.isFinite(saved.h) ? Math.max(MIN_CARD_H, saved.h) : DEFAULT_CARD_H;
+    if (saved && Number.isFinite(saved.x) && Number.isFinite(saved.y)) {
+      const x = Math.max(1, saved.x);
+      const y = Math.max(1, saved.y);
+      positions.set(id, { x, y, w, h });
+      belowSaved = Math.max(belowSaved, y + h);
+    } else {
+      unset.push({ id, w, h });
+    }
+  }
+  const packed = packShelves(unset, totalCols, positions.size ? belowSaved : 1);
+  for (const it of unset) {
+    const { x, y } = packed.get(it.id);
+    positions.set(it.id, { x, y, w: it.w, h: it.h });
+  }
+  return positions;
+}
+
+function rectsOverlap(a, b) {
+  return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
 }
 
 // ---------- dashboard (shared) ----------
 
-function renderServiceCard(s, opts = {}) {
+function renderServiceCard(s, opts = {}, pos, positions) {
   const svc = s.service;
-  const size = sizeFor(svc.id);
-  const card = el("div", { class: "card", style: `grid-column: span ${size.w}; grid-row: span ${size.h};` });
+  const card = el("div", {
+    class: "card",
+    style: `grid-column: ${pos.x} / span ${pos.w}; grid-row: ${pos.y} / span ${pos.h};`,
+  });
+  card.dataset.serviceId = svc.id;
 
   card.appendChild(
-    el("div", { class: "card-header" }, [
+    el("div", { class: `card-header${opts.interactive ? " drag-handle" : ""}` }, [
       el("div", { class: "title" }, [typeIcon(svc.type), el("span", { text: svc.name })]),
       el("span", { class: `badge ${s.overall_status}` }, [
         el("span", { class: `dot ${s.overall_status}` }),
@@ -174,43 +230,118 @@ function renderServiceCard(s, opts = {}) {
         el("button", { class: "small", onclick: () => opts.onHistory && opts.onHistory(svc.id) }, "History"),
       ])
     );
-    attachResizeHandle(card, svc.id, size.w, size.h, opts.onResize);
+    attachResizeHandle(card, svc.id, pos, opts.onLayoutChange);
+    attachMoveHandle(card, svc.id, pos, positions, opts.onLayoutChange);
   }
 
   return card;
 }
 
-function attachResizeHandle(card, serviceId, initialW, initialH, onResize) {
+// `onLayoutChange`, shared by both drag handlers below, always receives an
+// *array* of `{id, patch}` updates - a plain resize or move only ever
+// produces one, but a move that swaps two cards produces two that must be
+// saved together in a single request. Saving them as two separate requests
+// would race: both would be built from the same pre-drag `sizes` snapshot,
+// and whichever request's PUT lands second would silently wipe out the
+// first request's change (the server replaces `sizes` wholesale, it doesn't
+// merge), leaving the swap only half-persisted.
+function attachResizeHandle(card, serviceId, pos, onLayoutChange) {
   const handle = el("div", { class: "resize-handle", title: "Drag to resize" });
   card.appendChild(handle);
 
-  let current = { w: initialW, h: initialH };
   let start = null;
 
   function onPointerMove(e) {
-    const dx = e.clientX - start.x;
-    const dy = e.clientY - start.y;
-    const newW = Math.max(MIN_CARD_W, start.w + Math.round(dx / GRID_UNIT));
-    const newH = Math.max(MIN_CARD_H, start.h + Math.round(dy / GRID_UNIT));
-    current = { w: newW, h: newH };
-    card.style.gridColumn = `span ${newW}`;
-    card.style.gridRow = `span ${newH}`;
+    const dx = e.clientX - start.px;
+    const dy = e.clientY - start.py;
+    pos.w = Math.max(MIN_CARD_W, start.w + Math.round(dx / GRID_UNIT));
+    pos.h = Math.max(MIN_CARD_H, start.h + Math.round(dy / GRID_UNIT));
+    card.style.gridColumn = `${pos.x} / span ${pos.w}`;
+    card.style.gridRow = `${pos.y} / span ${pos.h}`;
   }
 
   function onPointerUp() {
     document.removeEventListener("pointermove", onPointerMove);
     document.removeEventListener("pointerup", onPointerUp);
-    if (onResize && (current.w !== initialW || current.h !== initialH)) {
-      onResize(serviceId, current.w, current.h);
-      initialW = current.w;
-      initialH = current.h;
+    if (onLayoutChange && (pos.w !== start.w || pos.h !== start.h)) {
+      onLayoutChange([{ id: serviceId, patch: { w: pos.w, h: pos.h } }]);
     }
   }
 
   handle.addEventListener("pointerdown", (e) => {
     e.preventDefault();
     e.stopPropagation();
-    start = { x: e.clientX, y: e.clientY, w: current.w, h: current.h };
+    start = { px: e.clientX, py: e.clientY, w: pos.w, h: pos.h };
+    document.addEventListener("pointermove", onPointerMove);
+    document.addEventListener("pointerup", onPointerUp);
+  });
+}
+
+// Drag-to-reposition from the card's title bar, like moving a window. Cards
+// snap to the same grid the resize handle uses. If the drop spot overlaps
+// exactly one other card, they swap places; overlapping more than one card
+// is treated as an invalid drop and the card snaps back.
+function attachMoveHandle(card, serviceId, pos, positions, onLayoutChange) {
+  const header = card.querySelector(".card-header");
+  if (!header) return;
+
+  let start = null;
+
+  function onPointerMove(e) {
+    const dx = e.clientX - start.px;
+    const dy = e.clientY - start.py;
+    pos.x = Math.max(1, start.x + Math.round(dx / GRID_UNIT));
+    pos.y = Math.max(1, start.y + Math.round(dy / GRID_UNIT));
+    card.style.gridColumn = `${pos.x} / span ${pos.w}`;
+    card.style.gridRow = `${pos.y} / span ${pos.h}`;
+  }
+
+  function snapBackTo(x, y) {
+    pos.x = x;
+    pos.y = y;
+    card.style.gridColumn = `${pos.x} / span ${pos.w}`;
+    card.style.gridRow = `${pos.y} / span ${pos.h}`;
+  }
+
+  function onPointerUp() {
+    document.removeEventListener("pointermove", onPointerMove);
+    document.removeEventListener("pointerup", onPointerUp);
+    card.classList.remove("dragging");
+
+    if (pos.x === start.x && pos.y === start.y) return;
+
+    const overlapping = [];
+    for (const [otherId, otherPos] of positions) {
+      if (otherId === serviceId) continue;
+      if (rectsOverlap(pos, otherPos)) overlapping.push(otherId);
+    }
+
+    if (overlapping.length === 0) {
+      onLayoutChange && onLayoutChange([{ id: serviceId, patch: { x: pos.x, y: pos.y } }]);
+    } else if (overlapping.length === 1) {
+      const otherId = overlapping[0];
+      const otherPos = positions.get(otherId);
+      const otherCard = $(`.card[data-service-id="${otherId}"]`);
+      const originX = start.x, originY = start.y;
+      otherPos.x = originX;
+      otherPos.y = originY;
+      if (otherCard) {
+        otherCard.style.gridColumn = `${otherPos.x} / span ${otherPos.w}`;
+        otherCard.style.gridRow = `${otherPos.y} / span ${otherPos.h}`;
+      }
+      onLayoutChange && onLayoutChange([
+        { id: serviceId, patch: { x: pos.x, y: pos.y } },
+        { id: otherId, patch: { x: otherPos.x, y: otherPos.y } },
+      ]);
+    } else {
+      snapBackTo(start.x, start.y);
+    }
+  }
+
+  header.addEventListener("pointerdown", (e) => {
+    e.preventDefault();
+    start = { px: e.clientX, py: e.clientY, x: pos.x, y: pos.y };
+    card.classList.add("dragging");
     document.addEventListener("pointermove", onPointerMove);
     document.addEventListener("pointerup", onPointerUp);
   });
@@ -269,8 +400,9 @@ async function loadDashboard(cardOpts = {}) {
   const refresh = $("#last-refresh");
   if (refresh) refresh.textContent = "Updated " + new Date().toLocaleTimeString();
 
+  const positions = computeCardLayout(statuses);
   for (const s of statuses) {
-    grid.appendChild(renderServiceCard(s, cardOpts));
+    grid.appendChild(renderServiceCard(s, cardOpts, positions.get(s.service.id), positions));
   }
   for (const s of statuses) {
     loadUptimeStrip(s.service.id);
