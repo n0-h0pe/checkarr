@@ -32,13 +32,13 @@ Then open `http://<host>:8080`.
 The scenario this targets: Radarr/Sonarr's root folder is a network share
 (e.g. an SMB share added in Unraid) that sometimes mounts "successfully" as
 far as the OS is concerned, but is actually empty - nothing underneath it
-mounted properly, so the app is quietly looking at an empty directory. Two
-ways to catch this are supported, and you can use either or both:
+mounted properly, so the app is quietly looking at an empty directory. Three
+ways to catch this are supported:
 
-1. **Root folder API check (recommended)** - the built-in "Root folders
-   accessible" check calls two of the target app's own API endpoints, both
-   from *its* point of view, needing **no extra volume mounts** on the
-   HealthChecker container at all:
+1. **Root folder API check (recommended, on by default)** - the built-in
+   "Root folders accessible" check calls two of the target app's own API
+   endpoints, both from *its* point of view, needing **no extra volume
+   mounts** on the HealthChecker container at all:
    - `/api/v3/rootfolder` for the `accessible` flag - catches a mount point
      that's gone entirely.
    - `/api/v3/filesystem` (the same endpoint the app's own "Add Root Folder"
@@ -47,15 +47,22 @@ ways to catch this are supported, and you can use either or both:
      alone misses, which is the one that actually matters here.
 
    Both signals are combined into one check result; either one failing marks
-   the check as failing. Applies to Radarr, Sonarr, Lidarr, and Whisparr
-   (Prowlarr has no root folders to check).
-2. **Direct filesystem check (optional, belt-and-braces)** - add a
-   `filesystem_path` check on any service. It has two path fields, because
-   the path an app like Radarr sees for a folder is essentially never the
-   same path HealthChecker sees for that same underlying host directory -
-   each container maps its own volumes independently, and they can
-   coincidentally collide (e.g. a torrent client's `/data` meaning something
-   completely different to Radarr's `/data`):
+   the check as failing. Covers whatever root folders are already configured
+   *inside* Radarr/Sonarr/Lidarr/Whisparr (Prowlarr has none to check).
+2. **`arr_filesystem_path` (API-based, add manually)** - same underlying API
+   as above, but for any path you give it, not just configured root folders
+   - useful for a specific subfolder you want to watch independently. Takes
+   a single required field, **Path in `<app>` container**, exactly as that
+   app itself sees it. Still no volume mount needed - the app does the
+   looking, not HealthChecker.
+3. **`filesystem_path` (direct, requires a bind mount)** - for services with
+   no such browse API (anything that isn't Radarr/Sonarr/Lidarr/Whisparr).
+   Has two path fields, because the path an app sees for a folder is
+   essentially never the same path HealthChecker sees for that same
+   underlying host directory - each container maps its own volumes
+   independently, and they can coincidentally collide (e.g. a torrent
+   client's `/data` meaning something completely different to Radarr's
+   `/data`):
    - **Path in HealthChecker container** - the actual path this check tests.
      For this to see anything meaningful, bind-mount the host path in
      question into the HealthChecker container (read-only is fine), e.g. in
@@ -120,6 +127,7 @@ Any service (regardless of type) can also have `filesystem_path` or
 | `filesystem_path` | any | Checks a path exists and has a minimum number of entries (see above) |
 | `arr_system_status` | Radarr/Sonarr/Lidarr/Whisparr/Prowlarr | Confirms the API is reachable and the API key is valid |
 | `arr_root_folder` | Radarr/Sonarr/Lidarr/Whisparr | Flags any root folder reported as inaccessible, empty-from-the-app's-own-view, or below a free-space threshold - see "Detecting unmounted/failed drives" above |
+| `arr_filesystem_path` | Radarr/Sonarr/Lidarr/Whisparr | Same empty/populated check as `arr_root_folder`, but for an arbitrary path you specify rather than the app's configured root folders - no volume mount needed |
 | `arr_health` | Radarr/Sonarr/Lidarr/Whisparr/Prowlarr | Pulls the app's own health/notifications feed into this dashboard |
 | `plex_identity` | Plex | Hits Plex's unauthenticated `/identity` endpoint |
 | `plex_remote_access` | Plex | Checks plex.tv for this server's registered connections and actually tries to reach its public `plex.direct` address; reports OK (direct), degraded (relay-only), or failing (nothing registered). Needs the Plex token and outbound internet access. Polled every 10 minutes by default (see below) since it depends on an external API. |

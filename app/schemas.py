@@ -24,6 +24,7 @@ CHECK_TYPES = [
     "arr_system_status",
     "arr_root_folder",
     "arr_health",
+    "arr_filesystem_path",
     "plex_identity",
     "plex_remote_access",
     "jellyfin_health",
