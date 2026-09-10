@@ -136,6 +136,7 @@ function openServiceModal(svc = null) {
   $("#svc-name").value = svc ? svc.name : "";
   $("#svc-local-url").value = svc && svc.local_url ? svc.local_url : "";
   $("#svc-remote-url").value = svc && svc.remote_url ? svc.remote_url : "";
+  $("#svc-check-both").checked = svc ? !!svc.check_both_targets : false;
   $("#svc-key").value = "";
   $("#svc-key-hint").textContent = svc && svc.has_api_key ? "(key already set - leave blank to keep)" : "";
   $("#svc-interval").value = svc && svc.poll_interval_seconds ? svc.poll_interval_seconds : "";
@@ -169,6 +170,7 @@ async function submitServiceForm(ev) {
   }
   const payload = {
     name: $("#svc-name").value.trim(),
+    check_both_targets: $("#svc-check-both").checked,
     verify_ssl: $("#svc-verify-ssl").checked,
     enabled: $("#svc-enabled").checked,
     poll_interval_seconds: $("#svc-interval").value ? parseInt($("#svc-interval").value, 10) : null,

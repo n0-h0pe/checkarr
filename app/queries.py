@@ -7,6 +7,7 @@ mutating or secret-bearing).
 from datetime import datetime, timedelta, timezone
 
 from fastapi import HTTPException
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from . import models, schemas
@@ -19,14 +20,24 @@ def get_service_statuses(db: Session) -> list[schemas.ServiceStatusOut]:
     for service in db.query(models.Service).order_by(models.Service.name).all():
         latest_results = []
         for check in service.checks:
-            result = (
-                db.query(models.CheckResult)
+            # A check can produce more than one row per poll now (one per
+            # local/remote target) - grab every row from its most recent
+            # poll, not just a single "latest" row, or the (local) one
+            # would silently hide the (remote) one (or vice versa).
+            latest_ts = (
+                db.query(func.max(models.CheckResult.timestamp))
                 .filter(models.CheckResult.check_id == check.id)
-                .order_by(models.CheckResult.timestamp.desc())
-                .first()
+                .scalar()
             )
-            if result:
-                latest_results.append(result)
+            if latest_ts is None:
+                continue
+            results = (
+                db.query(models.CheckResult)
+                .filter(models.CheckResult.check_id == check.id, models.CheckResult.timestamp == latest_ts)
+                .order_by(models.CheckResult.check_name)
+                .all()
+            )
+            latest_results.extend(results)
 
         active_notifications = (
             db.query(models.Notification)

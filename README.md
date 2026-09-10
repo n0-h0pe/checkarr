@@ -8,7 +8,7 @@ of what's healthy, what's degraded, and why.
 ## Features
 
 - Polls each service on its own schedule (default every 5 minutes, configurable globally, per-service, and per-check).
-- Local and remote addresses: give a service either address, or both - if both are set, every target-scoped check runs against each on every poll (useful when a service is reachable directly on the LAN and via a reverse proxy, and you want both paths monitored independently).
+- Local and remote addresses: give a service either address, or both. With both set, the Web UI check runs against each (so you know if the reverse-proxied path breaks even when the app itself is fine on the LAN); every other check runs against local only, to avoid needlessly doubling up API-heavy checks - opt into running everything against both with a per-service toggle. See "Adding a service" below.
 - Built-in checks: HTTP 200 web UI reachability, *arr-family API status, root-folder accessibility **and population** (drive/mount detection - see below), each app's own system health feed, and for Plex, Remote Access status.
 - Fully configurable: add your own checks per service (custom HTTP path/status/keyword checks, or a filesystem existence check).
 - Consolidates the *arr apps' own "System > Status" health notifications (indexer down, missing files, low disk space, etc.) into one Notifications tab, with automatic resolve-tracking.
@@ -88,11 +88,19 @@ and set a **local address**, a **remote address**, or both:
 - **Local address** - direct/LAN URL (e.g. `http://radarr:7878`).
 - **Remote address** - public/reverse-proxied URL, if you have one (e.g.
   `https://radarr.example.com`).
-- At least one is required. If you set both, every check that talks to the
-  service's web UI/API runs against **both** addresses on every poll,
-  labeled `(local)` / `(remote)` in the dashboard and history - useful for
-  catching a reverse-proxy misconfiguration even when the app itself is
-  perfectly healthy on the LAN.
+- At least one is required.
+
+With only one address set, checks just run against it as normal - nothing
+below applies. With **both** set:
+
+- By default, the **Web UI reachable** check runs against both addresses
+  (labeled `(local)` / `(remote)`); every other check runs against the local
+  address only. This catches a broken reverse proxy/external access without
+  doubling up API-heavy checks that don't gain much from running twice.
+- Tick **"Run all checks against both Internal and remote addresses"** (info
+  icon next to it in the Add/Edit service form) to run *every* check against
+  both addresses instead, each shown as its own row on the dashboard and in
+  history.
 
 Add an API key (Radarr/Sonarr/Lidarr/Whisparr/Prowlarr: Settings > General >
 API Key; Plex: your X-Plex-Token; Jellyfin: an API key from Dashboard > API

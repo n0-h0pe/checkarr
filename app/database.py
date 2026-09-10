@@ -63,6 +63,11 @@ def _run_migrations() -> None:
                     "inserting new services will fail until this is resolved manually."
                 )
 
+        if "check_both_targets" not in service_cols:
+            conn.exec_driver_sql(
+                "ALTER TABLE services ADD COLUMN check_both_targets BOOLEAN DEFAULT 0"
+            )
+
         check_cols = _table_columns(conn, "check_definitions")
         if "interval_seconds" not in check_cols:
             conn.exec_driver_sql("ALTER TABLE check_definitions ADD COLUMN interval_seconds INTEGER")

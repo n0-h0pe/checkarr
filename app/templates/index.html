@@ -98,7 +98,12 @@
         <div class="field">
           <label>Remote address</label>
           <input type="text" id="svc-remote-url" placeholder="https://radarr.example.com">
-          <div class="hint">Public/reverse-proxied address, if any. At least one of local/remote is required - set both to check both on every poll.</div>
+          <div class="hint">Public/reverse-proxied address, if any. At least one of local/remote is required.</div>
+        </div>
+        <div class="field checkbox">
+          <input type="checkbox" id="svc-check-both">
+          <label for="svc-check-both">Run all checks against both Internal and remote addresses</label>
+          <span class="info-icon" title="By default, if a Remote address is configured, only the Web UI check is ran against it. This option will run all checks against the local address and the remote address and show as individual checks per address on the dashboard.">&#9432;</span>
         </div>
         <div class="field">
           <label>API key <span class="hint" id="svc-key-hint"></span></label>

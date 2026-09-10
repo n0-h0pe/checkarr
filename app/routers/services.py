@@ -26,6 +26,7 @@ def create_service(payload: schemas.ServiceCreate, db: Session = Depends(get_db)
         type=payload.type,
         local_url=payload.local_url.rstrip("/") if payload.local_url else None,
         remote_url=payload.remote_url.rstrip("/") if payload.remote_url else None,
+        check_both_targets=payload.check_both_targets,
         api_key_encrypted=encrypt_secret(payload.api_key),
         verify_ssl=payload.verify_ssl,
         enabled=payload.enabled,
@@ -70,6 +71,8 @@ def update_service(service_id: int, payload: schemas.ServiceUpdate, db: Session 
         service.remote_url = payload.remote_url.rstrip("/") or None
     if not service.local_url and not service.remote_url:
         raise HTTPException(400, "At least one of local address or remote address must be set")
+    if payload.check_both_targets is not None:
+        service.check_both_targets = payload.check_both_targets
     if payload.clear_api_key:
         service.api_key_encrypted = None
     elif payload.api_key:

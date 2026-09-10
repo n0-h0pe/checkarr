@@ -200,6 +200,11 @@ table th { color: var(--text-dim); font-weight: 600; font-size: 12px; text-trans
 .field textarea { resize: vertical; min-height: 60px; }
 .field.checkbox { display: flex; align-items: center; gap: 8px; }
 .field.checkbox label { margin: 0; text-transform: none; font-size: 13px; color: var(--text); }
+.info-icon {
+  display: inline-flex; align-items: center; justify-content: center;
+  color: var(--text-dim); font-size: 14px; cursor: help; line-height: 1;
+}
+.info-icon:hover { color: var(--accent); }
 .field .hint { color: var(--text-dim); font-size: 11px; margin-top: 4px; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
 
