@@ -177,3 +177,18 @@ class PlexAuthPollResponse(BaseModel):
 class LibraryScanResponse(BaseModel):
     checks_created: list[CheckDefinitionOut]
     paths_found: int
+
+
+class CheckBulkUpdateItem(BaseModel):
+    check_id: int
+    enabled: bool | None = None
+    config: dict[str, Any] | None = None
+
+
+class CheckBulkUpdateRequest(BaseModel):
+    updates: list[CheckBulkUpdateItem]
+
+
+class CheckBulkUpdateResponse(BaseModel):
+    updated: list[CheckDefinitionOut]
+    skipped_ids: list[int] = Field(default_factory=list)

@@ -16,6 +16,7 @@ of what's healthy, what's degraded, and why.
 - Real app icons (not emoji), and a version/build date in the header so you can tell at a glance whether you're running the image you think you are.
 - "Test connection" button in the Add/Edit service form - a quick green ✓/red ✕ per address before you even save, plus autofilled Name and a type-appropriate default port in the address placeholder when you pick a service type.
 - For Plex, a "Sign in to Plex" button fills in the X-Plex-Token for you via Plex's own sign-in flow - no copying tokens out of your browser's dev tools.
+- Quick-edit controls on every check's row in Settings (Enabled, and for Plex/Jellyfin path checks, the empty-path severity and minimum-entries count) - no need to open Edit for a one-field change. These stage locally with an obvious "unsaved changes" banner and explicit Save/Discard, so a stray click can't silently change what's being monitored.
 - API keys are encrypted at rest (Fernet/AES) and never echoed back to the browser.
 - Historic results stored in SQLite, with a History tab and per-service uptime strip on the dashboard.
 - Single Docker container: web GUI + API + scheduler + database, no external dependencies.
@@ -185,6 +186,24 @@ Every check has an optional interval override (seconds). Leave it blank to
 run on every poll of the service; set it higher (e.g. 600) to run that one
 check less often than its siblings - the default `plex_remote_access` check
 uses this to poll every 10 minutes even on a service polled every 5.
+
+### Quick-editing checks
+
+Every check's row in Settings has an **Enabled** checkbox right there, no
+need to open Edit just to pause one check. `plex_filesystem_path` and
+`jellyfin_filesystem_path` checks get two more: a **Red/Yellow** toggle for
+whether an empty path is a hard failure or just a warning (a brand-new,
+legitimately-empty library shouldn't necessarily page you the same way a
+dead mount should), and a **−/+** stepper for the minimum entries expected.
+Both are also editable the normal way via Edit, kept in sync either way.
+
+None of these save immediately - an **"unsaved changes"** banner appears at
+the top of Settings as soon as you touch one, with **Save Changes** (applies
+everything you've changed, across as many checks/services as you touched,
+in one go) and **Discard Changes** (reverts to what's actually saved).
+Switching tabs or triggering other actions elsewhere on the page won't lose
+your pending edits; only Save or Discard clears them, and leaving the page
+with changes pending prompts you first.
 
 ## Public dashboard
 
