@@ -131,6 +131,9 @@ main { padding: 20px 24px 60px; max-width: 1300px; margin: 0 auto; }
 
 .uptime-strip { display: flex; gap: 2px; margin: 10px 0; }
 .uptime-strip .bar { flex: 1; height: 20px; border-radius: 2px; background: var(--unknown); }
+.uptime-strip .bar.ok { background: var(--ok); }
+.uptime-strip .bar.warn { background: var(--warn); }
+.uptime-strip .bar.fail { background: var(--fail); }
 
 .check-row {
   display: flex; align-items: center; justify-content: space-between;
