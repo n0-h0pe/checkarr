@@ -217,11 +217,36 @@ table th { color: var(--text-dim); font-weight: 600; font-size: 12px; text-trans
 .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
 
 .checks-subpanel { background: var(--bg); border-radius: 6px; padding: 10px 14px; margin: 6px 0 16px; }
-.checks-subpanel .check-item { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 6px 0; border-top: 1px solid var(--border); font-size: 13px; }
-.checks-subpanel .check-item:first-child { border-top: none; }
-.check-item .check-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.check-quick-controls { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
-.check-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+
+/* CSS Grid, not a <table> - this environment's <thead>/<tbody> box
+   generation for programmatically-created tables doesn't reliably share a
+   column grid between the header row and body rows (confirmed: header and
+   body columns rendered at different widths despite identical markup).
+   Grid sidesteps that entirely: header cells and row cells are all direct
+   children of one grid container sharing one column template. */
+.checks-grid {
+  display: grid;
+  grid-template-columns: 44px 140px 1fr 110px 130px;
+  align-items: center;
+  column-gap: 8px;
+}
+.checks-grid > div {
+  padding: 6px 4px;
+  font-size: 13px;
+  border-bottom: 1px solid var(--border);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.checks-grid-header {
+  font-size: 11px; color: var(--text-dim); font-weight: 600;
+  text-transform: uppercase; letter-spacing: .03em;
+}
+.checks-grid .check-actions { display: flex; gap: 6px; overflow: visible; }
+.checks-grid .row-pending-delete { opacity: .5; }
+.checks-grid .row-pending-delete.check-name-cell { text-decoration: line-through; }
+
+.expand-arrow { width: 24px; padding: 4px 0; text-align: center; font-family: monospace; }
 
 .severity-toggle {
   display: inline-flex; align-items: center; gap: 5px;
@@ -233,16 +258,6 @@ table th { color: var(--text-dim); font-weight: 600; font-size: 12px; text-trans
 .severity-toggle.fail { border-color: rgba(229,72,77,.4); color: var(--fail); }
 .severity-toggle.warn { border-color: rgba(245,166,35,.4); color: var(--warn); }
 .severity-toggle:hover { border-color: var(--accent); }
-
-.stepper { display: flex; align-items: center; gap: 0; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
-.stepper button {
-  border: none; border-radius: 0; background: var(--bg-panel-alt); width: 22px; height: 22px;
-  padding: 0; font-size: 13px; line-height: 1; color: var(--text);
-}
-.stepper .stepper-value { width: 28px; text-align: center; font-size: 12px; color: var(--text-dim); }
-.stepper-label { font-size: 11px; color: var(--text-dim); white-space: nowrap; }
-
-.inline-enabled { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--text-dim); white-space: nowrap; }
 
 .unsaved-banner[hidden] { display: none; }
 .unsaved-banner {

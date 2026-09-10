@@ -40,11 +40,34 @@ async function runNow(serviceId) {
 
 // ---------- settings: services ----------
 
-// check_id -> { enabled?, config? } staged but not yet saved. Every render
-// of the Settings page (initial load, after Add/Edit/Delete, tab switches)
-// re-fetches fresh data then re-applies this on top, so nothing but an
-// explicit Save/Discard ever loses a pending quick-edit.
+// check_id -> { enabled?, config? } staged but not yet saved, plus a
+// separate set of check_ids staged for deletion. Every render of the
+// Settings page (initial load, after Add/Edit/Delete-service, tab switches)
+// re-fetches fresh data then re-applies both on top, so nothing but an
+// explicit Save/Discard ever loses a pending quick-edit or a pending delete.
 let pendingCheckChanges = new Map();
+let pendingCheckDeletions = new Set();
+
+function getCookie(name) {
+  const match = document.cookie.match(new RegExp("(?:^|; )" + name + "=([^;]*)"));
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
+function setCookie(name, value, days) {
+  const expires = new Date(Date.now() + days * 864e5).toUTCString();
+  document.cookie = `${name}=${encodeURIComponent(value)}; expires=${expires}; path=/; SameSite=Lax`;
+}
+
+function loadCollapsedServiceIds() {
+  const raw = getCookie("hc_collapsed_services");
+  return raw ? new Set(raw.split(",").filter(Boolean).map(Number)) : new Set();
+}
+
+function saveCollapsedServiceIds() {
+  setCookie("hc_collapsed_services", Array.from(collapsedServiceIds).join(","), 365);
+}
+
+let collapsedServiceIds = loadCollapsedServiceIds();
 
 async function loadSettings() {
   try {
@@ -90,33 +113,77 @@ function stageCheckChange(check, patch) {
   updateUnsavedBanner();
 }
 
+function stageCheckDeletion(check) {
+  pendingCheckDeletions.add(check.id);
+  renderServicesFromState();
+  updateUnsavedBanner();
+}
+
+function undoCheckDeletion(check) {
+  pendingCheckDeletions.delete(check.id);
+  renderServicesFromState();
+  updateUnsavedBanner();
+}
+
+function pendingChangeCount() {
+  return pendingCheckChanges.size + pendingCheckDeletions.size;
+}
+
 function updateUnsavedBanner() {
-  $("#unsaved-banner").hidden = pendingCheckChanges.size === 0;
+  const hidden = pendingChangeCount() === 0;
+  $("#unsaved-banner").hidden = hidden;
+  $("#unsaved-banner-bottom").hidden = hidden;
 }
 
 async function saveChanges() {
-  const updates = Array.from(pendingCheckChanges, ([check_id, patch]) => ({ check_id: Number(check_id), ...patch }));
-  if (updates.length === 0) return;
-  try {
-    await api("/api/checks/bulk-update", { method: "POST", body: JSON.stringify({ updates }) });
-  } catch (e) {
-    toast("Save failed: " + e.message, true);
-    return;
+  const deleteIds = Array.from(pendingCheckDeletions);
+  const updates = Array.from(pendingCheckChanges, ([check_id, patch]) => ({ check_id: Number(check_id), ...patch }))
+    .filter((u) => !pendingCheckDeletions.has(u.check_id));
+
+  if (deleteIds.length === 0 && updates.length === 0) return;
+
+  const deleteResults = await Promise.allSettled(
+    deleteIds.map((id) => api(`/api/checks/${id}`, { method: "DELETE" }))
+  );
+  const failedDeletes = deleteResults.filter((r) => r.status === "rejected").length;
+
+  let updateFailed = false;
+  if (updates.length > 0) {
+    try {
+      await api("/api/checks/bulk-update", { method: "POST", body: JSON.stringify({ updates }) });
+    } catch (e) {
+      updateFailed = true;
+      toast("Save failed: " + e.message, true);
+    }
   }
-  pendingCheckChanges.clear();
+
+  if (failedDeletes > 0) {
+    toast(`${failedDeletes} deletion(s) failed`, true);
+  }
+  if (!updateFailed) {
+    // Only drop the changes that actually made it - keep anything that
+    // failed staged so the user doesn't lose it silently.
+    for (const id of deleteIds) pendingCheckDeletions.delete(id);
+    for (const u of updates) pendingCheckChanges.delete(u.check_id);
+    if (failedDeletes === 0 && !updateFailed) toast("Changes saved");
+  }
   updateUnsavedBanner();
-  toast("Changes saved");
   loadSettings();
 }
 
 function discardChanges() {
   pendingCheckChanges.clear();
+  pendingCheckDeletions.clear();
   updateUnsavedBanner();
   loadSettings();
 }
 
 function renderServiceRow(svc) {
   const tr = el("tr", { class: "service-row" });
+  const isCollapsed = collapsedServiceIds.has(svc.id);
+
+  const arrowBtn = el("button", { class: "small expand-arrow" }, isCollapsed ? ">" : "v");
+  tr.appendChild(el("td", {}, arrowBtn));
   tr.appendChild(el("td", { text: svc.name }));
   tr.appendChild(el("td", {}, [typeIcon(svc.type), " " + svc.type]));
   tr.appendChild(el("td", { text: svc.local_url || "-" }));
@@ -130,7 +197,16 @@ function renderServiceRow(svc) {
   ]);
   tr.appendChild(el("td", {}, actions));
 
-  const detailRow = el("tr", {}, el("td", { colspan: "7" }, renderChecksPanel(svc)));
+  const detailRow = el("tr", {}, el("td", { colspan: "8" }, renderChecksPanel(svc)));
+  detailRow.style.display = isCollapsed ? "none" : "";
+
+  arrowBtn.addEventListener("click", () => {
+    const collapse = detailRow.style.display !== "none";
+    detailRow.style.display = collapse ? "none" : "";
+    arrowBtn.textContent = collapse ? ">" : "v";
+    if (collapse) collapsedServiceIds.add(svc.id); else collapsedServiceIds.delete(svc.id);
+    saveCollapsedServiceIds();
+  });
 
   const wrapper = document.createDocumentFragment();
   wrapper.appendChild(tr);
@@ -162,72 +238,69 @@ function renderChecksPanel(svc) {
   );
   if (svc.checks.length === 0) {
     panel.appendChild(el("div", { class: "text-dim", text: "No checks configured" }));
+    return panel;
   }
+  const grid = el("div", { class: "checks-grid" }, [
+    el("div", { class: "checks-grid-header", text: "Enable" }),
+    el("div", { class: "checks-grid-header", text: "Check Type" }),
+    el("div", { class: "checks-grid-header", text: "Name" }),
+    el("div", { class: "checks-grid-header", text: "Alert level" }),
+    el("div", { class: "checks-grid-header" }),
+  ]);
   for (const c of svc.checks) {
-    panel.appendChild(renderCheckRow(svc, c));
+    appendCheckGridRow(grid, svc, c);
   }
+  panel.appendChild(grid);
   return panel;
 }
 
-const FILESYSTEM_SEVERITY_TYPES = new Set(["plex_filesystem_path", "jellyfin_filesystem_path"]);
+function appendCheckGridRow(grid, svc, c) {
+  const pendingDelete = pendingCheckDeletions.has(c.id);
+  const rowClass = pendingDelete ? "row-pending-delete" : "";
 
-function renderCheckRow(svc, c) {
-  const quickControls = [];
-
-  if (FILESYSTEM_SEVERITY_TYPES.has(c.type)) {
-    const severity = c.config.fail_severity === "warn" ? "warn" : "fail";
-    quickControls.push(
-      el(
-        "button",
-        {
-          class: `severity-toggle ${severity}`,
-          title: "Status reported when this path is empty - click to toggle",
-          onclick: () => stageCheckChange(c, { config: { fail_severity: severity === "fail" ? "warn" : "fail" } }),
-        },
-        [el("span", { class: `dot ${severity}` }), severity === "fail" ? "Red" : "Yellow"]
-      )
-    );
-
-    const minEntries = Number.isFinite(c.config.min_entries) ? c.config.min_entries : 1;
-    const valueSpan = el("span", { class: "stepper-value", text: String(minEntries) });
-    quickControls.push(
-      el("div", { class: "stepper", title: "Minimum entries expected" }, [
-        el("button", {
-          type: "button",
-          onclick: () => stageCheckChange(c, { config: { min_entries: Math.max(0, minEntries - 1) } }),
-        }, "−"),
-        valueSpan,
-        el("button", {
-          type: "button",
-          onclick: () => stageCheckChange(c, { config: { min_entries: minEntries + 1 } }),
-        }, "+"),
-      ])
-    );
-  }
-
-  quickControls.push(
-    el("label", { class: "inline-enabled" }, [
-      el("input", {
-        type: "checkbox",
-        checked: c.enabled ? "checked" : null,
-        onchange: (e) => stageCheckChange(c, { enabled: e.target.checked }),
-      }),
-      "Enabled",
+  grid.appendChild(
+    el("div", { class: rowClass }, el("input", {
+      type: "checkbox",
+      checked: c.enabled ? "checked" : null,
+      disabled: pendingDelete ? "disabled" : null,
+      onchange: (e) => stageCheckChange(c, { enabled: e.target.checked }),
+    }))
+  );
+  grid.appendChild(
+    el("div", { class: rowClass }, el("span", { class: `badge ${c.enabled ? "ok" : "disabled"}`, text: c.type }))
+  );
+  grid.appendChild(
+    el("div", { class: `check-name-cell ${rowClass}`, title: c.name }, [
+      c.name,
+      c.interval_seconds ? el("span", { class: "text-dim", text: ` (every ${c.interval_seconds}s)` }) : null,
     ])
   );
 
-  return el("div", { class: "check-item" }, [
-    el("span", { class: "check-name" }, [
-      el("span", { class: `badge ${c.enabled ? "ok" : "disabled"}`, text: c.type }),
-      " " + c.name,
-      c.interval_seconds ? el("span", { class: "text-dim", text: ` (every ${c.interval_seconds}s)` }) : null,
-    ]),
-    el("div", { class: "check-quick-controls" }, quickControls),
-    el("div", { class: "check-actions" }, [
-      el("button", { class: "small", onclick: () => openCheckModal(svc, c) }, "Edit"),
-      c.is_builtin ? null : el("button", { class: "small danger", onclick: () => deleteCheck(svc, c) }, "Delete"),
-    ]),
-  ]);
+  const alertLevel = c.config.alert_level === "warn" ? "warn" : "fail";
+  grid.appendChild(
+    el("div", { class: rowClass }, pendingDelete
+      ? el("span", { class: "text-dim", text: "-" })
+      : el(
+          "button",
+          {
+            class: `severity-toggle ${alertLevel}`,
+            title: "Status reported when this check fails - click to toggle",
+            onclick: () => stageCheckChange(c, { config: { alert_level: alertLevel === "fail" ? "warn" : "fail" } }),
+          },
+          [el("span", { class: `dot ${alertLevel}` }), alertLevel === "fail" ? "Red" : "Yellow"]
+        )
+    )
+  );
+
+  grid.appendChild(
+    el("div", { class: `check-actions ${rowClass}` }, pendingDelete
+      ? [el("button", { class: "small", onclick: () => undoCheckDeletion(c) }, "Undo")]
+      : [
+          el("button", { class: "small", onclick: () => openCheckModal(svc, c) }, "Edit"),
+          c.is_builtin ? null : el("button", { class: "small danger", onclick: () => stageCheckDeletion(c) }, "Delete"),
+        ]
+    )
+  );
 }
 
 async function deleteService(svc) {
@@ -235,20 +308,10 @@ async function deleteService(svc) {
   try {
     await api(`/api/services/${svc.id}`, { method: "DELETE" });
     toast("Service deleted");
-    for (const c of svc.checks) pendingCheckChanges.delete(c.id);
-    updateUnsavedBanner();
-    loadSettings();
-  } catch (e) {
-    toast("Delete failed: " + e.message, true);
-  }
-}
-
-async function deleteCheck(svc, check) {
-  if (!confirm(`Delete check "${check.name}"?`)) return;
-  try {
-    await api(`/api/services/${svc.id}/checks/${check.id}`, { method: "DELETE" });
-    toast("Check deleted");
-    pendingCheckChanges.delete(check.id);
+    for (const c of svc.checks) {
+      pendingCheckChanges.delete(c.id);
+      pendingCheckDeletions.delete(c.id);
+    }
     updateUnsavedBanner();
     loadSettings();
   } catch (e) {
@@ -498,6 +561,7 @@ function openCheckModal(svc, check = null) {
   $("#chk-name").value = check ? check.name : "";
   $("#chk-enabled").checked = check ? check.enabled : true;
   $("#chk-interval").value = check && check.interval_seconds ? check.interval_seconds : "";
+  $("#chk-alert-level").value = check && check.config && check.config.alert_level === "warn" ? "warn" : "fail";
 
   const typeSelect = $("#chk-type");
   typeSelect.innerHTML = "";
@@ -594,6 +658,7 @@ async function submitCheckForm(ev) {
       config[f.key] = val;
     }
   }
+  config.alert_level = $("#chk-alert-level").value;
 
   const intervalVal = $("#chk-interval").value;
   const payload = {
@@ -643,9 +708,11 @@ async function init() {
   $("#history-hours").addEventListener("change", loadHistoryTab);
   $("#save-changes-btn").addEventListener("click", saveChanges);
   $("#discard-changes-btn").addEventListener("click", discardChanges);
+  $("#save-changes-btn-bottom").addEventListener("click", saveChanges);
+  $("#discard-changes-btn-bottom").addEventListener("click", discardChanges);
 
   window.addEventListener("beforeunload", (e) => {
-    if (pendingCheckChanges.size > 0) {
+    if (pendingChangeCount() > 0) {
       e.preventDefault();
       e.returnValue = "";
     }

@@ -1,10 +1,10 @@
 """Backs the Settings page's "Save Changes" button: applies every staged
-quick-edit (Enabled toggle, severity toggle, min-entries stepper) across
+quick-edit (Enabled toggle, alert-level toggle) and staged deletion across
 however many checks/services were touched, in one request instead of one
 round trip per row.
 """
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from .. import models, schemas
@@ -12,6 +12,18 @@ from ..database import get_db
 from ..security import require_auth
 
 router = APIRouter(prefix="/api/checks", tags=["checks"], dependencies=[Depends(require_auth)])
+
+
+@router.delete("/{check_id}", status_code=204)
+def delete_check(check_id: int, db: Session = Depends(get_db)):
+    """Flat delete-by-id, used by Settings' staged-deletion Save flow, which
+    tracks only check ids (not which service each belongs to)."""
+    check = db.get(models.CheckDefinition, check_id)
+    if not check:
+        raise HTTPException(404, "Check not found")
+    db.delete(check)
+    db.commit()
+    return None
 
 
 @router.post("/bulk-update", response_model=schemas.CheckBulkUpdateResponse)

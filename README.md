@@ -189,21 +189,33 @@ uses this to poll every 10 minutes even on a service polled every 5.
 
 ### Quick-editing checks
 
-Every check's row in Settings has an **Enabled** checkbox right there, no
-need to open Edit just to pause one check. `plex_filesystem_path` and
-`jellyfin_filesystem_path` checks get two more: a **Red/Yellow** toggle for
-whether an empty path is a hard failure or just a warning (a brand-new,
-legitimately-empty library shouldn't necessarily page you the same way a
-dead mount should), and a **−/+** stepper for the minimum entries expected.
-Both are also editable the normal way via Edit, kept in sync either way.
+Each service's checks are laid out as a table: **Enable** (a bare checkbox,
+no label) | **Check Type** | **Name** | **Alert level** | Edit/Delete. Every
+check gets an inline Enabled checkbox and an **Alert level** Red/Yellow
+toggle right there - no need to open Edit for either. Alert level caps how a
+*failure* reports: Yellow (warn) downgrades what would otherwise be a red
+FAIL for that check to a warning instead (e.g. a brand-new, legitimately-
+empty Plex/Jellyfin library shouldn't necessarily page you the same way a
+dead mount should) - it never touches an already-OK or already-WARN result,
+and it applies to every check type, not just filesystem checks. Both Enable
+and Alert level are also editable the normal way via Edit, kept in sync
+either way; the minimum-entries count for filesystem checks lives in Edit
+only, not the table, to keep the row compact.
 
-None of these save immediately - an **"unsaved changes"** banner appears at
-the top of Settings as soon as you touch one, with **Save Changes** (applies
-everything you've changed, across as many checks/services as you touched,
-in one go) and **Discard Changes** (reverts to what's actually saved).
-Switching tabs or triggering other actions elsewhere on the page won't lose
-your pending edits; only Save or Discard clears them, and leaving the page
-with changes pending prompts you first.
+Click the **›**/**v** arrow next to a service's name to collapse or expand
+its checks table - collapsed/expanded state is remembered per service in a
+browser cookie (not tied to Save/Discard), defaulting to expanded.
+
+None of Enable, Alert level, or **Delete** save immediately: deleting a
+check just marks its row for deletion (shown struck through, with an
+**Undo** button) rather than removing it outright. An **"unsaved changes"**
+banner appears at both the top and bottom of Settings as soon as you change
+anything, with **Save Changes** (applies everything you've changed - edits
+and deletions, across as many checks/services as you touched - in one go)
+and **Discard Changes** (reverts to what's actually saved, un-deleting
+anything you'd marked). Switching tabs or triggering other actions
+elsewhere on the page won't lose your pending edits; only Save or Discard
+clears them, and leaving the page with changes pending prompts you first.
 
 ## Public dashboard
 
