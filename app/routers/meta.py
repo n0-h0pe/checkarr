@@ -156,13 +156,6 @@ CHECK_TYPE_META = [
         "fields": [
             {"key": "path", "label": "Path in {service} container", "kind": "text", "default": ""},
             {"key": "min_entries", "label": "Minimum entries expected", "kind": "number", "default": 1},
-            {
-                "key": "fail_severity",
-                "label": "Status when empty",
-                "kind": "select",
-                "options": ["fail", "warn"],
-                "default": "fail",
-            },
         ],
     },
     {
@@ -178,13 +171,6 @@ CHECK_TYPE_META = [
         "fields": [
             {"key": "path", "label": "Path in {service} container", "kind": "text", "default": ""},
             {"key": "min_entries", "label": "Minimum entries expected", "kind": "number", "default": 1},
-            {
-                "key": "fail_severity",
-                "label": "Status when empty",
-                "kind": "select",
-                "options": ["fail", "warn"],
-                "default": "fail",
-            },
         ],
     },
     {

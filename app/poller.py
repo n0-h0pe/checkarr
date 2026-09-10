@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 
 import httpx
 
-from .checks.base import NotificationItem
+from .checks.base import STATUS_FAIL, STATUS_WARN, NotificationItem
 from .checks.runner import ALWAYS_BOTH_TARGETS_TYPES, SERVICE_SCOPED_TYPES, run_check
 from .config import settings
 from .database import SessionLocal
@@ -101,13 +101,18 @@ async def poll_service(service_id: int) -> None:
 
         for (check, label, _url), outcome in zip(jobs, outcomes):
             check_name = f"{check.name} ({label})" if label and suffix_targets else check.name
+            status = outcome.status
+            # "Alert level" (any check type) caps how loud a failure reports
+            # as - doesn't touch OK/WARN outcomes, only downgrades a FAIL.
+            if status == STATUS_FAIL and (check.config or {}).get("alert_level") == "warn":
+                status = STATUS_WARN
             db.add(
                 CheckResult(
                     service_id=service.id,
                     check_id=check.id,
                     check_name=check_name,
                     check_type=check.type,
-                    status=outcome.status,
+                    status=status,
                     message=outcome.message,
                     response_time_ms=outcome.response_time_ms,
                     timestamp=now,
