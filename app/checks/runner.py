@@ -5,6 +5,7 @@ from ..security import decrypt_secret
 from .base import STATUS_FAIL, CheckOutcome
 from .arr_check import check_filesystem_path_api, check_health, check_root_folders, check_system_status
 from .filesystem_check import check_filesystem_path
+from .ftp_check import check_ftp_path
 from .http_check import check_http_200, check_keyword_match
 from .media_server_check import (
     check_jellyfin_filesystem_path,
@@ -13,7 +14,13 @@ from .media_server_check import (
     check_plex_identity,
     check_plex_remote_access,
 )
-from .torrent_client_check import check_deluge_login, check_qbittorrent_login
+from .torrent_client_check import (
+    check_deluge_disk_space,
+    check_deluge_login,
+    check_qbittorrent_disk_space,
+    check_qbittorrent_login,
+    check_rtorrent_rpc_status,
+)
 
 ARR_TYPES = {"radarr", "sonarr", "prowlarr", "lidarr", "whisparr"}
 ROOT_FOLDER_TYPES = {"radarr", "sonarr", "lidarr", "whisparr"}
@@ -33,11 +40,14 @@ TARGET_SCOPED_TYPES = {
     "jellyfin_filesystem_path",
     "qbittorrent_login",
     "deluge_login",
+    "qbittorrent_disk_space",
+    "deluge_disk_space",
+    "rtorrent_rpc_status",
 }
 
 # Checks that don't care which URL is configured - the poller runs these
 # exactly once per poll regardless of how many targets are set.
-SERVICE_SCOPED_TYPES = {"filesystem_path", "plex_remote_access"}
+SERVICE_SCOPED_TYPES = {"filesystem_path", "plex_remote_access", "ftp_path"}
 
 # When a service has both a local and a remote address but hasn't opted into
 # "run all checks against both", these target-scoped types still run against
@@ -67,6 +77,8 @@ async def run_check(
             return await check_keyword_match(client, base_url, config, auth=basic_auth)
         if ctype == "filesystem_path":
             return await check_filesystem_path(config)
+        if ctype == "ftp_path":
+            return await check_ftp_path(config)
         if ctype == "arr_system_status":
             return await check_system_status(client, base_url, api_key, service.type, config)
         if ctype == "arr_root_folder":
@@ -89,6 +101,12 @@ async def run_check(
             return await check_qbittorrent_login(client, base_url, service.username, api_key, config)
         if ctype == "deluge_login":
             return await check_deluge_login(client, base_url, api_key, config)
+        if ctype == "qbittorrent_disk_space":
+            return await check_qbittorrent_disk_space(client, base_url, service.username, api_key, config)
+        if ctype == "deluge_disk_space":
+            return await check_deluge_disk_space(client, base_url, api_key, config)
+        if ctype == "rtorrent_rpc_status":
+            return await check_rtorrent_rpc_status(client, base_url, config, auth=basic_auth)
         return CheckOutcome(STATUS_FAIL, f"Unknown check type '{ctype}'", None)
     except Exception as exc:  # noqa: BLE001 - a broken check must not kill the poll loop
         return CheckOutcome(STATUS_FAIL, f"Check raised an unexpected error: {exc}", None)
@@ -124,6 +142,10 @@ def default_checks_for_service_type(service_type: str) -> list[dict]:
         checks.append({"name": "Jellyfin health", "type": "jellyfin_health", "config": {}, "is_builtin": True})
     if service_type == "qbittorrent":
         checks.append({"name": "Login (API)", "type": "qbittorrent_login", "config": {}, "is_builtin": True})
+        checks.append({"name": "Free disk space", "type": "qbittorrent_disk_space", "config": {}, "is_builtin": True})
     if service_type == "deluge":
         checks.append({"name": "Login (API)", "type": "deluge_login", "config": {}, "is_builtin": True})
+        checks.append({"name": "Free disk space", "type": "deluge_disk_space", "config": {}, "is_builtin": True})
+    if service_type == "rtorrent":
+        checks.append({"name": "XML-RPC reachable", "type": "rtorrent_rpc_status", "config": {}, "is_builtin": True})
     return checks
