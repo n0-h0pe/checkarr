@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Media Estate HealthChecker</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+  <header class="app-header">
+    <h1>🩺 Media Estate HealthChecker</h1>
+    <div class="header-right">
+      <div class="summary-pill" id="summary-pill"></div>
+      <span class="text-dim" id="last-refresh"></span>
+    </div>
+  </header>
+
+  <nav class="tabs">
+    <button class="tab-btn active" data-tab="dashboard">Dashboard</button>
+    <button class="tab-btn" data-tab="notifications">Notifications</button>
+    <button class="tab-btn" data-tab="history">History</button>
+    <button class="tab-btn" data-tab="settings">Settings</button>
+  </nav>
+
+  <main>
+    <section class="tab-panel active" id="tab-dashboard">
+      <div class="cards-grid" id="dashboard-grid"></div>
+    </section>
+
+    <section class="tab-panel" id="tab-notifications">
+      <div class="panel">
+        <div class="panel-header">
+          <h2>Consolidated notifications</h2>
+          <label class="field checkbox" style="margin:0">
+            <input type="checkbox" id="show-resolved">
+            <span>Show resolved</span>
+          </label>
+        </div>
+        <div id="notifications-list"></div>
+      </div>
+    </section>
+
+    <section class="tab-panel" id="tab-history">
+      <div class="panel">
+        <div class="panel-header">
+          <h2>Check history</h2>
+          <div style="display:flex; gap:8px;">
+            <select id="history-service"></select>
+            <select id="history-hours">
+              <option value="6">Last 6h</option>
+              <option value="24" selected>Last 24h</option>
+              <option value="72">Last 3 days</option>
+              <option value="168">Last 7 days</option>
+            </select>
+          </div>
+        </div>
+        <table>
+          <thead><tr><th>Time</th><th>Check</th><th>Status</th><th>Response</th><th>Message</th></tr></thead>
+          <tbody id="history-body"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="tab-panel" id="tab-settings">
+      <div class="panel">
+        <div class="panel-header">
+          <h2>Services</h2>
+          <button class="primary" id="add-service-btn">+ Add service</button>
+        </div>
+        <table>
+          <thead>
+            <tr><th></th><th>Name</th><th>Type</th><th>URL</th><th>Interval</th><th>Status</th><th></th></tr>
+          </thead>
+          <tbody id="services-body"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <div class="modal-backdrop hidden" id="service-modal">
+    <div class="modal">
+      <h3 id="service-modal-title">Add service</h3>
+      <form id="service-form">
+        <input type="hidden" id="svc-id">
+        <div class="field">
+          <label>Name</label>
+          <input type="text" id="svc-name" required placeholder="e.g. Radarr - Movies">
+        </div>
+        <div class="field">
+          <label>Type</label>
+          <select id="svc-type"></select>
+        </div>
+        <div class="field">
+          <label>Base URL</label>
+          <input type="text" id="svc-url" required placeholder="http://radarr:7878">
+        </div>
+        <div class="field">
+          <label>API key <span class="hint" id="svc-key-hint"></span></label>
+          <input type="password" id="svc-key" placeholder="leave blank to keep existing / not required">
+        </div>
+        <div class="field">
+          <label>Poll interval override (seconds, optional)</label>
+          <input type="number" id="svc-interval" min="30" placeholder="default: global setting">
+        </div>
+        <div class="field checkbox">
+          <input type="checkbox" id="svc-verify-ssl" checked>
+          <label for="svc-verify-ssl">Verify SSL certificates</label>
+        </div>
+        <div class="field checkbox">
+          <input type="checkbox" id="svc-enabled" checked>
+          <label for="svc-enabled">Enabled</label>
+        </div>
+        <div class="field">
+          <label>Notes (optional)</label>
+          <textarea id="svc-notes"></textarea>
+        </div>
+        <div class="modal-actions">
+          <button type="button" id="service-cancel">Cancel</button>
+          <button type="submit" class="primary">Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="modal-backdrop hidden" id="check-modal">
+    <div class="modal">
+      <h3 id="check-modal-title">Add check</h3>
+      <form id="check-form">
+        <input type="hidden" id="chk-service-id">
+        <input type="hidden" id="chk-id">
+        <div class="field">
+          <label>Name</label>
+          <input type="text" id="chk-name" required>
+        </div>
+        <div class="field">
+          <label>Check type</label>
+          <select id="chk-type"></select>
+        </div>
+        <div id="chk-dynamic-fields"></div>
+        <div class="field checkbox">
+          <input type="checkbox" id="chk-enabled" checked>
+          <label for="chk-enabled">Enabled</label>
+        </div>
+        <div class="modal-actions">
+          <button type="button" id="check-cancel">Cancel</button>
+          <button type="submit" class="primary">Save check</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="/static/js/app.js"></script>
+</body>
+</html>

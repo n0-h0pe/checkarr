@@ -1,0 +1,25 @@
+services:
+  healthchecker:
+    build: .
+    container_name: healthchecker
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    env_file:
+      - .env
+    environment:
+      - TZ=${TZ:-UTC}
+    volumes:
+      - ./data:/data
+      # Optional: bind-mount the SAME host paths Radarr/Sonarr use, read-only,
+      # so a "filesystem_path" check can independently confirm a drive/share
+      # is actually mounted here too. Not required - the built-in
+      # "Root folders accessible" check reads this straight from Radarr/
+      # Sonarr's own API and needs no extra mounts. Example:
+      # - /mnt/media:/mnt/media:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://127.0.0.1:8080/healthz', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
