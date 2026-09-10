@@ -12,9 +12,18 @@ import httpx
 
 from .version import VERSION
 
-# Jellyfin rejects requests with no client-identifying header at all on some
-# endpoints, so this is always sent, not just for the login call itself.
-JELLYFIN_CLIENT_HEADER = f'MediaBrowser Client="Checkarr", Device="Checkarr", DeviceId="checkarr-healthcheck", Version="{VERSION}"'
+# Jellyfin's auth middleware needs this to identify the calling client on
+# every request, including the login call itself - both header names are
+# sent since Jellyfin has supported the two interchangeably across versions
+# (X-Emby-Authorization is the long-standing name; Authorization is what a
+# reverse proxy is guaranteed to forward untouched, since it's a standard
+# header where X-Emby-Authorization is not always allow-listed by a
+# proxy config someone copied from an older guide).
+_CLIENT_AUTH_VALUE = f'MediaBrowser Client="Checkarr", Device="Checkarr", DeviceId="checkarr-healthcheck", Version="{VERSION}"'
+JELLYFIN_AUTH_HEADERS = {
+    "X-Emby-Authorization": _CLIENT_AUTH_VALUE,
+    "Authorization": _CLIENT_AUTH_VALUE,
+}
 
 
 class JellyfinAdminAuthError(Exception):
@@ -23,7 +32,7 @@ class JellyfinAdminAuthError(Exception):
 
 async def get_jellyfin_admin_token(client: httpx.AsyncClient, base_url: str, username: str, password: str) -> str:
     url = base_url.rstrip("/") + "/Users/AuthenticateByName"
-    headers = {"Content-Type": "application/json", "X-Emby-Authorization": JELLYFIN_CLIENT_HEADER}
+    headers = {"Content-Type": "application/json", "Accept": "application/json", **JELLYFIN_AUTH_HEADERS}
     try:
         resp = await client.post(url, json={"Username": username, "Pw": password}, headers=headers)
     except httpx.RequestError as exc:
@@ -32,7 +41,12 @@ async def get_jellyfin_admin_token(client: httpx.AsyncClient, base_url: str, use
     if resp.status_code == 401:
         raise JellyfinAdminAuthError("Admin login rejected (HTTP 401) - check the admin username/password")
     if resp.status_code != 200:
-        raise JellyfinAdminAuthError(f"Admin login returned HTTP {resp.status_code}")
+        # Jellyfin's own error body (when present) is usually far more
+        # specific than the status code alone - e.g. a 400 here is often a
+        # validation message pointing at exactly what it didn't like.
+        detail = resp.text.strip()[:300]
+        suffix = f" - server said: {detail}" if detail else ""
+        raise JellyfinAdminAuthError(f"Admin login returned HTTP {resp.status_code}{suffix}")
 
     try:
         data = resp.json()

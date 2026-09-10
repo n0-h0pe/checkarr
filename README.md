@@ -237,14 +237,16 @@ uses this to poll every 10 minutes even on a service polled every 5.
 
 Each service's checks are laid out as a table: **Enable** (a bare checkbox,
 no label) | **Check Type** | **Name** | **Alert level** | Edit/Delete. Every
-check gets an inline Enabled checkbox and an **Alert level** Red/Yellow
+check gets an inline Enabled checkbox and an **Alert level** Fail/Warn
 toggle right there - no need to open Edit for either. Alert level caps how a
-*failure* reports: Yellow (warn) downgrades what would otherwise be a red
-FAIL for that check to a warning instead (e.g. a brand-new, legitimately-
-empty Plex/Jellyfin library shouldn't necessarily page you the same way a
-dead mount should) - it never touches an already-OK or already-WARN result,
-and it applies to every check type, not just filesystem checks. Both Enable
-and Alert level are also editable the normal way via Edit, kept in sync
+*failure* reports: Warn downgrades what would otherwise be a FAIL for that
+check to a warning instead (e.g. a brand-new, legitimately-empty Plex/
+Jellyfin library shouldn't necessarily page you the same way a dead mount
+should) - it never touches an already-OK or already-WARN result, and it
+applies to every check type, not just filesystem checks (except the torrent
+client disk-space checks, whose own warn/fail % thresholds already decide
+this - see "Torrent client disk space" above). Both Enable and Alert level
+are also editable the normal way via Edit, kept in sync
 either way; the minimum-entries count for filesystem checks lives in Edit
 only, not the table, to keep the row compact.
 
