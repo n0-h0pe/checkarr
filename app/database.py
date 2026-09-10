@@ -67,6 +67,8 @@ def _run_migrations() -> None:
             conn.exec_driver_sql(
                 "ALTER TABLE services ADD COLUMN check_both_targets BOOLEAN DEFAULT 0"
             )
+        if "username" not in service_cols:
+            conn.exec_driver_sql("ALTER TABLE services ADD COLUMN username VARCHAR(255)")
 
         check_cols = _table_columns(conn, "check_definitions")
         if "interval_seconds" not in check_cols:

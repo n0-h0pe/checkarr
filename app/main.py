@@ -9,7 +9,7 @@ from fastapi.templating import Jinja2Templates
 from . import scheduler as scheduler_module
 from .config import settings
 from .database import init_db
-from .routers import meta, notifications, services, status
+from .routers import meta, notifications, plex_auth, services, status
 from .security import require_auth
 
 logging.basicConfig(level=settings.log_level)
@@ -34,6 +34,7 @@ app.include_router(services.router)
 app.include_router(status.router)
 app.include_router(notifications.router)
 app.include_router(meta.router)
+app.include_router(plex_auth.router)
 
 
 @app.get("/", response_class=HTMLResponse, dependencies=[Depends(require_auth)])

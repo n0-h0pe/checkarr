@@ -1,11 +1,15 @@
+import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from .. import models, schemas
 from ..checks.runner import default_checks_for_service_type
+from ..config import settings
+from ..connection_test import test_connection
 from ..database import get_db
+from ..library_scan import LibraryScanError, scan_jellyfin_libraries, scan_plex_libraries
 from ..scheduler import schedule_service, unschedule_service
-from ..security import encrypt_secret, require_auth
+from ..security import decrypt_secret, encrypt_secret, require_auth
 from ..serializers import serialize_service as _out
 
 router = APIRouter(prefix="/api/services", tags=["services"], dependencies=[Depends(require_auth)])
@@ -14,6 +18,11 @@ router = APIRouter(prefix="/api/services", tags=["services"], dependencies=[Depe
 @router.get("", response_model=list[schemas.ServiceOut])
 def list_services(db: Session = Depends(get_db)):
     return [_out(s) for s in db.query(models.Service).order_by(models.Service.name).all()]
+
+
+@router.post("/test-connection", response_model=schemas.ConnectionTestResponse)
+async def test_connection_route(payload: schemas.ConnectionTestRequest):
+    return await test_connection(payload)
 
 
 @router.post("", response_model=schemas.ServiceOut, status_code=201)
@@ -27,6 +36,7 @@ def create_service(payload: schemas.ServiceCreate, db: Session = Depends(get_db)
         local_url=payload.local_url.rstrip("/") if payload.local_url else None,
         remote_url=payload.remote_url.rstrip("/") if payload.remote_url else None,
         check_both_targets=payload.check_both_targets,
+        username=payload.username or None,
         api_key_encrypted=encrypt_secret(payload.api_key),
         verify_ssl=payload.verify_ssl,
         enabled=payload.enabled,
@@ -73,6 +83,8 @@ def update_service(service_id: int, payload: schemas.ServiceUpdate, db: Session 
         raise HTTPException(400, "At least one of local address or remote address must be set")
     if payload.check_both_targets is not None:
         service.check_both_targets = payload.check_both_targets
+    if payload.username is not None:
+        service.username = payload.username or None
     if payload.clear_api_key:
         service.api_key_encrypted = None
     elif payload.api_key:
@@ -128,6 +140,58 @@ async def run_now(service_id: int, db: Session = Depends(get_db)):
         .all()
     )
     return results
+
+
+@router.post("/{service_id}/scan-libraries", response_model=schemas.LibraryScanResponse)
+async def scan_libraries(service_id: int, db: Session = Depends(get_db)):
+    service = db.get(models.Service, service_id)
+    if not service:
+        raise HTTPException(404, "Service not found")
+    if service.type not in ("plex", "jellyfin"):
+        raise HTTPException(400, "Library scanning is only available for Plex and Jellyfin services")
+
+    base_url = service.local_url or service.remote_url
+    if not base_url:
+        raise HTTPException(400, "Service has no address configured")
+
+    api_key = decrypt_secret(service.api_key_encrypted)
+    check_type = "plex_filesystem_path" if service.type == "plex" else "jellyfin_filesystem_path"
+
+    async with httpx.AsyncClient(timeout=settings.http_timeout_seconds, verify=service.verify_ssl) as client:
+        try:
+            if service.type == "plex":
+                found = await scan_plex_libraries(client, base_url, api_key)
+            else:
+                found = await scan_jellyfin_libraries(client, base_url, api_key)
+        except LibraryScanError as exc:
+            raise HTTPException(502, str(exc))
+
+    existing_paths = {c.config.get("path") for c in service.checks if c.type == check_type}
+
+    created: list[models.CheckDefinition] = []
+    for title, path in found:
+        if path in existing_paths:
+            continue
+        check = models.CheckDefinition(
+            service_id=service.id,
+            name=f"Library: {title} ({path})",
+            type=check_type,
+            config={"path": path, "min_entries": 1},
+            enabled=True,
+            is_builtin=False,
+        )
+        db.add(check)
+        existing_paths.add(path)
+        created.append(check)
+
+    db.commit()
+    for c in created:
+        db.refresh(c)
+
+    return schemas.LibraryScanResponse(
+        checks_created=[schemas.CheckDefinitionOut.model_validate(c, from_attributes=True) for c in created],
+        paths_found=len(found),
+    )
 
 
 @router.get("/{service_id}/checks", response_model=list[schemas.CheckDefinitionOut])

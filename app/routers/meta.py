@@ -25,6 +25,25 @@ SERVICE_TYPE_ICONS = {
     "rtorrent": f"{_ICON_BASE}/rutorrent.svg",  # rTorrent has no web UI of its own - this is its usual ruTorrent frontend
 }
 
+# Used to autofill the Name field and the Local address placeholder when a
+# type is picked in Add Service - "port" is each app's documented default,
+# omitted where there isn't a real convention (rTorrent has no web UI of its
+# own; Chaptarr's isn't established).
+SERVICE_TYPE_DEFAULTS = {
+    "radarr": {"name": "Radarr", "port": 7878},
+    "sonarr": {"name": "Sonarr", "port": 8989},
+    "prowlarr": {"name": "Prowlarr", "port": 9696},
+    "lidarr": {"name": "Lidarr", "port": 8686},
+    "whisparr": {"name": "Whisparr", "port": 6969},
+    "chaptarr": {"name": "Chaptarr", "port": None},
+    "plex": {"name": "Plex", "port": 32400},
+    "jellyfin": {"name": "Jellyfin", "port": 8096},
+    "qbittorrent": {"name": "qBittorrent", "port": 8080},
+    "deluge": {"name": "Deluge", "port": 8112},
+    "rtorrent": {"name": "rTorrent", "port": None},
+    "generic": {"name": "", "port": None},
+}
+
 CHECK_TYPE_META = [
     {
         "type": "http_200",
@@ -131,9 +150,39 @@ CHECK_TYPE_META = [
         ],
     },
     {
+        "type": "plex_filesystem_path",
+        "label": "Filesystem path check via API (no volume mount needed)",
+        "applies_to": ["plex"],
+        "fields": [
+            {"key": "path", "label": "Path in {service} container", "kind": "text", "default": ""},
+            {"key": "min_entries", "label": "Minimum entries expected", "kind": "number", "default": 1},
+        ],
+    },
+    {
         "type": "jellyfin_health",
         "label": "Jellyfin /health endpoint",
         "applies_to": ["jellyfin"],
+        "fields": [],
+    },
+    {
+        "type": "jellyfin_filesystem_path",
+        "label": "Filesystem path check via API (no volume mount needed)",
+        "applies_to": ["jellyfin"],
+        "fields": [
+            {"key": "path", "label": "Path in {service} container", "kind": "text", "default": ""},
+            {"key": "min_entries", "label": "Minimum entries expected", "kind": "number", "default": 1},
+        ],
+    },
+    {
+        "type": "qbittorrent_login",
+        "label": "Login via API (verifies configured username/password)",
+        "applies_to": ["qbittorrent"],
+        "fields": [],
+    },
+    {
+        "type": "deluge_login",
+        "label": "Login via API (verifies configured password)",
+        "applies_to": ["deluge"],
         "fields": [],
     },
 ]
@@ -145,5 +194,6 @@ def get_meta():
         "service_types": SERVICE_TYPES,
         "check_types": CHECK_TYPE_META,
         "service_type_icons": SERVICE_TYPE_ICONS,
+        "service_type_defaults": SERVICE_TYPE_DEFAULTS,
         "build": {"version": VERSION, "build_date": BUILD_DATE},
     }

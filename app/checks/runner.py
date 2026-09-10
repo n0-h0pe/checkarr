@@ -6,7 +6,14 @@ from .base import STATUS_FAIL, CheckOutcome
 from .arr_check import check_filesystem_path_api, check_health, check_root_folders, check_system_status
 from .filesystem_check import check_filesystem_path
 from .http_check import check_http_200, check_keyword_match
-from .media_server_check import check_jellyfin_health, check_plex_identity, check_plex_remote_access
+from .media_server_check import (
+    check_jellyfin_filesystem_path,
+    check_jellyfin_health,
+    check_plex_filesystem_path,
+    check_plex_identity,
+    check_plex_remote_access,
+)
+from .torrent_client_check import check_deluge_login, check_qbittorrent_login
 
 ARR_TYPES = {"radarr", "sonarr", "prowlarr", "lidarr", "whisparr"}
 ROOT_FOLDER_TYPES = {"radarr", "sonarr", "lidarr", "whisparr"}
@@ -21,7 +28,11 @@ TARGET_SCOPED_TYPES = {
     "arr_health",
     "arr_filesystem_path",
     "plex_identity",
+    "plex_filesystem_path",
     "jellyfin_health",
+    "jellyfin_filesystem_path",
+    "qbittorrent_login",
+    "deluge_login",
 }
 
 # Checks that don't care which URL is configured - the poller runs these
@@ -43,11 +54,17 @@ async def run_check(
     config = check.config or {}
     ctype = check.type
 
+    # Basic auth for services that gate their web UI behind htaccess-style
+    # login (mainly rTorrent/ruTorrent, which has no API of its own) -
+    # applied whenever both a username and a secret are configured,
+    # regardless of type, since it's harmless for services that don't need it.
+    basic_auth = (service.username, api_key) if service.username and api_key else None
+
     try:
         if ctype == "http_200":
-            return await check_http_200(client, base_url, config)
+            return await check_http_200(client, base_url, config, auth=basic_auth)
         if ctype == "keyword_match":
-            return await check_keyword_match(client, base_url, config)
+            return await check_keyword_match(client, base_url, config, auth=basic_auth)
         if ctype == "filesystem_path":
             return await check_filesystem_path(config)
         if ctype == "arr_system_status":
@@ -60,10 +77,18 @@ async def run_check(
             return await check_filesystem_path_api(client, base_url, api_key, service.type, config)
         if ctype == "plex_identity":
             return await check_plex_identity(client, base_url, api_key, config)
+        if ctype == "plex_filesystem_path":
+            return await check_plex_filesystem_path(client, base_url, api_key, config)
         if ctype == "jellyfin_health":
             return await check_jellyfin_health(client, base_url, api_key, config)
+        if ctype == "jellyfin_filesystem_path":
+            return await check_jellyfin_filesystem_path(client, base_url, api_key, config)
         if ctype == "plex_remote_access":
             return await check_plex_remote_access(client, api_key, config)
+        if ctype == "qbittorrent_login":
+            return await check_qbittorrent_login(client, base_url, service.username, api_key, config)
+        if ctype == "deluge_login":
+            return await check_deluge_login(client, base_url, api_key, config)
         return CheckOutcome(STATUS_FAIL, f"Unknown check type '{ctype}'", None)
     except Exception as exc:  # noqa: BLE001 - a broken check must not kill the poll loop
         return CheckOutcome(STATUS_FAIL, f"Check raised an unexpected error: {exc}", None)
@@ -71,8 +96,9 @@ async def run_check(
 
 def default_checks_for_service_type(service_type: str) -> list[dict]:
     """Sensible built-in checks pre-populated when a service is created."""
+    web_ui_config = {"path": "/web/index.html"} if service_type == "plex" else {}
     checks = [
-        {"name": "Web UI reachable", "type": "http_200", "config": {}, "is_builtin": True},
+        {"name": "Web UI reachable", "type": "http_200", "config": web_ui_config, "is_builtin": True},
     ]
     if service_type in ARR_TYPES:
         checks += [
@@ -96,4 +122,8 @@ def default_checks_for_service_type(service_type: str) -> list[dict]:
         )
     if service_type == "jellyfin":
         checks.append({"name": "Jellyfin health", "type": "jellyfin_health", "config": {}, "is_builtin": True})
+    if service_type == "qbittorrent":
+        checks.append({"name": "Login (API)", "type": "qbittorrent_login", "config": {}, "is_builtin": True})
+    if service_type == "deluge":
+        checks.append({"name": "Login (API)", "type": "deluge_login", "config": {}, "is_builtin": True})
     return checks

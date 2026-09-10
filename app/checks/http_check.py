@@ -5,7 +5,9 @@ import httpx
 from .base import STATUS_FAIL, STATUS_OK, STATUS_WARN, CheckOutcome
 
 
-async def check_http_200(client: httpx.AsyncClient, base_url: str, config: dict) -> CheckOutcome:
+async def check_http_200(
+    client: httpx.AsyncClient, base_url: str, config: dict, auth: tuple[str, str] | None = None
+) -> CheckOutcome:
     """Generic "is the web UI up" check: GET a URL, expect an allowed status code."""
     path = (config.get("path") or "").strip()
     url = _join(base_url, path)
@@ -14,7 +16,7 @@ async def check_http_200(client: httpx.AsyncClient, base_url: str, config: dict)
 
     start = time.perf_counter()
     try:
-        resp = await client.request(method, url, follow_redirects=True)
+        resp = await client.request(method, url, follow_redirects=True, auth=auth)
     except httpx.RequestError as exc:
         elapsed = (time.perf_counter() - start) * 1000
         return CheckOutcome(STATUS_FAIL, f"Request to {url} failed: {exc}", elapsed)
@@ -29,7 +31,9 @@ async def check_http_200(client: httpx.AsyncClient, base_url: str, config: dict)
     return CheckOutcome(STATUS_OK, f"{url} responded HTTP {resp.status_code}", elapsed)
 
 
-async def check_keyword_match(client: httpx.AsyncClient, base_url: str, config: dict) -> CheckOutcome:
+async def check_keyword_match(
+    client: httpx.AsyncClient, base_url: str, config: dict, auth: tuple[str, str] | None = None
+) -> CheckOutcome:
     """GET a URL and require (or forbid) a substring in the response body."""
     path = (config.get("path") or "").strip()
     url = _join(base_url, path)
@@ -38,7 +42,7 @@ async def check_keyword_match(client: httpx.AsyncClient, base_url: str, config: 
 
     start = time.perf_counter()
     try:
-        resp = await client.get(url, follow_redirects=True)
+        resp = await client.get(url, follow_redirects=True, auth=auth)
     except httpx.RequestError as exc:
         elapsed = (time.perf_counter() - start) * 1000
         return CheckOutcome(STATUS_FAIL, f"Request to {url} failed: {exc}", elapsed)

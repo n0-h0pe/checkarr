@@ -92,22 +92,36 @@
         </div>
         <div class="field">
           <label>Local address</label>
-          <input type="text" id="svc-local-url" placeholder="http://radarr:7878">
+          <div class="input-with-status">
+            <input type="text" id="svc-local-url" placeholder="http://radarr:7878">
+            <span class="conn-status" id="svc-local-status"></span>
+          </div>
           <div class="hint">Direct/LAN address. Leave blank if only reachable remotely (e.g. behind a reverse proxy).</div>
         </div>
         <div class="field">
-          <label>Remote address</label>
-          <input type="text" id="svc-remote-url" placeholder="https://radarr.example.com">
+          <label>Remote address <span class="hint">(optional)</span></label>
+          <div class="input-with-status">
+            <input type="text" id="svc-remote-url" placeholder="https://radarr.example.com">
+            <span class="conn-status" id="svc-remote-status"></span>
+          </div>
           <div class="hint">Public/reverse-proxied address, if any. At least one of local/remote is required.</div>
+        </div>
+        <div class="field">
+          <button type="button" class="small" id="svc-test-connection">Test connection</button>
         </div>
         <div class="field checkbox">
           <input type="checkbox" id="svc-check-both">
           <label for="svc-check-both">Run all checks against both Internal and remote addresses</label>
           <span class="info-icon" title="By default, if a Remote address is configured, only the Web UI check is ran against it. This option will run all checks against the local address and the remote address and show as individual checks per address on the dashboard.">&#9432;</span>
         </div>
+        <div class="field" id="svc-username-field" hidden>
+          <label>Username <span class="hint">(optional - leave blank if this instance has no auth)</span></label>
+          <input type="text" id="svc-username" placeholder="admin">
+        </div>
         <div class="field">
-          <label>API key <span class="hint" id="svc-key-hint"></span></label>
+          <label id="svc-key-label">API key <span class="hint" id="svc-key-hint"></span></label>
           <input type="password" id="svc-key" placeholder="leave blank to keep existing / not required">
+          <button type="button" class="small" id="svc-plex-signin" hidden style="margin-top:8px;">Sign in to Plex</button>
         </div>
         <div class="field">
           <label>Poll interval override (seconds, optional)</label>

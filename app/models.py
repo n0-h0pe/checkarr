@@ -19,6 +19,13 @@ class Service(Base):
     local_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     remote_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     check_both_targets: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Plaintext (not sensitive - usernames aren't secrets) login name for
+    # services that authenticate with username+password/secret rather than
+    # a bearer API key (qBittorrent, rTorrent via HTTP Basic Auth). The
+    # paired secret always lives in api_key_encrypted regardless of what
+    # it semantically is for a given service type (API key / token /
+    # password) - one encrypted slot, reused.
+    username: Mapped[str | None] = mapped_column(String(255), nullable=True)
     api_key_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
     verify_ssl: Mapped[bool] = mapped_column(Boolean, default=True)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
