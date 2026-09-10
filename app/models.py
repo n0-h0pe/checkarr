@@ -16,7 +16,8 @@ class Service(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     name: Mapped[str] = mapped_column(String(120), nullable=False)
     type: Mapped[str] = mapped_column(String(30), nullable=False)  # radarr/sonarr/prowlarr/plex/jellyfin/generic
-    base_url: Mapped[str] = mapped_column(String(500), nullable=False)
+    local_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    remote_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     api_key_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
     verify_ssl: Mapped[bool] = mapped_column(Boolean, default=True)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
@@ -38,6 +39,15 @@ class Service(Base):
     def has_api_key(self) -> bool:
         return bool(self.api_key_encrypted)
 
+    def get_targets(self) -> list[tuple[str, str]]:
+        """(label, url) pairs for whichever of local/remote address are set."""
+        targets: list[tuple[str, str]] = []
+        if self.local_url:
+            targets.append(("local", self.local_url.rstrip("/")))
+        if self.remote_url:
+            targets.append(("remote", self.remote_url.rstrip("/")))
+        return targets
+
 
 class CheckDefinition(Base):
     __tablename__ = "check_definitions"
@@ -49,6 +59,7 @@ class CheckDefinition(Base):
     config: Mapped[dict] = mapped_column(JSON, default=dict)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     is_builtin: Mapped[bool] = mapped_column(Boolean, default=False)
+    interval_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
     service: Mapped["Service"] = relationship(back_populates="checks")

@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 SERVICE_TYPES = ["radarr", "sonarr", "prowlarr", "plex", "jellyfin", "generic"]
 CHECK_TYPES = [
@@ -12,6 +12,7 @@ CHECK_TYPES = [
     "arr_root_folder",
     "arr_health",
     "plex_identity",
+    "plex_remote_access",
     "jellyfin_health",
 ]
 
@@ -21,6 +22,7 @@ class CheckDefinitionBase(BaseModel):
     type: str
     config: dict[str, Any] = Field(default_factory=dict)
     enabled: bool = True
+    interval_seconds: int | None = None
 
 
 class CheckDefinitionCreate(CheckDefinitionBase):
@@ -32,6 +34,8 @@ class CheckDefinitionUpdate(BaseModel):
     type: str | None = None
     config: dict[str, Any] | None = None
     enabled: bool | None = None
+    interval_seconds: int | None = None
+    clear_interval: bool = False
 
 
 class CheckDefinitionOut(CheckDefinitionBase):
@@ -44,11 +48,18 @@ class CheckDefinitionOut(CheckDefinitionBase):
 class ServiceBase(BaseModel):
     name: str
     type: str
-    base_url: str
+    local_url: str | None = None
+    remote_url: str | None = None
     verify_ssl: bool = True
     enabled: bool = True
     poll_interval_seconds: int | None = None
     notes: str | None = None
+
+    @model_validator(mode="after")
+    def _require_an_address(self):
+        if not self.local_url and not self.remote_url:
+            raise ValueError("At least one of local_url or remote_url must be set")
+        return self
 
 
 class ServiceCreate(ServiceBase):
@@ -57,7 +68,10 @@ class ServiceCreate(ServiceBase):
 
 class ServiceUpdate(BaseModel):
     name: str | None = None
-    base_url: str | None = None
+    local_url: str | None = None
+    remote_url: str | None = None
+    clear_local_url: bool = False
+    clear_remote_url: bool = False
     api_key: str | None = None
     clear_api_key: bool = False
     verify_ssl: bool | None = None

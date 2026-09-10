@@ -6,16 +6,45 @@ from datetime import datetime, timedelta, timezone
 import httpx
 
 from .checks.base import NotificationItem
-from .checks.runner import run_check
+from .checks.runner import SERVICE_SCOPED_TYPES, run_check
 from .config import settings
 from .database import SessionLocal
-from .models import CheckResult, Notification, Service
+from .models import CheckDefinition, CheckResult, Notification, Service
 
 logger = logging.getLogger("healthchecker.poller")
 
 
 def _fingerprint(item: NotificationItem) -> str:
     return hashlib.sha256(f"{item.source}:{item.message}".encode()).hexdigest()
+
+
+def _as_aware(dt: datetime) -> datetime:
+    """SQLite round-trips DateTime columns as naive; treat naive as UTC."""
+    return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+
+
+def _due_checks(db, checks: list[CheckDefinition], now: datetime) -> list[CheckDefinition]:
+    """Filters to checks whose own interval override has actually elapsed.
+
+    Checks without an override run on every tick (the service's own poll
+    cadence). One with e.g. interval_seconds=600 on a service polled every
+    5 minutes simply gets skipped on every other tick, reusing its last
+    stored result in between.
+    """
+    due = []
+    for check in checks:
+        if not check.interval_seconds:
+            due.append(check)
+            continue
+        last = (
+            db.query(CheckResult)
+            .filter(CheckResult.check_id == check.id)
+            .order_by(CheckResult.timestamp.desc())
+            .first()
+        )
+        if not last or (now - _as_aware(last.timestamp)).total_seconds() >= check.interval_seconds:
+            due.append(check)
+    return due
 
 
 async def poll_service(service_id: int) -> None:
@@ -29,25 +58,45 @@ async def poll_service(service_id: int) -> None:
         if not checks:
             return
 
+        now = datetime.now(timezone.utc)
+        due = _due_checks(db, checks, now)
+        if not due:
+            return
+
+        targets = service.get_targets()
+        suffix_targets = len(targets) > 1  # only disambiguate when both local+remote are configured
+
+        jobs: list[tuple[CheckDefinition, str | None, str | None]] = []  # (check, label, base_url)
+        for check in due:
+            if check.type in SERVICE_SCOPED_TYPES:
+                jobs.append((check, None, None))
+            elif targets:
+                for label, url in targets:
+                    jobs.append((check, label, url))
+            else:
+                # Target-scoped check on a service with no address configured
+                # (shouldn't normally happen - validated at creation).
+                jobs.append((check, None, None))
+
         try:
             async with httpx.AsyncClient(
                 timeout=settings.http_timeout_seconds, verify=service.verify_ssl
             ) as client:
-                outcomes = await asyncio.gather(*(run_check(client, service, c) for c in checks))
+                outcomes = await asyncio.gather(*(run_check(client, service, c, url) for c, _, url in jobs))
         except Exception:
             logger.exception("Unexpected error polling service %s (%s)", service.name, service.id)
             return
 
-        now = datetime.now(timezone.utc)
         notification_sources_checked: set[str] = set()
         fingerprints_seen: set[str] = set()
 
-        for check, outcome in zip(checks, outcomes):
+        for (check, label, _url), outcome in zip(jobs, outcomes):
+            check_name = f"{check.name} ({label})" if label and suffix_targets else check.name
             db.add(
                 CheckResult(
                     service_id=service.id,
                     check_id=check.id,
-                    check_name=check.name,
+                    check_name=check_name,
                     check_type=check.type,
                     status=outcome.status,
                     message=outcome.message,

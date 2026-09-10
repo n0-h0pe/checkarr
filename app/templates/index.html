@@ -69,7 +69,7 @@
         </div>
         <table>
           <thead>
-            <tr><th></th><th>Name</th><th>Type</th><th>URL</th><th>Interval</th><th>Status</th><th></th></tr>
+            <tr><th></th><th>Name</th><th>Type</th><th>Local</th><th>Remote</th><th>Interval</th><th>Status</th><th></th></tr>
           </thead>
           <tbody id="services-body"></tbody>
         </table>
@@ -91,8 +91,14 @@
           <select id="svc-type"></select>
         </div>
         <div class="field">
-          <label>Base URL</label>
-          <input type="text" id="svc-url" required placeholder="http://radarr:7878">
+          <label>Local address</label>
+          <input type="text" id="svc-local-url" placeholder="http://radarr:7878">
+          <div class="hint">Direct/LAN address. Leave blank if only reachable remotely (e.g. behind a reverse proxy).</div>
+        </div>
+        <div class="field">
+          <label>Remote address</label>
+          <input type="text" id="svc-remote-url" placeholder="https://radarr.example.com">
+          <div class="hint">Public/reverse-proxied address, if any. At least one of local/remote is required - set both to check both on every poll.</div>
         </div>
         <div class="field">
           <label>API key <span class="hint" id="svc-key-hint"></span></label>
@@ -137,6 +143,11 @@
           <select id="chk-type"></select>
         </div>
         <div id="chk-dynamic-fields"></div>
+        <div class="field">
+          <label>Poll interval override (seconds, optional)</label>
+          <input type="number" id="chk-interval" min="30" placeholder="default: run every poll">
+          <div class="hint">Leave blank to run this check on every poll. Set higher (e.g. 600) to run it less often than the service's other checks - useful for slow/external checks like plex.direct.</div>
+        </div>
         <div class="field checkbox">
           <input type="checkbox" id="chk-enabled" checked>
           <label for="chk-enabled">Enabled</label>

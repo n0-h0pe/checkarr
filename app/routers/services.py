@@ -15,7 +15,8 @@ def _out(service: models.Service) -> schemas.ServiceOut:
         id=service.id,
         name=service.name,
         type=service.type,
-        base_url=service.base_url,
+        local_url=service.local_url,
+        remote_url=service.remote_url,
         verify_ssl=service.verify_ssl,
         enabled=service.enabled,
         poll_interval_seconds=service.poll_interval_seconds,
@@ -42,7 +43,8 @@ def create_service(payload: schemas.ServiceCreate, db: Session = Depends(get_db)
     service = models.Service(
         name=payload.name,
         type=payload.type,
-        base_url=payload.base_url.rstrip("/"),
+        local_url=payload.local_url.rstrip("/") if payload.local_url else None,
+        remote_url=payload.remote_url.rstrip("/") if payload.remote_url else None,
         api_key_encrypted=encrypt_secret(payload.api_key),
         verify_ssl=payload.verify_ssl,
         enabled=payload.enabled,
@@ -77,8 +79,16 @@ def update_service(service_id: int, payload: schemas.ServiceUpdate, db: Session 
 
     if payload.name is not None:
         service.name = payload.name
-    if payload.base_url is not None:
-        service.base_url = payload.base_url.rstrip("/")
+    if payload.clear_local_url:
+        service.local_url = None
+    elif payload.local_url is not None:
+        service.local_url = payload.local_url.rstrip("/") or None
+    if payload.clear_remote_url:
+        service.remote_url = None
+    elif payload.remote_url is not None:
+        service.remote_url = payload.remote_url.rstrip("/") or None
+    if not service.local_url and not service.remote_url:
+        raise HTTPException(400, "At least one of local address or remote address must be set")
     if payload.clear_api_key:
         service.api_key_encrypted = None
     elif payload.api_key:
@@ -116,19 +126,21 @@ def delete_service(service_id: int, db: Session = Depends(get_db)):
 
 @router.post("/{service_id}/run-now", response_model=list[schemas.CheckResultOut])
 async def run_now(service_id: int, db: Session = Depends(get_db)):
+    import datetime as dt
+
     from ..poller import poll_service
 
     service = db.get(models.Service, service_id)
     if not service:
         raise HTTPException(404, "Service not found")
 
+    before = dt.datetime.now(dt.timezone.utc)
     await poll_service(service_id)
     db.expire_all()
     results = (
         db.query(models.CheckResult)
-        .filter(models.CheckResult.service_id == service_id)
+        .filter(models.CheckResult.service_id == service_id, models.CheckResult.timestamp >= before)
         .order_by(models.CheckResult.timestamp.desc())
-        .limit(len(service.checks) or 10)
         .all()
     )
     return results
@@ -156,6 +168,7 @@ def create_check(service_id: int, payload: schemas.CheckDefinitionCreate, db: Se
         type=payload.type,
         config=payload.config,
         enabled=payload.enabled,
+        interval_seconds=payload.interval_seconds,
         is_builtin=False,
     )
     db.add(check)
@@ -182,6 +195,10 @@ def update_check(
         check.config = payload.config
     if payload.enabled is not None:
         check.enabled = payload.enabled
+    if payload.clear_interval:
+        check.interval_seconds = None
+    elif payload.interval_seconds is not None:
+        check.interval_seconds = payload.interval_seconds
 
     db.commit()
     db.refresh(check)

@@ -42,7 +42,18 @@ CHECK_TYPE_META = [
         "label": "Filesystem path check (requires volume mount)",
         "applies_to": SERVICE_TYPES,
         "fields": [
-            {"key": "path", "label": "Path inside this container", "kind": "text", "default": ""},
+            {
+                "key": "healthchecker_path",
+                "label": "Path in HealthChecker container",
+                "kind": "text",
+                "default": "",
+            },
+            {
+                "key": "service_path",
+                "label": "Path in {service} container (optional, for reference only)",
+                "kind": "text",
+                "default": "",
+            },
             {"key": "min_entries", "label": "Minimum entries expected", "kind": "number", "default": 1},
         ],
     },
@@ -76,6 +87,19 @@ CHECK_TYPE_META = [
         "label": "Plex identity endpoint",
         "applies_to": ["plex"],
         "fields": [],
+    },
+    {
+        "type": "plex_remote_access",
+        "label": "Remote Access status (plex.tv + plex.direct reachability)",
+        "applies_to": ["plex"],
+        "fields": [
+            {
+                "key": "client_identifier",
+                "label": "Plex server client identifier (optional, disambiguates multiple servers on one account)",
+                "kind": "text",
+                "default": "",
+            },
+        ],
     },
     {
         "type": "jellyfin_health",
