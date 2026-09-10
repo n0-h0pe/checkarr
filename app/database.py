@@ -74,6 +74,10 @@ def _run_migrations() -> None:
         if "interval_seconds" not in check_cols:
             conn.exec_driver_sql("ALTER TABLE check_definitions ADD COLUMN interval_seconds INTEGER")
 
+        layout_cols = _table_columns(conn, "dashboard_layouts")
+        if "columns" not in layout_cols:
+            conn.exec_driver_sql("ALTER TABLE dashboard_layouts ADD COLUMN columns INTEGER")
+
 
 def get_db():
     db = SessionLocal()

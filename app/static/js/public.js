@@ -6,8 +6,13 @@ async function init() {
   await loadMeta();
 
   if (window.PUBLIC_PAGE === "dashboard") {
-    loadDashboard(); // interactive defaults to falsy - no Run now / edit affordances
+    loadDashboard(); // interactive/editable default to falsy - no Run now, no drag/resize
     setInterval(loadDashboard, 30000);
+    let resizeTimer = null;
+    window.addEventListener("resize", () => {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(loadDashboard, 200);
+    });
   } else if (window.PUBLIC_PAGE === "notifications") {
     const showResolvedBox = $("#show-resolved");
     if (showResolvedBox) showResolvedBox.addEventListener("change", loadNotifications);

@@ -17,7 +17,7 @@ of what's healthy, what's degraded, and why.
 - "Test connection" button in the Add/Edit service form - a quick green ✓/red ✕ per address before you even save, plus autofilled Name and a type-appropriate default port in the address placeholder when you pick a service type.
 - For Plex, a "Sign in to Plex" button fills in the X-Plex-Token for you via Plex's own sign-in flow - no copying tokens out of your browser's dev tools.
 - Quick-edit controls on every check's row in Settings (Enabled, and for Plex/Jellyfin path checks, the empty-path severity and minimum-entries count) - no need to open Edit for a one-field change. These stage locally with an obvious "unsaved changes" banner and explicit Save/Discard, so a stray click can't silently change what's being monitored.
-- Resizable, freely movable dashboard cards, snapped to an invisible grid and saved as named, switchable layouts. See "Dashboard layouts" below.
+- An "Edit layout" mode for the dashboard: drag cards anywhere and resize them from the corner, snapped to an invisible grid, saved as named/switchable layouts that adapt to how wide your window is. See "Dashboard layouts" below.
 - API keys are encrypted at rest (Fernet/AES) and never echoed back to the browser.
 - Historic results stored in SQLite, with a History tab and per-service uptime strip on the dashboard.
 - Single Docker container: web GUI + API + scheduler + database, no external dependencies.
@@ -220,27 +220,43 @@ clears them, and leaving the page with changes pending prompts you first.
 
 ## Dashboard layouts
 
-Every service card has a drag handle in its bottom-right corner (like a
-resizable window) - drag it to make the card wider or taller. Cards snap to
-an invisible grid and can't go below the default 16x10 grid-unit size; drag
-outward to make a card larger so you can fit more of its checks without
-scrolling. If a card ends up shorter than its check list needs, the checks
-inside it scroll independently while the card's header and buttons stay put.
+Click **Edit layout** in the top bar to rearrange the dashboard - drag and
+resize only work in this mode, so normal day-to-day viewing can't
+accidentally bump a card out of place. Click it again (**Done editing**)
+when you're finished; it's not remembered across page loads, so the
+dashboard always opens in plain view.
 
-Drag a card by its title bar to move it anywhere on the grid - it snaps to
-the same invisible grid the resize handle uses. Drop it somewhere empty and
-it just moves there; drop it on top of another card and the two swap places;
-drop it somewhere that overlaps more than one other card and it snaps back
-instead, since there's no single sensible place to put it. The dashboard
-isn't limited to three cards per row - it uses the full width of the window,
-so how many fit side by side just depends on their sizes and your screen.
+While editing:
+
+- Drag a card by its title bar to move it anywhere on the grid - it snaps to
+  an invisible grid. Drop it somewhere empty and it just moves there; drop
+  it on or across other cards and whatever's in the way gets pushed straight
+  down out of your way (cascading further if that push then overlaps
+  something else) rather than refusing the move - there's always somewhere
+  for a card to land.
+- Every card has a drag handle in its bottom-right corner (like a resizable
+  window) - drag it to make the card wider or taller. Cards can't go below
+  the default 16x10 grid-unit size. If a card ends up shorter than its check
+  list needs, the checks inside it scroll independently while the card's
+  header and buttons stay put.
+
+The dashboard isn't limited to three cards per row - it uses the full width
+of the browser window, so how many fit side by side just depends on their
+sizes and how wide you make the window. Speaking of which: the layout
+remembers how wide your window was the last time you edited it. Open it
+later in a narrower window (or on a smaller screen) and cards that would
+otherwise run off the edge just wrap onto the next line, without touching
+what you actually saved - widen the window back out (or just come back to
+it on your usual screen) and you'll see the exact arrangement you left,
+untouched.
 
 Sizes and positions save automatically as soon as you release the drag - no
 separate Save step. A service you haven't dragged yet is placed
 automatically below whatever you have positioned, so newly added services
 never land on top of something you've already arranged.
 
-The dropdown in the top bar next to **+ New** holds your saved layouts:
+The dropdown in the top bar next to **Edit layout** holds your saved
+layouts:
 
 - **+ New** - saves the dashboard's current card sizes as a new layout (you
   pick a name) and switches to it.
