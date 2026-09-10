@@ -96,3 +96,25 @@ def get_notifications(
 def get_service_names(db: Session) -> list[tuple[int, str]]:
     """(id, name) pairs - enough for a dashboard to label notifications/history without exposing full service records."""
     return [(s.id, s.name) for s in db.query(models.Service).order_by(models.Service.name).all()]
+
+
+DEFAULT_LAYOUT_NAME = "Default"
+
+
+def get_or_create_active_layout(db: Session) -> models.DashboardLayout:
+    """Exactly one DashboardLayout is active at any time. Used both by the
+    admin app (to know what to render/resize) and, read-only, by the public
+    dashboard (so it mirrors whatever layout is currently selected)."""
+    layout = db.query(models.DashboardLayout).filter_by(is_active=True).first()
+    if layout:
+        return layout
+
+    layout = db.query(models.DashboardLayout).order_by(models.DashboardLayout.id).first()
+    if not layout:
+        layout = models.DashboardLayout(name=DEFAULT_LAYOUT_NAME, sizes={}, is_active=True)
+        db.add(layout)
+    else:
+        layout.is_active = True
+    db.commit()
+    db.refresh(layout)
+    return layout

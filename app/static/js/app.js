@@ -19,12 +19,14 @@ function switchTab(tab) {
   if (tab === "settings") loadSettings();
 }
 
-function loadDashboardAdmin() {
-  return loadDashboard({
+async function loadDashboardAdmin() {
+  await loadDashboard({
     interactive: true,
     onRunNow: runNow,
     onHistory: (id) => { switchTab("history"); $("#history-service").value = id; loadHistoryTab(); },
+    onResize: persistCardSize,
   });
+  loadLayoutList();
 }
 
 async function runNow(serviceId) {
@@ -36,6 +38,90 @@ async function runNow(serviceId) {
   }
   if (state.tab === "dashboard") loadDashboardAdmin();
   if (state.tab === "settings") loadSettings();
+}
+
+// ---------- dashboard layouts ----------
+
+async function persistCardSize(serviceId, w, h) {
+  if (!state.activeLayout || !state.activeLayout.id) return;
+  const sizes = { ...state.activeLayout.sizes, [String(serviceId)]: { w, h } };
+  try {
+    state.activeLayout = await api(`/api/dashboard-layouts/${state.activeLayout.id}`, {
+      method: "PUT",
+      body: JSON.stringify({ sizes }),
+    });
+  } catch (e) {
+    toast("Could not save layout: " + e.message, true);
+  }
+}
+
+async function loadLayoutList() {
+  let layouts;
+  try {
+    layouts = await api("/api/dashboard-layouts");
+  } catch (e) {
+    return;
+  }
+  const select = $("#layout-select");
+  select.innerHTML = "";
+  for (const l of layouts) {
+    select.appendChild(el("option", { value: l.id, text: l.name, selected: l.is_active ? "selected" : null }));
+  }
+}
+
+async function onLayoutSelectChange() {
+  const id = $("#layout-select").value;
+  if (!id) return;
+  try {
+    state.activeLayout = await api(`/api/dashboard-layouts/${id}/activate`, { method: "POST" });
+  } catch (e) {
+    toast("Could not switch layout: " + e.message, true);
+    return;
+  }
+  loadDashboardAdmin();
+}
+
+async function newLayoutFromCurrent() {
+  const name = prompt("Name for the new layout:");
+  if (!name) return;
+  const sizes = state.activeLayout ? state.activeLayout.sizes : {};
+  try {
+    state.activeLayout = await api("/api/dashboard-layouts", { method: "POST", body: JSON.stringify({ name, sizes }) });
+  } catch (e) {
+    toast("Could not create layout: " + e.message, true);
+    return;
+  }
+  toast(`Layout "${name}" created`);
+  loadDashboardAdmin();
+}
+
+async function renameActiveLayout() {
+  if (!state.activeLayout) return;
+  const name = prompt("Rename layout:", state.activeLayout.name);
+  if (!name || name === state.activeLayout.name) return;
+  try {
+    state.activeLayout = await api(`/api/dashboard-layouts/${state.activeLayout.id}`, {
+      method: "PUT",
+      body: JSON.stringify({ name }),
+    });
+  } catch (e) {
+    toast("Rename failed: " + e.message, true);
+    return;
+  }
+  loadLayoutList();
+}
+
+async function deleteActiveLayout() {
+  if (!state.activeLayout) return;
+  if (!confirm(`Delete layout "${state.activeLayout.name}"?`)) return;
+  try {
+    await api(`/api/dashboard-layouts/${state.activeLayout.id}`, { method: "DELETE" });
+  } catch (e) {
+    toast("Delete failed: " + e.message, true);
+    return;
+  }
+  state.activeLayout = null;
+  loadDashboardAdmin();
 }
 
 // ---------- settings: services ----------
@@ -608,12 +694,12 @@ function renderDynamicFields(svc, checkType, existingConfig = {}) {
 
   if (checkType === "filesystem_path") {
     container.appendChild(
-      el("div", { class: "field hint", text: "Note: 'Path in HealthChecker container' must be bind-mounted into this container to be checked - it's almost never the same path the target app uses internally. For Radarr/Sonarr/Lidarr/Whisparr, prefer 'Filesystem path check via API' instead (below in this list) - it needs no volume mount at all." })
+      el("div", { class: "field hint", text: "Note: 'Path in Checkarr container' must be bind-mounted into this container to be checked - it's almost never the same path the target app uses internally. For Radarr/Sonarr/Lidarr/Whisparr, prefer 'Filesystem path check via API' instead (below in this list) - it needs no volume mount at all." })
     );
   }
   if (checkType === "arr_filesystem_path") {
     container.appendChild(
-      el("div", { class: "field hint", text: "Browses this path through the app's own API, exactly like its 'Add Root Folder' picker does - no volume mount needed on HealthChecker. For a folder already configured as a root folder, the 'Root folders accessible' check already covers this; use this for any other path you want to watch independently." })
+      el("div", { class: "field hint", text: "Browses this path through the app's own API, exactly like its 'Add Root Folder' picker does - no volume mount needed on Checkarr. For a folder already configured as a root folder, the 'Root folders accessible' check already covers this; use this for any other path you want to watch independently." })
     );
   }
   if (checkType === "plex_remote_access") {
@@ -710,6 +796,10 @@ async function init() {
   $("#discard-changes-btn").addEventListener("click", discardChanges);
   $("#save-changes-btn-bottom").addEventListener("click", saveChanges);
   $("#discard-changes-btn-bottom").addEventListener("click", discardChanges);
+  $("#layout-select").addEventListener("change", onLayoutSelectChange);
+  $("#layout-new-btn").addEventListener("click", newLayoutFromCurrent);
+  $("#layout-rename-btn").addEventListener("click", renameActiveLayout);
+  $("#layout-delete-btn").addEventListener("click", deleteActiveLayout);
 
   window.addEventListener("beforeunload", (e) => {
     if (pendingChangeCount() > 0) {

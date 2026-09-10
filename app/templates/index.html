@@ -3,13 +3,19 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Media Estate HealthChecker</title>
+  <title>Checkarr</title>
   <link rel="stylesheet" href="/static/css/style.css">
 </head>
 <body>
   <header class="app-header">
-    <h1>🩺 Media Estate HealthChecker <span class="build-info" id="build-info"></span></h1>
+    <h1>🩺 Checkarr <span class="build-info" id="build-info"></span></h1>
     <div class="header-right">
+      <div class="layout-controls">
+        <select id="layout-select" title="Dashboard layout"></select>
+        <button type="button" class="small" id="layout-new-btn" title="Save current card sizes as a new layout">+ New</button>
+        <button type="button" class="small" id="layout-rename-btn" title="Rename this layout">Rename</button>
+        <button type="button" class="small danger" id="layout-delete-btn" title="Delete this layout">Delete</button>
+      </div>
       <div class="summary-pill" id="summary-pill"></div>
       <span class="text-dim" id="last-refresh"></span>
     </div>

@@ -12,7 +12,7 @@ async def check_filesystem_path(config: dict) -> CheckOutcome:
     checks both existence and a minimum number of entries.
 
     The path an app like Radarr sees for a folder is almost never the same
-    path HealthChecker sees for the same underlying host directory (each
+    path Checkarr sees for the same underlying host directory (each
     container maps its own volumes independently, and they can coincidentally
     collide - e.g. a torrent client's /data meaning something totally
     different to Radarr's /data). So the *functional* check always runs
@@ -31,7 +31,7 @@ async def check_filesystem_path(config: dict) -> CheckOutcome:
     start = time.perf_counter()
 
     if not path:
-        return CheckOutcome(STATUS_FAIL, "No 'Path in HealthChecker container' configured", 0)
+        return CheckOutcome(STATUS_FAIL, "No 'Path in Checkarr container' configured", 0)
 
     if not os.path.exists(path):
         elapsed = (time.perf_counter() - start) * 1000
