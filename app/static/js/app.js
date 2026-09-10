@@ -720,7 +720,7 @@ function closeCheckModal() {
 // Alert level toggle would only cause confusion here (or, worse, silently
 // downgrade a real fail-level reading it wasn't meant to touch), so it's
 // hidden for them and never included in their saved config.
-const NO_ALERT_LEVEL_TYPES = new Set(["qbittorrent_disk_space", "deluge_disk_space"]);
+const NO_ALERT_LEVEL_TYPES = new Set(["qbittorrent_disk_space", "deluge_disk_space", "arr_disk_space"]);
 
 function renderDynamicFields(svc, checkType, existingConfig = {}) {
   $("#chk-alert-level-field").hidden = NO_ALERT_LEVEL_TYPES.has(checkType);
@@ -798,6 +798,11 @@ function renderDynamicFields(svc, checkType, existingConfig = {}) {
       el("div", { class: "field hint", text: "The API only reports how much space is free, not the disk's total size, so there's nothing to compute a percentage against until you fill in 'Total disk size' - leave it blank to just see the free space reported with no threshold applied. No Alert level field here - Warn below/Fail below above already decide that." })
     );
   }
+  if (checkType === "arr_disk_space") {
+    container.appendChild(
+      el("div", { class: "field hint", text: "Reads free AND total space directly from the app's own API, so unlike the torrent client disk-space checks there's nothing to fill in manually - Warn below/Fail below above work out of the box. Leave Path blank to check every disk the app reports on and flag whichever is lowest; set it to check just one. No Alert level field here - Warn below/Fail below above already decide that." })
+    );
+  }
   if (checkType === "rtorrent_rpc_status") {
     container.appendChild(
       el("div", { class: "field hint", text: "rTorrent has no web UI or API of its own - this speaks its XML-RPC interface directly, so the path varies by setup: plain /RPC2 for a bare XML-RPC-over-HTTP bridge, or something under ruTorrent's plugins directory when fronted by it - commonly /rutorrent/plugins/httprpc/action.php for the httprpc plugin, or [path to ruTorrent]/plugins/rpc/rpc.php for older setups. If this fails with a 404, that's almost always the fix. Uses the Username/Password above as HTTP Basic Auth, same as the Web UI check." })
@@ -806,6 +811,11 @@ function renderDynamicFields(svc, checkType, existingConfig = {}) {
   if (checkType === "ftp_path") {
     container.appendChild(
       el("div", { class: "field hint", text: "Connects to its own FTP host/port/credentials above, independent of this service's local/remote address - for a NAS or share exposed over FTP rather than one bind-mounted into this container. Same existence/population check as the filesystem path check, just reached over FTP." })
+    );
+  }
+  if (checkType === "overseerr_tmdb_status") {
+    container.appendChild(
+      el("div", { class: "field hint", text: "There's no dedicated \"test TMDB\" endpoint, so this hits the same trending-movies call the app's own homepage makes on every load - a failure here usually means a TMDB-side or connectivity problem, not the app itself (that's what the Status check above is for)." })
     );
   }
 }
