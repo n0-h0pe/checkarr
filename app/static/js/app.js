@@ -141,9 +141,10 @@ function renderServiceCard(s) {
       ]),
     ])
   );
+  const addressLabel = [svc.local_url, svc.remote_url].filter(Boolean).join(" / ");
   card.appendChild(
     el("div", { class: "card-sub" }, [
-      `${svc.type} · ${svc.base_url} · last checked ${relTime(s.last_checked)}`,
+      `${svc.type} · ${addressLabel} · last checked ${relTime(s.last_checked)}`,
       s.active_notification_count > 0 ? el("span", { style: "color:var(--warn)" }, ` · ${s.active_notification_count} notification(s)`) : null,
     ])
   );
@@ -314,7 +315,8 @@ function renderServiceRow(svc) {
   tr.appendChild(el("td", {}, expandBtn));
   tr.appendChild(el("td", { text: svc.name }));
   tr.appendChild(el("td", {}, [TYPE_ICON[svc.type] || "", " " + svc.type]));
-  tr.appendChild(el("td", { text: svc.base_url }));
+  tr.appendChild(el("td", { text: svc.local_url || "-" }));
+  tr.appendChild(el("td", { text: svc.remote_url || "-" }));
   tr.appendChild(el("td", { text: svc.poll_interval_seconds ? `${svc.poll_interval_seconds}s` : "default" }));
   tr.appendChild(el("td", {}, el("span", { class: `badge ${svc.enabled ? "ok" : "disabled"}`, text: svc.enabled ? "enabled" : "disabled" })));
 
@@ -324,7 +326,7 @@ function renderServiceRow(svc) {
   ]);
   tr.appendChild(el("td", {}, actions));
 
-  const detailRow = el("tr", {}, el("td", { colspan: "7" }, renderChecksPanel(svc)));
+  const detailRow = el("tr", {}, el("td", { colspan: "8" }, renderChecksPanel(svc)));
   detailRow.style.display = "none";
 
   const toggle = () => {
@@ -357,6 +359,7 @@ function renderChecksPanel(svc) {
         el("span", {}, [
           el("span", { class: `badge ${c.enabled ? "ok" : "disabled"}`, text: c.type }),
           " " + c.name,
+          c.interval_seconds ? el("span", { class: "text-dim", text: ` (every ${c.interval_seconds}s)` }) : null,
         ]),
         el("div", { style: "display:flex; gap:6px;" }, [
           el("button", { class: "small", onclick: () => openCheckModal(svc, c) }, "Edit"),
@@ -396,7 +399,8 @@ function openServiceModal(svc = null) {
   $("#service-modal-title").textContent = svc ? "Edit service" : "Add service";
   $("#svc-id").value = svc ? svc.id : "";
   $("#svc-name").value = svc ? svc.name : "";
-  $("#svc-url").value = svc ? svc.base_url : "";
+  $("#svc-local-url").value = svc && svc.local_url ? svc.local_url : "";
+  $("#svc-remote-url").value = svc && svc.remote_url ? svc.remote_url : "";
   $("#svc-key").value = "";
   $("#svc-key-hint").textContent = svc && svc.has_api_key ? "(key already set - leave blank to keep)" : "";
   $("#svc-interval").value = svc && svc.poll_interval_seconds ? svc.poll_interval_seconds : "";
@@ -422,9 +426,14 @@ function closeServiceModal() {
 async function submitServiceForm(ev) {
   ev.preventDefault();
   const id = $("#svc-id").value;
+  const localUrl = $("#svc-local-url").value.trim();
+  const remoteUrl = $("#svc-remote-url").value.trim();
+  if (!localUrl && !remoteUrl) {
+    toast("Set at least one of Local address / Remote address", true);
+    return;
+  }
   const payload = {
     name: $("#svc-name").value.trim(),
-    base_url: $("#svc-url").value.trim(),
     verify_ssl: $("#svc-verify-ssl").checked,
     enabled: $("#svc-enabled").checked,
     poll_interval_seconds: $("#svc-interval").value ? parseInt($("#svc-interval").value, 10) : null,
@@ -435,8 +444,14 @@ async function submitServiceForm(ev) {
 
   try {
     if (id) {
+      // PUT: an empty box means "clear this address" - null is indistinguishable
+      // from "field omitted" in JSON, so use explicit clear flags instead.
+      if (localUrl) payload.local_url = localUrl; else payload.clear_local_url = true;
+      if (remoteUrl) payload.remote_url = remoteUrl; else payload.clear_remote_url = true;
       await api(`/api/services/${id}`, { method: "PUT", body: JSON.stringify(payload) });
     } else {
+      payload.local_url = localUrl || null;
+      payload.remote_url = remoteUrl || null;
       payload.type = $("#svc-type").value;
       await api("/api/services", { method: "POST", body: JSON.stringify(payload) });
     }
@@ -460,6 +475,7 @@ function openCheckModal(svc, check = null) {
   $("#chk-id").value = check ? check.id : "";
   $("#chk-name").value = check ? check.name : "";
   $("#chk-enabled").checked = check ? check.enabled : true;
+  $("#chk-interval").value = check && check.interval_seconds ? check.interval_seconds : "";
 
   const typeSelect = $("#chk-type");
   typeSelect.innerHTML = "";
@@ -488,7 +504,8 @@ function renderDynamicFields(svc, checkType, existingConfig = {}) {
     if (f.key === "expected_status_codes" && Array.isArray(value)) value = value.join(",");
     if (value === undefined || value === null) value = f.default ?? "";
 
-    const fieldWrap = el("div", { class: "field" }, [el("label", { text: f.label })]);
+    const label = f.label.replace("{service}", svc.type);
+    const fieldWrap = el("div", { class: "field" }, [el("label", { text: label })]);
     let input;
     if (f.kind === "select") {
       input = el("select", { id: `chk-field-${f.key}` });
@@ -505,7 +522,12 @@ function renderDynamicFields(svc, checkType, existingConfig = {}) {
 
   if (checkType === "filesystem_path") {
     container.appendChild(
-      el("div", { class: "field hint", text: "Note: this container must have the same host path bind-mounted for this check to see it. Prefer the *arr Root Folder check when available - it needs no extra mounts." })
+      el("div", { class: "field hint", text: "Note: 'Path in HealthChecker container' must be bind-mounted into this container to be checked - it's almost never the same path the target app uses internally. Prefer the *arr Root Folder check when available - it needs no extra mounts." })
+    );
+  }
+  if (checkType === "plex_remote_access") {
+    container.appendChild(
+      el("div", { class: "field hint", text: "Queries plex.tv and your server's public plex.direct address - both need outbound internet access from this container. Runs against your saved Plex API key, not the local/remote address above." })
     );
   }
 }
@@ -531,15 +553,18 @@ async function submitCheckForm(ev) {
     }
   }
 
+  const intervalVal = $("#chk-interval").value;
   const payload = {
     name: $("#chk-name").value.trim(),
     type: checkType,
     config,
     enabled: $("#chk-enabled").checked,
+    interval_seconds: intervalVal ? parseInt(intervalVal, 10) : null,
   };
 
   try {
     if (checkId) {
+      if (!intervalVal) payload.clear_interval = true;
       await api(`/api/services/${serviceId}/checks/${checkId}`, { method: "PUT", body: JSON.stringify(payload) });
     } else {
       await api(`/api/services/${serviceId}/checks`, { method: "POST", body: JSON.stringify(payload) });

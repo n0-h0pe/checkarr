@@ -6,8 +6,9 @@ consolidated view of what's healthy, what's degraded, and why.
 
 ## Features
 
-- Polls each service on its own schedule (default every 5 minutes, configurable globally and per-service).
-- Built-in checks: HTTP 200 web UI reachability, Radarr/Sonarr/Prowlarr API status, Radarr/Sonarr root-folder accessibility (drive/mount detection), and each app's own system health feed.
+- Polls each service on its own schedule (default every 5 minutes, configurable globally, per-service, and per-check).
+- Local and remote addresses: give a service either address, or both - if both are set, every target-scoped check runs against each on every poll (useful when a service is reachable directly on the LAN and via a reverse proxy, and you want both paths monitored independently).
+- Built-in checks: HTTP 200 web UI reachability, Radarr/Sonarr/Prowlarr API status, Radarr/Sonarr root-folder accessibility (drive/mount detection), each app's own system health feed, and for Plex, Remote Access status.
 - Fully configurable: add your own checks per service (custom HTTP path/status/keyword checks, or a filesystem existence check).
 - Consolidates Radarr/Sonarr/Prowlarr's own "System > Status" health notifications (indexer down, missing files, low disk space, etc.) into one Notifications tab, with automatic resolve-tracking.
 - API keys are encrypted at rest (Fernet/AES) and never echoed back to the browser.
@@ -34,15 +35,24 @@ Two ways are supported, and you can use either or both:
    internally to detect a dead mount, so it needs **no extra volume mounts**
    on the HealthChecker container - it just asks the app what it sees.
 2. **Direct filesystem check (optional, belt-and-braces)** - add a
-   `filesystem_path` check on any service and give it a path. For this to see
-   anything meaningful, bind-mount the **same host path** Radarr/Sonarr use
-   into the HealthChecker container (read-only is fine), e.g. in
-   `docker-compose.yml`:
+   `filesystem_path` check on any service. It has two path fields, because
+   the path an app like Radarr sees for a folder is essentially never the
+   same path HealthChecker sees for that same underlying host directory -
+   each container maps its own volumes independently, and they can
+   coincidentally collide (e.g. a torrent client's `/data` meaning something
+   completely different to Radarr's `/data`):
+   - **Path in HealthChecker container** - the actual path this check tests.
+     For this to see anything meaningful, bind-mount the host path in
+     question into the HealthChecker container (read-only is fine), e.g. in
+     `docker-compose.yml`:
 
-   ```yaml
-   volumes:
-     - /mnt/media:/mnt/media:ro
-   ```
+     ```yaml
+     volumes:
+       - /mnt/media:/mnt/media:ro
+     ```
+   - **Path in `<app>` container** - optional, purely a label so the check's
+     message tells you which of the target app's own paths this corresponds
+     to. Doesn't affect the check itself.
 
    A mount point whose backing disk/share failed to mount typically still
    exists as an *empty* directory, so the check flags it as failing if it has
@@ -51,11 +61,23 @@ Two ways are supported, and you can use either or both:
 ## Adding a service
 
 Settings tab -> "Add service". Pick a type (Radarr/Sonarr/Prowlarr/Plex/
-Jellyfin/Generic), give it a base URL and API key (Radarr/Sonarr/Prowlarr:
-Settings > General > API Key; Plex: your X-Plex-Token; Jellyfin: an API key
-from Dashboard > API Keys, only needed for authenticated checks). A sensible
-set of default checks is created automatically based on the type - add more
-from the service's expanded row.
+Jellyfin/Generic), and set a **local address**, a **remote address**, or
+both:
+
+- **Local address** - direct/LAN URL (e.g. `http://radarr:7878`).
+- **Remote address** - public/reverse-proxied URL, if you have one (e.g.
+  `https://radarr.example.com`).
+- At least one is required. If you set both, every check that talks to the
+  service's web UI/API runs against **both** addresses on every poll,
+  labeled `(local)` / `(remote)` in the dashboard and history - useful for
+  catching a reverse-proxy misconfiguration even when the app itself is
+  perfectly healthy on the LAN.
+
+Add an API key (Radarr/Sonarr/Prowlarr: Settings > General > API Key; Plex:
+your X-Plex-Token; Jellyfin: an API key from Dashboard > API Keys, only
+needed for authenticated checks). A sensible set of default checks is
+created automatically based on the type - add more from the service's
+expanded row, each with its own optional poll interval override (see below).
 
 ## Available check types
 
@@ -68,7 +90,15 @@ from the service's expanded row.
 | `arr_root_folder` | Radarr/Sonarr | Flags any root folder reported as inaccessible, or below a free-space threshold |
 | `arr_health` | Radarr/Sonarr/Prowlarr | Pulls the app's own health/notifications feed into this dashboard |
 | `plex_identity` | Plex | Hits Plex's unauthenticated `/identity` endpoint |
+| `plex_remote_access` | Plex | Checks plex.tv for this server's registered connections and actually tries to reach its public `plex.direct` address; reports OK (direct), degraded (relay-only), or failing (nothing registered). Needs the Plex token and outbound internet access. Polled every 10 minutes by default (see below) since it depends on an external API. |
 | `jellyfin_health` | Jellyfin | Hits Jellyfin's `/health` endpoint |
+
+### Per-check poll interval
+
+Every check has an optional interval override (seconds). Leave it blank to
+run on every poll of the service; set it higher (e.g. 600) to run that one
+check less often than its siblings - the default `plex_remote_access` check
+uses this to poll every 10 minutes even on a service polled every 5.
 
 ## Security notes
 
@@ -83,6 +113,13 @@ from the service's expanded row.
   or put it behind your existing reverse proxy's auth.
 - Filesystem checks only ever read paths you've explicitly bind-mounted
   read-only; the container does not need write access to your media.
+
+## Upgrading
+
+Schema changes apply automatically on startup (additive `ALTER TABLE`s
+against the existing SQLite file - no separate migration step). Services
+created before the local/remote address split keep working unchanged: their
+old single address becomes their local address automatically.
 
 ## Configuration reference
 

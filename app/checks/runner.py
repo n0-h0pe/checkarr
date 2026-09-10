@@ -6,33 +6,53 @@ from .base import STATUS_FAIL, CheckOutcome
 from .arr_check import check_health, check_root_folders, check_system_status
 from .filesystem_check import check_filesystem_path
 from .http_check import check_http_200, check_keyword_match
-from .media_server_check import check_jellyfin_health, check_plex_identity
+from .media_server_check import check_jellyfin_health, check_plex_identity, check_plex_remote_access
 
 ARR_TYPES = {"radarr", "sonarr", "prowlarr"}
 
+# Checks that run once against a specific local/remote URL - the poller runs
+# these once per configured target (local, remote, or both).
+TARGET_SCOPED_TYPES = {
+    "http_200",
+    "keyword_match",
+    "arr_system_status",
+    "arr_root_folder",
+    "arr_health",
+    "plex_identity",
+    "jellyfin_health",
+}
 
-async def run_check(client: httpx.AsyncClient, service: Service, check: CheckDefinition) -> CheckOutcome:
+# Checks that don't care which URL is configured - the poller runs these
+# exactly once per poll regardless of how many targets are set.
+SERVICE_SCOPED_TYPES = {"filesystem_path", "plex_remote_access"}
+
+
+async def run_check(
+    client: httpx.AsyncClient, service: Service, check: CheckDefinition, base_url: str | None
+) -> CheckOutcome:
     api_key = decrypt_secret(service.api_key_encrypted)
     config = check.config or {}
     ctype = check.type
 
     try:
         if ctype == "http_200":
-            return await check_http_200(client, service.base_url, config)
+            return await check_http_200(client, base_url, config)
         if ctype == "keyword_match":
-            return await check_keyword_match(client, service.base_url, config)
+            return await check_keyword_match(client, base_url, config)
         if ctype == "filesystem_path":
             return await check_filesystem_path(config)
         if ctype == "arr_system_status":
-            return await check_system_status(client, service.base_url, api_key, service.type, config)
+            return await check_system_status(client, base_url, api_key, service.type, config)
         if ctype == "arr_root_folder":
-            return await check_root_folders(client, service.base_url, api_key, service.type, config)
+            return await check_root_folders(client, base_url, api_key, service.type, config)
         if ctype == "arr_health":
-            return await check_health(client, service.base_url, api_key, service.type, config)
+            return await check_health(client, base_url, api_key, service.type, config)
         if ctype == "plex_identity":
-            return await check_plex_identity(client, service.base_url, api_key, config)
+            return await check_plex_identity(client, base_url, api_key, config)
         if ctype == "jellyfin_health":
-            return await check_jellyfin_health(client, service.base_url, api_key, config)
+            return await check_jellyfin_health(client, base_url, api_key, config)
+        if ctype == "plex_remote_access":
+            return await check_plex_remote_access(client, api_key, config)
         return CheckOutcome(STATUS_FAIL, f"Unknown check type '{ctype}'", None)
     except Exception as exc:  # noqa: BLE001 - a broken check must not kill the poll loop
         return CheckOutcome(STATUS_FAIL, f"Check raised an unexpected error: {exc}", None)
@@ -54,6 +74,15 @@ def default_checks_for_service_type(service_type: str) -> list[dict]:
         )
     if service_type == "plex":
         checks.append({"name": "Plex identity", "type": "plex_identity", "config": {}, "is_builtin": True})
+        checks.append(
+            {
+                "name": "Remote Access (plex.direct)",
+                "type": "plex_remote_access",
+                "config": {},
+                "is_builtin": True,
+                "interval_seconds": 600,
+            }
+        )
     if service_type == "jellyfin":
         checks.append({"name": "Jellyfin health", "type": "jellyfin_health", "config": {}, "is_builtin": True})
     return checks
