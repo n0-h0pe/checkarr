@@ -5,6 +5,11 @@ services:
     restart: unless-stopped
     ports:
       - "8080:8080"
+      # Restricted, settings/API-key-free dashboard-only view - safe to
+      # expose externally (port-forward, separate reverse-proxy host, etc.)
+      # in a way you wouldn't want to do with 8080. Remove this mapping (and
+      # set HC_PUBLIC_DASHBOARD_ENABLED=false) if you don't want it at all.
+      - "8090:8090"
     env_file:
       - .env
     environment:

@@ -1,73 +1,5 @@
-const state = {
-  meta: null,
-  services: [],
-  tab: "dashboard",
-  historyServiceId: null,
-};
-
-// ---------- helpers ----------
-
-function $(sel, root = document) { return root.querySelector(sel); }
-function $all(sel, root = document) { return Array.from(root.querySelectorAll(sel)); }
-
-function el(tag, attrs = {}, children = []) {
-  const node = document.createElement(tag);
-  for (const [k, v] of Object.entries(attrs)) {
-    if (k === "class") node.className = v;
-    else if (k === "text") node.textContent = v;
-    else if (k.startsWith("on") && typeof v === "function") node.addEventListener(k.slice(2), v);
-    else if (v !== null && v !== undefined) node.setAttribute(k, v);
-  }
-  for (const child of [].concat(children)) {
-    if (child === null || child === undefined) continue;
-    node.appendChild(typeof child === "string" ? document.createTextNode(child) : child);
-  }
-  return node;
-}
-
-async function api(path, opts = {}) {
-  const resp = await fetch(path, {
-    headers: { "Content-Type": "application/json" },
-    ...opts,
-  });
-  if (!resp.ok) {
-    let detail = resp.statusText;
-    try {
-      const body = await resp.json();
-      detail = body.detail || JSON.stringify(body);
-    } catch (_) { /* ignore */ }
-    throw new Error(detail);
-  }
-  if (resp.status === 204) return null;
-  return resp.json();
-}
-
-function toast(message, isError = false) {
-  const t = el("div", { class: "toast" + (isError ? " error" : ""), text: message });
-  document.body.appendChild(t);
-  setTimeout(() => t.remove(), 4000);
-}
-
-function relTime(iso) {
-  if (!iso) return "never";
-  const diff = (Date.now() - new Date(iso + (iso.endsWith("Z") ? "" : "Z"))) / 1000;
-  if (diff < 5) return "just now";
-  if (diff < 60) return `${Math.floor(diff)}s ago`;
-  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
-  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
-  return `${Math.floor(diff / 86400)}d ago`;
-}
-
-function fmtTime(iso) {
-  const d = new Date(iso + (iso.endsWith("Z") ? "" : "Z"));
-  return d.toLocaleString();
-}
-
-const TYPE_ICON = { radarr: "🎬", sonarr: "📺", prowlarr: "🔎", plex: "▶️", jellyfin: "🪼", generic: "🧩" };
-
-function statusLabel(s) {
-  return { ok: "OK", warn: "Warning", fail: "Failing", unknown: "Unknown", disabled: "Disabled" }[s] || s;
-}
+// Admin app: full CRUD over services/checks, on top of the read-only
+// rendering shared with the public dashboard via common.js.
 
 // ---------- tabs ----------
 
@@ -81,130 +13,18 @@ function switchTab(tab) {
   state.tab = tab;
   $all(".tab-btn").forEach((b) => b.classList.toggle("active", b.dataset.tab === tab));
   $all(".tab-panel").forEach((p) => p.classList.toggle("active", p.id === `tab-${tab}`));
-  if (tab === "dashboard") loadDashboard();
+  if (tab === "dashboard") loadDashboardAdmin();
   if (tab === "notifications") loadNotifications();
   if (tab === "history") loadHistoryTab();
   if (tab === "settings") loadSettings();
 }
 
-// ---------- dashboard ----------
-
-async function loadDashboard() {
-  let statuses;
-  try {
-    statuses = await api("/api/status");
-  } catch (e) {
-    toast("Failed to load status: " + e.message, true);
-    return;
-  }
-
-  const grid = $("#dashboard-grid");
-  grid.innerHTML = "";
-
-  if (statuses.length === 0) {
-    grid.appendChild(el("div", { class: "empty-state", text: "No services configured yet. Add one in Settings." }));
-  }
-
-  const counts = { ok: 0, warn: 0, fail: 0, unknown: 0, disabled: 0 };
-  statuses.forEach((s) => { counts[s.overall_status] = (counts[s.overall_status] || 0) + 1; });
-  $("#summary-pill").innerHTML = "";
-  ["ok", "warn", "fail"].forEach((k) => {
-    $("#summary-pill").appendChild(
-      el("span", {}, [el("span", { class: `dot ${k}` }), `${counts[k] || 0} ${k}`])
-    );
+function loadDashboardAdmin() {
+  return loadDashboard({
+    interactive: true,
+    onRunNow: runNow,
+    onHistory: (id) => { switchTab("history"); $("#history-service").value = id; loadHistoryTab(); },
   });
-  $("#last-refresh").textContent = "Updated " + new Date().toLocaleTimeString();
-
-  for (const s of statuses) {
-    grid.appendChild(renderServiceCard(s));
-  }
-
-  // Uptime strips, loaded after initial paint.
-  for (const s of statuses) {
-    loadUptimeStrip(s.service.id);
-  }
-}
-
-function renderServiceCard(s) {
-  const svc = s.service;
-  const card = el("div", { class: "card" });
-
-  card.appendChild(
-    el("div", { class: "card-header" }, [
-      el("div", { class: "title" }, [
-        el("span", { class: "type-icon", text: TYPE_ICON[svc.type] || "🧩" }),
-        el("span", { text: svc.name }),
-      ]),
-      el("span", { class: `badge ${s.overall_status}` }, [
-        el("span", { class: `dot ${s.overall_status}` }),
-        statusLabel(s.overall_status),
-      ]),
-    ])
-  );
-  const addressLabel = [svc.local_url, svc.remote_url].filter(Boolean).join(" / ");
-  card.appendChild(
-    el("div", { class: "card-sub" }, [
-      `${svc.type} · ${addressLabel} · last checked ${relTime(s.last_checked)}`,
-      s.active_notification_count > 0 ? el("span", { style: "color:var(--warn)" }, ` · ${s.active_notification_count} notification(s)`) : null,
-    ])
-  );
-
-  const strip = el("div", { class: "uptime-strip", id: `strip-${svc.id}` });
-  card.appendChild(strip);
-
-  for (const r of s.latest_results) {
-    card.appendChild(
-      el("div", { class: "check-row" }, [
-        el("div", { class: "name" }, [
-          el("span", { class: `dot ${r.status}` }),
-          el("span", { class: "label", text: r.check_name }),
-        ]),
-        el("div", { class: "msg", title: r.message, text: r.message }),
-      ])
-    );
-  }
-  if (s.latest_results.length === 0) {
-    card.appendChild(el("div", { class: "check-row" }, [el("span", { class: "text-dim", text: "No results yet" })]));
-  }
-
-  card.appendChild(
-    el("div", { class: "card-actions" }, [
-      el("button", { class: "small", onclick: () => runNow(svc.id) }, "Run now"),
-      el("button", { class: "small", onclick: () => { switchTab("history"); $("#history-service").value = svc.id; loadHistoryTab(); } }, "History"),
-    ])
-  );
-
-  return card;
-}
-
-async function loadUptimeStrip(serviceId) {
-  let rows;
-  try {
-    rows = await api(`/api/history?service_id=${serviceId}&hours=24&limit=300`);
-  } catch (_) {
-    return;
-  }
-  const strip = $(`#strip-${serviceId}`);
-  if (!strip) return;
-
-  const byTs = new Map();
-  for (const r of rows) {
-    const key = r.timestamp;
-    const worst = byTs.get(key);
-    const order = { ok: 0, warn: 1, fail: 2 };
-    if (!worst || order[r.status] > order[worst]) byTs.set(key, r.status);
-  }
-  const timestamps = Array.from(byTs.keys()).sort();
-  const last = timestamps.slice(-20);
-
-  strip.innerHTML = "";
-  if (last.length === 0) {
-    strip.style.display = "none";
-    return;
-  }
-  for (const ts of last) {
-    strip.appendChild(el("div", { class: `bar ${byTs.get(ts)}`, title: fmtTime(ts) }));
-  }
 }
 
 async function runNow(serviceId) {
@@ -214,83 +34,8 @@ async function runNow(serviceId) {
   } catch (e) {
     toast("Run failed: " + e.message, true);
   }
-  if (state.tab === "dashboard") loadDashboard();
+  if (state.tab === "dashboard") loadDashboardAdmin();
   if (state.tab === "settings") loadSettings();
-}
-
-// ---------- notifications ----------
-
-async function loadNotifications() {
-  const activeOnly = !$("#show-resolved").checked;
-  let items;
-  try {
-    items = await api(`/api/notifications?active_only=${activeOnly}`);
-  } catch (e) {
-    toast("Failed to load notifications: " + e.message, true);
-    return;
-  }
-  const svcById = new Map(state.services.map((s) => [s.id, s]));
-  const list = $("#notifications-list");
-  list.innerHTML = "";
-  if (items.length === 0) {
-    list.appendChild(el("div", { class: "empty-state", text: "No notifications 🎉" }));
-    return;
-  }
-  for (const n of items) {
-    const svc = svcById.get(n.service_id);
-    const row = el("div", { class: "notif-row" }, [
-      el("div", { class: "top" }, [
-        el("span", { class: `badge ${n.severity}`, text: n.severity }),
-        el("span", { class: "service-name", text: svc ? svc.name : `Service #${n.service_id}` }),
-        n.resolved ? el("span", { class: "badge ok", text: "resolved" }) : null,
-      ]),
-      el("div", { class: "msg", text: n.message }),
-      el("div", { class: "meta" }, [
-        `first seen ${fmtTime(n.first_seen)} · last seen ${fmtTime(n.last_seen)}`,
-        n.wiki_url ? el("span", {}, [" · ", el("a", { href: n.wiki_url, target: "_blank", rel: "noopener", text: "more info" })]) : null,
-      ]),
-    ]);
-    list.appendChild(row);
-  }
-}
-
-// ---------- history ----------
-
-async function loadHistoryTab() {
-  const select = $("#history-service");
-  if (select.options.length === 0) {
-    for (const s of state.services) {
-      select.appendChild(el("option", { value: s.id, text: s.name }));
-    }
-  }
-  if (!select.value && state.services.length) select.value = state.services[0].id;
-  const serviceId = select.value;
-  const hours = $("#history-hours").value;
-  const body = $("#history-body");
-  body.innerHTML = "";
-  if (!serviceId) return;
-
-  let rows;
-  try {
-    rows = await api(`/api/history?service_id=${serviceId}&hours=${hours}&limit=500`);
-  } catch (e) {
-    toast("Failed to load history: " + e.message, true);
-    return;
-  }
-  for (const r of rows) {
-    body.appendChild(
-      el("tr", {}, [
-        el("td", { text: fmtTime(r.timestamp) }),
-        el("td", { text: r.check_name }),
-        el("td", {}, el("span", { class: `badge ${r.status}`, text: r.status })),
-        el("td", { text: r.response_time_ms ? `${Math.round(r.response_time_ms)} ms` : "-" }),
-        el("td", { text: r.message }),
-      ])
-    );
-  }
-  if (rows.length === 0) {
-    body.appendChild(el("tr", {}, el("td", { colspan: "5", class: "empty-state", text: "No data in this window" })));
-  }
 }
 
 // ---------- settings: services ----------
@@ -311,30 +56,20 @@ async function loadSettings() {
 
 function renderServiceRow(svc) {
   const tr = el("tr", { class: "service-row" });
-  const expandBtn = el("button", { class: "small" }, "▸");
-  tr.appendChild(el("td", {}, expandBtn));
   tr.appendChild(el("td", { text: svc.name }));
-  tr.appendChild(el("td", {}, [TYPE_ICON[svc.type] || "", " " + svc.type]));
+  tr.appendChild(el("td", {}, [typeIcon(svc.type), " " + svc.type]));
   tr.appendChild(el("td", { text: svc.local_url || "-" }));
   tr.appendChild(el("td", { text: svc.remote_url || "-" }));
   tr.appendChild(el("td", { text: svc.poll_interval_seconds ? `${svc.poll_interval_seconds}s` : "default" }));
   tr.appendChild(el("td", {}, el("span", { class: `badge ${svc.enabled ? "ok" : "disabled"}`, text: svc.enabled ? "enabled" : "disabled" })));
 
   const actions = el("div", { style: "display:flex; gap:6px;" }, [
-    el("button", { class: "small", onclick: (e) => { e.stopPropagation(); openServiceModal(svc); } }, "Edit"),
-    el("button", { class: "small danger", onclick: (e) => { e.stopPropagation(); deleteService(svc); } }, "Delete"),
+    el("button", { class: "small", onclick: () => openServiceModal(svc) }, "Edit"),
+    el("button", { class: "small danger", onclick: () => deleteService(svc) }, "Delete"),
   ]);
   tr.appendChild(el("td", {}, actions));
 
-  const detailRow = el("tr", {}, el("td", { colspan: "8" }, renderChecksPanel(svc)));
-  detailRow.style.display = "none";
-
-  const toggle = () => {
-    const open = detailRow.style.display !== "none";
-    detailRow.style.display = open ? "none" : "table-row";
-    expandBtn.textContent = open ? "▸" : "▾";
-  };
-  tr.addEventListener("click", toggle);
+  const detailRow = el("tr", {}, el("td", { colspan: "7" }, renderChecksPanel(svc)));
 
   const wrapper = document.createDocumentFragment();
   wrapper.appendChild(tr);
@@ -522,7 +257,7 @@ function renderDynamicFields(svc, checkType, existingConfig = {}) {
 
   if (checkType === "filesystem_path") {
     container.appendChild(
-      el("div", { class: "field hint", text: "Note: 'Path in HealthChecker container' must be bind-mounted into this container to be checked - it's almost never the same path the target app uses internally. Prefer the *arr Root Folder check when available - it needs no extra mounts." })
+      el("div", { class: "field hint", text: "Note: 'Path in HealthChecker container' must be bind-mounted into this container to be checked - it's almost never the same path the target app uses internally. Prefer the *arr Root Folder check when available - it needs no extra mounts and also detects a mount that's present but empty." })
     );
   }
   if (checkType === "plex_remote_access") {
@@ -581,8 +316,13 @@ async function submitCheckForm(ev) {
 
 async function init() {
   initTabs();
-  state.meta = await api("/api/meta");
+  await loadMeta();
   state.services = await api("/api/services");
+
+  const buildInfo = $("#build-info");
+  if (buildInfo && state.meta.build) {
+    buildInfo.textContent = `v${state.meta.build.version} · built ${state.meta.build.build_date}`;
+  }
 
   $("#add-service-btn").addEventListener("click", () => openServiceModal());
   $("#service-cancel").addEventListener("click", closeServiceModal);
@@ -593,8 +333,8 @@ async function init() {
   $("#history-service").addEventListener("change", loadHistoryTab);
   $("#history-hours").addEventListener("change", loadHistoryTab);
 
-  loadDashboard();
-  setInterval(() => { if (state.tab === "dashboard") loadDashboard(); }, 30000);
+  loadDashboardAdmin();
+  setInterval(() => { if (state.tab === "dashboard") loadDashboardAdmin(); }, 30000);
   setInterval(() => { if (state.tab === "notifications") loadNotifications(); }, 30000);
 }
 

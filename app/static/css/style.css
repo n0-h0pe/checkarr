@@ -200,12 +200,21 @@ table th { color: var(--text-dim); font-weight: 600; font-size: 12px; text-trans
 .field .hint { color: var(--text-dim); font-size: 11px; margin-top: 4px; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
 
-.service-row { cursor: pointer; }
-.service-row:hover { background: var(--bg-panel-alt); }
 .checks-subpanel { background: var(--bg); border-radius: 6px; padding: 10px 14px; margin: 6px 0 16px; }
 .checks-subpanel .check-item { display: flex; align-items: center; justify-content: space-between; padding: 6px 0; border-top: 1px solid var(--border); font-size: 13px; }
 .checks-subpanel .check-item:first-child { border-top: none; }
-.type-icon { font-size: 15px; }
+.type-icon { width: 18px; height: 18px; object-fit: contain; vertical-align: -4px; }
+.type-icon-fallback { font-size: 15px; }
+
+.build-info { font-size: 11px; font-weight: 400; color: var(--text-dim); margin-left: 6px; vertical-align: middle; }
+
+/* Public dashboard: unobtrusive corner links to /history and /notifications */
+.public-footer-links { position: fixed; bottom: 8px; right: 10px; display: flex; gap: 10px; z-index: 5; }
+.public-footer-links a {
+  color: var(--text-dim); font-size: 10px; text-decoration: none; opacity: .25; letter-spacing: .04em;
+}
+.public-footer-links a:hover { opacity: .8; }
+.public-page main { padding-top: 24px; }
 
 .toast {
   position: fixed; bottom: 20px; right: 20px; background: var(--bg-panel-alt);

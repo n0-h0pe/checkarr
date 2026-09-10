@@ -6,28 +6,9 @@ from ..checks.runner import default_checks_for_service_type
 from ..database import get_db
 from ..scheduler import schedule_service, unschedule_service
 from ..security import encrypt_secret, require_auth
+from ..serializers import serialize_service as _out
 
 router = APIRouter(prefix="/api/services", tags=["services"], dependencies=[Depends(require_auth)])
-
-
-def _out(service: models.Service) -> schemas.ServiceOut:
-    return schemas.ServiceOut(
-        id=service.id,
-        name=service.name,
-        type=service.type,
-        local_url=service.local_url,
-        remote_url=service.remote_url,
-        verify_ssl=service.verify_ssl,
-        enabled=service.enabled,
-        poll_interval_seconds=service.poll_interval_seconds,
-        notes=service.notes,
-        has_api_key=bool(service.api_key_encrypted),
-        created_at=service.created_at,
-        updated_at=service.updated_at,
-        checks=[
-            schemas.CheckDefinitionOut.model_validate(c, from_attributes=True) for c in service.checks
-        ],
-    )
 
 
 @router.get("", response_model=list[schemas.ServiceOut])

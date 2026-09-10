@@ -3,7 +3,20 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-SERVICE_TYPES = ["radarr", "sonarr", "prowlarr", "plex", "jellyfin", "generic"]
+SERVICE_TYPES = [
+    "radarr",
+    "sonarr",
+    "prowlarr",
+    "lidarr",
+    "whisparr",
+    "chaptarr",
+    "plex",
+    "jellyfin",
+    "qbittorrent",
+    "deluge",
+    "rtorrent",
+    "generic",
+]
 CHECK_TYPES = [
     "http_200",
     "keyword_match",

@@ -4,11 +4,15 @@ import httpx
 
 from .base import STATUS_FAIL, STATUS_OK, STATUS_WARN, CheckOutcome, NotificationItem, build_headers
 
-# Radarr/Sonarr speak the v3 Servarr API; Prowlarr speaks v1. Structurally identical.
+# All Servarr-family apps expose a structurally identical REST API, just at
+# different version prefixes. Radarr/Sonarr are on v3; Whisparr is a Radarr
+# fork so shares v3. Prowlarr and Lidarr are still on v1.
 API_PREFIX = {
     "radarr": "/api/v3",
     "sonarr": "/api/v3",
+    "whisparr": "/api/v3",
     "prowlarr": "/api/v1",
+    "lidarr": "/api/v1",
 }
 
 
@@ -42,15 +46,51 @@ async def check_system_status(
     return CheckOutcome(STATUS_OK, f"API reachable, version {version}", elapsed)
 
 
+async def _is_folder_empty(
+    client: httpx.AsyncClient, base_url: str, api_key: str | None, service_type: str, path: str
+) -> bool | None:
+    """Browses a path via the same filesystem API Radarr/Sonarr's own "Add
+    Root Folder" folder picker uses (GET .../filesystem?path=...) - so
+    "empty" is judged from the service's own point of view, not the health
+    checker's. Catches the case `accessible: true` misses: a mount point
+    that exists and is writable but whose backing share (e.g. an SMB share
+    added in Unraid) mounted without actually populating, leaving Radarr/
+    Sonarr staring at a technically-valid but empty directory.
+
+    Returns None (inconclusive - never fails the check on its own) if the
+    browse call itself errors; some very old Servarr versions may also lack
+    this endpoint.
+    """
+    url = base_url.rstrip("/") + _api_base(service_type) + "/filesystem"
+    try:
+        resp = await client.get(
+            url, headers=build_headers(api_key), params={"path": path, "includeFiles": "true"}
+        )
+    except httpx.RequestError:
+        return None
+    if resp.status_code != 200:
+        return None
+    try:
+        data = resp.json()
+    except ValueError:
+        return None
+    directories = data.get("directories") or []
+    files = data.get("files") or []
+    return not directories and not files
+
+
 async def check_root_folders(
     client: httpx.AsyncClient, base_url: str, api_key: str | None, service_type: str, config: dict
 ) -> CheckOutcome:
-    """Uses Radarr/Sonarr's own root-folder accessibility flag to detect an unmounted/failed drive.
+    """Detects an unmounted/failed drive from two angles, both via the API
+    (no bind-mounts needed):
 
-    This is the recommended way to detect a dead mount: Radarr/Sonarr report
-    `accessible: false` for any root folder they can't see, which is exactly
-    what happens when the underlying disk/network share fails to mount -
-    without the health checker needing its own copy of the media volumes.
+    1. Radarr's/Sonarr's own root-folder `accessible` flag - catches a mount
+       point that's outright gone.
+    2. Actually browsing each accessible root folder's contents via the
+       filesystem API - catches a mount point that's present but empty,
+       e.g. an SMB share that mounted without populating. `accessible: true`
+       alone does NOT catch this; that's exactly the gap this closes.
     """
     url = base_url.rstrip("/") + _api_base(service_type) + "/rootfolder"
     start = time.perf_counter()
@@ -59,43 +99,55 @@ async def check_root_folders(
     except httpx.RequestError as exc:
         elapsed = (time.perf_counter() - start) * 1000
         return CheckOutcome(STATUS_FAIL, f"API request to {url} failed: {exc}", elapsed)
-    elapsed = (time.perf_counter() - start) * 1000
 
     if resp.status_code == 401:
+        elapsed = (time.perf_counter() - start) * 1000
         return CheckOutcome(STATUS_FAIL, "API key rejected (HTTP 401)", elapsed)
     if resp.status_code != 200:
+        elapsed = (time.perf_counter() - start) * 1000
         return CheckOutcome(STATUS_FAIL, f"Root folder API returned HTTP {resp.status_code}", elapsed)
 
     try:
         folders = resp.json()
     except ValueError:
+        elapsed = (time.perf_counter() - start) * 1000
         return CheckOutcome(STATUS_FAIL, "Root folder API returned invalid JSON", elapsed)
 
     if not folders:
+        elapsed = (time.perf_counter() - start) * 1000
         return CheckOutcome(STATUS_WARN, "No root folders configured", elapsed)
 
     min_free_bytes = config.get("min_free_bytes")
-    bad, low_space = [], []
+    bad, low_space, empty = [], [], []
     for f in folders:
         path = f.get("path", "?")
         if not f.get("accessible", False):
             bad.append(path)
-        elif min_free_bytes is not None and (f.get("freeSpace") or 0) < min_free_bytes:
+            continue
+        if min_free_bytes is not None and (f.get("freeSpace") or 0) < min_free_bytes:
             low_space.append(path)
+        if await _is_folder_empty(client, base_url, api_key, service_type, path):
+            empty.append(path)
 
-    if bad:
-        return CheckOutcome(
-            STATUS_FAIL,
-            f"Root folder(s) not accessible (likely unmounted/failed disk): {', '.join(bad)}",
-            elapsed,
-        )
+    elapsed = (time.perf_counter() - start) * 1000
+
+    if bad or empty:
+        parts = []
+        if bad:
+            parts.append(f"not accessible (likely unmounted/failed disk): {', '.join(bad)}")
+        if empty:
+            parts.append(
+                f"accessible but empty from {service_type}'s own view - possible failed/incomplete "
+                f"mount underneath (e.g. an SMB share that mounted but didn't populate): {', '.join(empty)}"
+            )
+        return CheckOutcome(STATUS_FAIL, "Root folder(s) " + "; ".join(parts), elapsed)
     if low_space:
         return CheckOutcome(
             STATUS_WARN,
             f"Root folder(s) below free space threshold: {', '.join(low_space)}",
             elapsed,
         )
-    return CheckOutcome(STATUS_OK, f"All {len(folders)} root folder(s) accessible", elapsed)
+    return CheckOutcome(STATUS_OK, f"All {len(folders)} root folder(s) accessible and populated", elapsed)
 
 
 _SEVERITY_MAP = {"ok": "ok", "notice": "notice", "warning": "warning", "error": "error"}
