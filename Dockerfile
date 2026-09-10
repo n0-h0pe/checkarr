@@ -2,7 +2,7 @@ FROM python:3.12-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    HC_DATA_DIR=/data
+    HC_DATA_DIR=/config
 
 WORKDIR /srv
 
@@ -11,9 +11,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app ./app
 
-RUN mkdir -p /data
+RUN mkdir -p /config
 
-# Runs as root: /data is typically a bind-mounted host directory (Unraid,
+# Runs as root: /config is typically a bind-mounted host directory (Unraid,
 # plain `docker run`, etc.) created root-owned by the Docker daemon, and a
 # non-root app user would otherwise be unable to write the SQLite DB/secret
 # key to it. Low-risk tradeoff for a homelab monitoring tool with no

@@ -10,7 +10,7 @@ services:
     environment:
       - TZ=${TZ:-UTC}
     volumes:
-      - ./data:/data
+      - ./config:/config
       # Optional: bind-mount the SAME host paths Radarr/Sonarr use, read-only,
       # so a "filesystem_path" check can independently confirm a drive/share
       # is actually mounted here too. Not required - the built-in

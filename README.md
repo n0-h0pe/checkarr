@@ -104,7 +104,7 @@ uses this to poll every 10 minutes even on a service polled every 5.
 
 - API keys are encrypted with Fernet before being stored in SQLite, using a
   key from `HC_APP_SECRET_KEY` if set, otherwise a key generated on first run
-  and persisted to `/data/secret.key`. **Set `HC_APP_SECRET_KEY` and back it
+  and persisted to `/config/secret.key`. **Set `HC_APP_SECRET_KEY` and back it
   up** - if the generated key file is lost, stored API keys can't be
   decrypted and services will need their keys re-entered.
 - The web UI/API has no authentication by default (fine on a trusted LAN
@@ -126,13 +126,14 @@ old single address becomes their local address automatically.
 All settings are environment variables (see `.env.example`), prefixed `HC_`:
 `HC_DEFAULT_POLL_INTERVAL_SECONDS`, `HC_HTTP_TIMEOUT_SECONDS`,
 `HC_HISTORY_RETENTION_DAYS`, `HC_APP_SECRET_KEY`, `HC_AUTH_USERNAME`,
-`HC_AUTH_PASSWORD`, `HC_LOG_LEVEL`, `HC_DATA_DIR` (defaults to `/data`,
-matching the compose volume).
+`HC_AUTH_PASSWORD`, `HC_LOG_LEVEL`, `HC_DATA_DIR` (defaults to `/config`,
+matching the compose volume - named to match the convention used by Radarr/
+Sonarr/etc. images).
 
 ## Development (without Docker)
 
 ```bash
 python -m venv .venv && . .venv/bin/activate  # or .venv\Scripts\activate on Windows
 pip install -r requirements.txt
-HC_DATA_DIR=./data uvicorn app.main:app --reload --port 8080
+HC_DATA_DIR=./config uvicorn app.main:app --reload --port 8080
 ```
