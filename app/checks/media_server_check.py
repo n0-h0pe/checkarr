@@ -11,6 +11,15 @@ from .base import STATUS_FAIL, STATUS_OK, STATUS_WARN, CheckOutcome
 PLEX_TV_RESOURCES_URL = "https://plex.tv/api/v2/resources"
 
 
+def _empty_path_status(config: dict) -> str:
+    """An empty-but-technically-reachable library path is a judgment call,
+    not always a hard failure (a brand new library is legitimately empty) -
+    config["fail_severity"] ("fail"/"warn", default "fail") lets the check be
+    configured either way. Connection/auth errors stay hard failures
+    regardless; this only governs the "found nothing" outcome."""
+    return STATUS_WARN if config.get("fail_severity") == "warn" else STATUS_FAIL
+
+
 async def check_plex_identity(client: httpx.AsyncClient, base_url: str, api_key: str | None, config: dict) -> CheckOutcome:
     """Plex's /identity endpoint is unauthenticated and cheap - good liveness probe."""
     url = base_url.rstrip("/") + "/identity"
@@ -179,7 +188,7 @@ async def check_plex_filesystem_path(
     total = len(directories) + len(files)
     if total < min_entries:
         return CheckOutcome(
-            STATUS_FAIL,
+            _empty_path_status(config),
             f"{path} has only {len(directories)} folder(s) and {len(files)} file(s) - possible unmounted/failed drive",
             elapsed,
         )
@@ -236,7 +245,7 @@ async def check_jellyfin_filesystem_path(
     if not isinstance(entries, list) or len(entries) < min_entries:
         count = len(entries) if isinstance(entries, list) else 0
         return CheckOutcome(
-            STATUS_FAIL,
+            _empty_path_status(config),
             f"{path} has only {count} entrie(s) - possible unmounted/failed drive",
             elapsed,
         )

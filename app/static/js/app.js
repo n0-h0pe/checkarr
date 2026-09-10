@@ -40,6 +40,12 @@ async function runNow(serviceId) {
 
 // ---------- settings: services ----------
 
+// check_id -> { enabled?, config? } staged but not yet saved. Every render
+// of the Settings page (initial load, after Add/Edit/Delete, tab switches)
+// re-fetches fresh data then re-applies this on top, so nothing but an
+// explicit Save/Discard ever loses a pending quick-edit.
+let pendingCheckChanges = new Map();
+
 async function loadSettings() {
   try {
     state.services = await api("/api/services");
@@ -47,11 +53,66 @@ async function loadSettings() {
     toast("Failed to load services: " + e.message, true);
     return;
   }
+  applyPendingChangesToState();
+  renderServicesFromState();
+}
+
+function applyPendingChangesToState() {
+  for (const svc of state.services) {
+    for (const c of svc.checks) {
+      const patch = pendingCheckChanges.get(c.id);
+      if (!patch) continue;
+      if (patch.enabled !== undefined) c.enabled = patch.enabled;
+      if (patch.config !== undefined) c.config = patch.config;
+    }
+  }
+}
+
+function renderServicesFromState() {
   const body = $("#services-body");
   body.innerHTML = "";
   for (const svc of state.services) {
     body.appendChild(renderServiceRow(svc));
   }
+}
+
+function stageCheckChange(check, patch) {
+  const existing = pendingCheckChanges.get(check.id) || {};
+  const merged = { ...existing };
+  if (patch.enabled !== undefined) merged.enabled = patch.enabled;
+  if (patch.config !== undefined) merged.config = { ...(existing.config || check.config), ...patch.config };
+  pendingCheckChanges.set(check.id, merged);
+
+  if (patch.enabled !== undefined) check.enabled = patch.enabled;
+  if (patch.config !== undefined) check.config = { ...check.config, ...patch.config };
+
+  renderServicesFromState();
+  updateUnsavedBanner();
+}
+
+function updateUnsavedBanner() {
+  $("#unsaved-banner").hidden = pendingCheckChanges.size === 0;
+}
+
+async function saveChanges() {
+  const updates = Array.from(pendingCheckChanges, ([check_id, patch]) => ({ check_id: Number(check_id), ...patch }));
+  if (updates.length === 0) return;
+  try {
+    await api("/api/checks/bulk-update", { method: "POST", body: JSON.stringify({ updates }) });
+  } catch (e) {
+    toast("Save failed: " + e.message, true);
+    return;
+  }
+  pendingCheckChanges.clear();
+  updateUnsavedBanner();
+  toast("Changes saved");
+  loadSettings();
+}
+
+function discardChanges() {
+  pendingCheckChanges.clear();
+  updateUnsavedBanner();
+  loadSettings();
 }
 
 function renderServiceRow(svc) {
@@ -103,21 +164,70 @@ function renderChecksPanel(svc) {
     panel.appendChild(el("div", { class: "text-dim", text: "No checks configured" }));
   }
   for (const c of svc.checks) {
-    panel.appendChild(
-      el("div", { class: "check-item" }, [
-        el("span", {}, [
-          el("span", { class: `badge ${c.enabled ? "ok" : "disabled"}`, text: c.type }),
-          " " + c.name,
-          c.interval_seconds ? el("span", { class: "text-dim", text: ` (every ${c.interval_seconds}s)` }) : null,
-        ]),
-        el("div", { style: "display:flex; gap:6px;" }, [
-          el("button", { class: "small", onclick: () => openCheckModal(svc, c) }, "Edit"),
-          c.is_builtin ? null : el("button", { class: "small danger", onclick: () => deleteCheck(svc, c) }, "Delete"),
-        ]),
+    panel.appendChild(renderCheckRow(svc, c));
+  }
+  return panel;
+}
+
+const FILESYSTEM_SEVERITY_TYPES = new Set(["plex_filesystem_path", "jellyfin_filesystem_path"]);
+
+function renderCheckRow(svc, c) {
+  const quickControls = [];
+
+  if (FILESYSTEM_SEVERITY_TYPES.has(c.type)) {
+    const severity = c.config.fail_severity === "warn" ? "warn" : "fail";
+    quickControls.push(
+      el(
+        "button",
+        {
+          class: `severity-toggle ${severity}`,
+          title: "Status reported when this path is empty - click to toggle",
+          onclick: () => stageCheckChange(c, { config: { fail_severity: severity === "fail" ? "warn" : "fail" } }),
+        },
+        [el("span", { class: `dot ${severity}` }), severity === "fail" ? "Red" : "Yellow"]
+      )
+    );
+
+    const minEntries = Number.isFinite(c.config.min_entries) ? c.config.min_entries : 1;
+    const valueSpan = el("span", { class: "stepper-value", text: String(minEntries) });
+    quickControls.push(
+      el("div", { class: "stepper", title: "Minimum entries expected" }, [
+        el("button", {
+          type: "button",
+          onclick: () => stageCheckChange(c, { config: { min_entries: Math.max(0, minEntries - 1) } }),
+        }, "−"),
+        valueSpan,
+        el("button", {
+          type: "button",
+          onclick: () => stageCheckChange(c, { config: { min_entries: minEntries + 1 } }),
+        }, "+"),
       ])
     );
   }
-  return panel;
+
+  quickControls.push(
+    el("label", { class: "inline-enabled" }, [
+      el("input", {
+        type: "checkbox",
+        checked: c.enabled ? "checked" : null,
+        onchange: (e) => stageCheckChange(c, { enabled: e.target.checked }),
+      }),
+      "Enabled",
+    ])
+  );
+
+  return el("div", { class: "check-item" }, [
+    el("span", { class: "check-name" }, [
+      el("span", { class: `badge ${c.enabled ? "ok" : "disabled"}`, text: c.type }),
+      " " + c.name,
+      c.interval_seconds ? el("span", { class: "text-dim", text: ` (every ${c.interval_seconds}s)` }) : null,
+    ]),
+    el("div", { class: "check-quick-controls" }, quickControls),
+    el("div", { class: "check-actions" }, [
+      el("button", { class: "small", onclick: () => openCheckModal(svc, c) }, "Edit"),
+      c.is_builtin ? null : el("button", { class: "small danger", onclick: () => deleteCheck(svc, c) }, "Delete"),
+    ]),
+  ]);
 }
 
 async function deleteService(svc) {
@@ -125,6 +235,8 @@ async function deleteService(svc) {
   try {
     await api(`/api/services/${svc.id}`, { method: "DELETE" });
     toast("Service deleted");
+    for (const c of svc.checks) pendingCheckChanges.delete(c.id);
+    updateUnsavedBanner();
     loadSettings();
   } catch (e) {
     toast("Delete failed: " + e.message, true);
@@ -136,6 +248,8 @@ async function deleteCheck(svc, check) {
   try {
     await api(`/api/services/${svc.id}/checks/${check.id}`, { method: "DELETE" });
     toast("Check deleted");
+    pendingCheckChanges.delete(check.id);
+    updateUnsavedBanner();
     loadSettings();
   } catch (e) {
     toast("Delete failed: " + e.message, true);
@@ -527,6 +641,15 @@ async function init() {
   $("#show-resolved").addEventListener("change", loadNotifications);
   $("#history-service").addEventListener("change", loadHistoryTab);
   $("#history-hours").addEventListener("change", loadHistoryTab);
+  $("#save-changes-btn").addEventListener("click", saveChanges);
+  $("#discard-changes-btn").addEventListener("click", discardChanges);
+
+  window.addEventListener("beforeunload", (e) => {
+    if (pendingCheckChanges.size > 0) {
+      e.preventDefault();
+      e.returnValue = "";
+    }
+  });
 
   loadDashboardAdmin();
   setInterval(() => { if (state.tab === "dashboard") loadDashboardAdmin(); }, 30000);
