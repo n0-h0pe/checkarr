@@ -108,10 +108,13 @@ class Notification(Base):
 
 
 class DashboardLayout(Base):
-    """A named, saveable arrangement of dashboard card sizes. `sizes` maps
+    """A named, saveable arrangement of dashboard cards. `sizes` maps
     service id (as a string, since JSON object keys must be strings) to
-    {"w": int, "h": int} in grid units. Exactly one row has is_active=True
-    at a time - that's what the dashboard (admin and public) renders."""
+    {"w": int, "h": int, "x": int, "y": int} in grid units - x/y are the
+    card's 1-based grid-line position, omitted for a card that hasn't been
+    manually placed yet (it's auto-packed into the remaining space on
+    render instead). Exactly one row has is_active=True at a time - that's
+    what the dashboard (admin and public) renders."""
 
     __tablename__ = "dashboard_layouts"
 

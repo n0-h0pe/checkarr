@@ -13,6 +13,7 @@ function switchTab(tab) {
   state.tab = tab;
   $all(".tab-btn").forEach((b) => b.classList.toggle("active", b.dataset.tab === tab));
   $all(".tab-panel").forEach((p) => p.classList.toggle("active", p.id === `tab-${tab}`));
+  document.body.classList.toggle("wide-main", tab === "dashboard");
   if (tab === "dashboard") loadDashboardAdmin();
   if (tab === "notifications") loadNotifications();
   if (tab === "history") loadHistoryTab();
@@ -24,7 +25,7 @@ async function loadDashboardAdmin() {
     interactive: true,
     onRunNow: runNow,
     onHistory: (id) => { switchTab("history"); $("#history-service").value = id; loadHistoryTab(); },
-    onResize: persistCardSize,
+    onLayoutChange: persistCardLayout,
   });
   loadLayoutList();
 }
@@ -42,9 +43,17 @@ async function runNow(serviceId) {
 
 // ---------- dashboard layouts ----------
 
-async function persistCardSize(serviceId, w, h) {
+// `updates` is [{id, patch}], patch being a partial {w,h} and/or {x,y} -
+// each merged onto whatever's already saved for that service so a resize
+// doesn't clobber a saved position and vice versa. Always sent as one PUT
+// so a two-card swap (drag-to-move landing on another card) saves both
+// cards' new positions atomically instead of racing two separate requests.
+async function persistCardLayout(updates) {
   if (!state.activeLayout || !state.activeLayout.id) return;
-  const sizes = { ...state.activeLayout.sizes, [String(serviceId)]: { w, h } };
+  const sizes = { ...state.activeLayout.sizes };
+  for (const { id, patch } of updates) {
+    sizes[String(id)] = { ...(sizes[String(id)] || {}), ...patch };
+  }
   try {
     state.activeLayout = await api(`/api/dashboard-layouts/${state.activeLayout.id}`, {
       method: "PUT",
@@ -808,6 +817,7 @@ async function init() {
     }
   });
 
+  document.body.classList.add("wide-main"); // dashboard is the default active tab
   loadDashboardAdmin();
   setInterval(() => { if (state.tab === "dashboard") loadDashboardAdmin(); }, 30000);
   setInterval(() => { if (state.tab === "notifications") loadNotifications(); }, 30000);
