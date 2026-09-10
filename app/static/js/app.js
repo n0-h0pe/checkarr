@@ -394,18 +394,21 @@ function appendCheckGridRow(grid, svc, c) {
 
   const alertLevel = c.config.alert_level === "warn" ? "warn" : "fail";
   grid.appendChild(
-    el("div", { class: rowClass }, pendingDelete
-      ? el("span", { class: "text-dim", text: "-" })
-      : el(
-          "button",
-          {
-            class: `severity-toggle ${alertLevel}`,
-            title: "Status reported when this check fails - click to toggle",
-            onclick: () => stageCheckChange(c, { config: { alert_level: alertLevel === "fail" ? "warn" : "fail" } }),
-          },
-          [el("span", { class: `dot ${alertLevel}` }), alertLevel === "fail" ? "Red" : "Yellow"]
-        )
-    )
+    el("div", { class: rowClass }, (() => {
+      if (pendingDelete) return el("span", { class: "text-dim", text: "-" });
+      if (NO_ALERT_LEVEL_TYPES.has(c.type)) {
+        return el("span", { class: "text-dim", title: "This check's own Warn/Fail % thresholds decide this instead", text: "—" });
+      }
+      return el(
+        "button",
+        {
+          class: `severity-toggle ${alertLevel}`,
+          title: "Status reported when this check fails - click to toggle",
+          onclick: () => stageCheckChange(c, { config: { alert_level: alertLevel === "fail" ? "warn" : "fail" } }),
+        },
+        [el("span", { class: `dot ${alertLevel}` }), alertLevel === "fail" ? "Fail" : "Warn"]
+      );
+    })())
   );
 
   grid.appendChild(
@@ -712,7 +715,16 @@ function closeCheckModal() {
   $("#check-modal").classList.add("hidden");
 }
 
+// These check types decide warn vs. fail themselves (from their own %
+// thresholds) rather than just reporting a bare pass/fail - the generic
+// Alert level toggle would only cause confusion here (or, worse, silently
+// downgrade a real fail-level reading it wasn't meant to touch), so it's
+// hidden for them and never included in their saved config.
+const NO_ALERT_LEVEL_TYPES = new Set(["qbittorrent_disk_space", "deluge_disk_space"]);
+
 function renderDynamicFields(svc, checkType, existingConfig = {}) {
+  $("#chk-alert-level-field").hidden = NO_ALERT_LEVEL_TYPES.has(checkType);
+
   const container = $("#chk-dynamic-fields");
   container.innerHTML = "";
   const meta = state.meta.check_types.find((ct) => ct.type === checkType);
@@ -783,7 +795,7 @@ function renderDynamicFields(svc, checkType, existingConfig = {}) {
   }
   if (checkType === "qbittorrent_disk_space" || checkType === "deluge_disk_space") {
     container.appendChild(
-      el("div", { class: "field hint", text: "The API only reports how much space is free, not the disk's total size, so there's nothing to compute a percentage against until you fill in 'Total disk size' - leave it blank to just see the free space reported with no threshold applied." })
+      el("div", { class: "field hint", text: "The API only reports how much space is free, not the disk's total size, so there's nothing to compute a percentage against until you fill in 'Total disk size' - leave it blank to just see the free space reported with no threshold applied. No Alert level field here - Warn below/Fail below above already decide that." })
     );
   }
   if (checkType === "rtorrent_rpc_status") {
@@ -820,7 +832,7 @@ async function submitCheckForm(ev) {
       config[f.key] = val;
     }
   }
-  config.alert_level = $("#chk-alert-level").value;
+  if (!NO_ALERT_LEVEL_TYPES.has(checkType)) config.alert_level = $("#chk-alert-level").value;
 
   const intervalVal = $("#chk-interval").value;
   const payload = {

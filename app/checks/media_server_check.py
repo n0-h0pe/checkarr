@@ -5,7 +5,7 @@ from urllib.parse import quote
 
 import httpx
 
-from ..jellyfin_client import JellyfinAdminAuthError, get_jellyfin_admin_token
+from ..jellyfin_client import JELLYFIN_AUTH_HEADERS, JellyfinAdminAuthError, get_jellyfin_admin_token
 from ..plex_client import plex_tv_headers
 from .base import STATUS_FAIL, STATUS_OK, STATUS_WARN, CheckOutcome
 
@@ -221,7 +221,7 @@ async def check_jellyfin_filesystem_path(
             return CheckOutcome(STATUS_FAIL, f"Admin login failed: {exc}", elapsed)
 
     url = base_url.rstrip("/") + "/Environment/DirectoryContents"
-    headers = {"X-Emby-Token": token} if token else {}
+    headers = {**JELLYFIN_AUTH_HEADERS, "X-Emby-Token": token} if token else {}
 
     try:
         resp = await client.get(
