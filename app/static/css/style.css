@@ -161,7 +161,12 @@ body.wide-main main { max-width: none; }
 .card.card-editable {
   outline: 1px dashed var(--border);
   outline-offset: 3px;
+  cursor: grab;
+  -webkit-user-select: none;
+  user-select: none;
 }
+.card.card-editable:active { cursor: grabbing; }
+.card.card-editable button { cursor: pointer; }
 .card.dragging {
   z-index: 50;
   opacity: .92;
@@ -172,12 +177,6 @@ body.wide-main main { max-width: none; }
 .card-header {
   display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; flex: 0 0 auto;
 }
-.card-header.drag-handle {
-  cursor: grab;
-  -webkit-user-select: none;
-  user-select: none;
-}
-.card-header.drag-handle:active { cursor: grabbing; }
 .card-header .title { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 15px; min-width: 0; }
 .card-header .title span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .card-sub { color: var(--text-dim); font-size: 12px; margin-bottom: 10px; flex: 0 0 auto; }
@@ -294,7 +293,7 @@ table th { color: var(--text-dim); font-weight: 600; font-size: 12px; text-trans
    children of one grid container sharing one column template. */
 .checks-grid {
   display: grid;
-  grid-template-columns: 44px 140px 1fr 110px 130px;
+  grid-template-columns: 60px 210px 1fr 110px 130px;
   align-items: center;
   column-gap: 8px;
 }
@@ -306,6 +305,9 @@ table th { color: var(--text-dim); font-weight: 600; font-size: 12px; text-trans
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* Enable column (1st of every 5-cell row, header included) - centers both
+   the "Enable" header text and each row's checkbox under it. */
+.checks-grid > div:nth-child(5n+1) { text-align: center; }
 .checks-grid-header {
   font-size: 11px; color: var(--text-dim); font-weight: 600;
   text-transform: uppercase; letter-spacing: .03em;

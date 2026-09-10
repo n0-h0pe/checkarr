@@ -88,6 +88,7 @@ class ServiceBase(BaseModel):
 
 class ServiceCreate(ServiceBase):
     api_key: str | None = None
+    jellyfin_admin_password: str | None = None
 
 
 class ServiceUpdate(BaseModel):
@@ -100,6 +101,8 @@ class ServiceUpdate(BaseModel):
     username: str | None = None
     api_key: str | None = None
     clear_api_key: bool = False
+    jellyfin_admin_password: str | None = None
+    clear_jellyfin_admin_password: bool = False
     verify_ssl: bool | None = None
     enabled: bool | None = None
     poll_interval_seconds: int | None = None
@@ -110,6 +113,7 @@ class ServiceOut(ServiceBase):
     model_config = ConfigDict(from_attributes=True)
     id: int
     has_api_key: bool
+    has_jellyfin_admin_password: bool
     created_at: datetime
     updated_at: datetime
     checks: list[CheckDefinitionOut] = Field(default_factory=list)

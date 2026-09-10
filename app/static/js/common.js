@@ -246,7 +246,7 @@ function renderServiceCard(s, opts = {}, pos, positions) {
   card.dataset.serviceId = svc.id;
 
   card.appendChild(
-    el("div", { class: `card-header${opts.editable ? " drag-handle" : ""}` }, [
+    el("div", { class: "card-header" }, [
       el("div", { class: "title" }, [typeIcon(svc.type), el("span", { text: svc.name })]),
       el("span", { class: `badge ${s.overall_status}` }, [
         el("span", { class: `dot ${s.overall_status}` }),
@@ -339,14 +339,13 @@ function attachResizeHandle(card, serviceId, pos, onLayoutChange) {
   });
 }
 
-// Drag-to-reposition from the card's title bar, like moving a window. Cards
-// snap to the same grid the resize handle uses, and can be dropped anywhere
-// - whatever ends up in the way gets pushed out of the way (resolveCollisions
-// above), it never just bounces back.
+// Drag-to-reposition, from anywhere on the card except the resize handle
+// and its buttons - a small hitbox is fiddly to grab, and the whole card is
+// otherwise inert while editing anyway. Cards snap to the same grid the
+// resize handle uses, and can be dropped anywhere - whatever ends up in the
+// way gets pushed out of the way (resolveCollisions above), it never just
+// bounces back.
 function attachMoveHandle(card, serviceId, pos, positions, onLayoutChange) {
-  const header = card.querySelector(".card-header");
-  if (!header) return;
-
   let start = null;
 
   function onPointerMove(e) {
@@ -379,7 +378,8 @@ function attachMoveHandle(card, serviceId, pos, positions, onLayoutChange) {
     onLayoutChange && onLayoutChange(updates);
   }
 
-  header.addEventListener("pointerdown", (e) => {
+  card.addEventListener("pointerdown", (e) => {
+    if (e.target.closest(".resize-handle, button")) return;
     e.preventDefault();
     start = { px: e.clientX, py: e.clientY, x: pos.x, y: pos.y };
     card.classList.add("dragging");

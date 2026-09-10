@@ -94,7 +94,10 @@ async def run_check(
         if ctype == "jellyfin_health":
             return await check_jellyfin_health(client, base_url, api_key, config)
         if ctype == "jellyfin_filesystem_path":
-            return await check_jellyfin_filesystem_path(client, base_url, api_key, config)
+            jellyfin_admin_password = decrypt_secret(service.jellyfin_admin_password_encrypted)
+            return await check_jellyfin_filesystem_path(
+                client, base_url, api_key, config, service.username, jellyfin_admin_password
+            )
         if ctype == "plex_remote_access":
             return await check_plex_remote_access(client, api_key, config)
         if ctype == "qbittorrent_login":

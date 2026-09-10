@@ -38,6 +38,7 @@ def create_service(payload: schemas.ServiceCreate, db: Session = Depends(get_db)
         check_both_targets=payload.check_both_targets,
         username=payload.username or None,
         api_key_encrypted=encrypt_secret(payload.api_key),
+        jellyfin_admin_password_encrypted=encrypt_secret(payload.jellyfin_admin_password),
         verify_ssl=payload.verify_ssl,
         enabled=payload.enabled,
         poll_interval_seconds=payload.poll_interval_seconds,
@@ -89,6 +90,10 @@ def update_service(service_id: int, payload: schemas.ServiceUpdate, db: Session 
         service.api_key_encrypted = None
     elif payload.api_key:
         service.api_key_encrypted = encrypt_secret(payload.api_key)
+    if payload.clear_jellyfin_admin_password:
+        service.jellyfin_admin_password_encrypted = None
+    elif payload.jellyfin_admin_password:
+        service.jellyfin_admin_password_encrypted = encrypt_secret(payload.jellyfin_admin_password)
     if payload.verify_ssl is not None:
         service.verify_ssl = payload.verify_ssl
     if payload.enabled is not None:
@@ -155,6 +160,7 @@ async def scan_libraries(service_id: int, db: Session = Depends(get_db)):
         raise HTTPException(400, "Service has no address configured")
 
     api_key = decrypt_secret(service.api_key_encrypted)
+    jellyfin_admin_password = decrypt_secret(service.jellyfin_admin_password_encrypted)
     check_type = "plex_filesystem_path" if service.type == "plex" else "jellyfin_filesystem_path"
 
     async with httpx.AsyncClient(timeout=settings.http_timeout_seconds, verify=service.verify_ssl) as client:
@@ -162,7 +168,9 @@ async def scan_libraries(service_id: int, db: Session = Depends(get_db)):
             if service.type == "plex":
                 found = await scan_plex_libraries(client, base_url, api_key)
             else:
-                found = await scan_jellyfin_libraries(client, base_url, api_key)
+                found = await scan_jellyfin_libraries(
+                    client, base_url, api_key, service.username, jellyfin_admin_password
+                )
         except LibraryScanError as exc:
             raise HTTPException(502, str(exc))
 

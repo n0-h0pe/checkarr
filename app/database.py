@@ -69,6 +69,8 @@ def _run_migrations() -> None:
             )
         if "username" not in service_cols:
             conn.exec_driver_sql("ALTER TABLE services ADD COLUMN username VARCHAR(255)")
+        if "jellyfin_admin_password_encrypted" not in service_cols:
+            conn.exec_driver_sql("ALTER TABLE services ADD COLUMN jellyfin_admin_password_encrypted TEXT")
 
         check_cols = _table_columns(conn, "check_definitions")
         if "interval_seconds" not in check_cols:
