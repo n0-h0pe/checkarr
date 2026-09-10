@@ -18,6 +18,7 @@ shows one consolidated view of what's healthy, what's degraded, and why.
 - For Plex, a "Sign in to Plex" button fills in the X-Plex-Token for you via Plex's own sign-in flow - no copying tokens out of your browser's dev tools.
 - Quick-edit controls on every check's row in Settings (Enabled, and for Plex/Jellyfin path checks, the empty-path severity and minimum-entries count) - no need to open Edit for a one-field change. These stage locally with an obvious "unsaved changes" banner and explicit Save/Discard, so a stray click can't silently change what's being monitored.
 - An "Edit layout" mode for the dashboard: drag cards anywhere and resize them from the corner, snapped to an invisible grid, saved as named/switchable layouts that adapt to how wide your window is. See "Dashboard layouts" below.
+- A responsive layout on every page - the dashboard, Settings, History, and Notifications all adapt down to a phone-width screen, admin and public alike.
 - API keys are encrypted at rest (Fernet/AES) and never echoed back to the browser.
 - Historic results stored in SQLite, with a History tab and per-service uptime strip on the dashboard.
 - Single Docker container: web GUI + API + scheduler + database, no external dependencies.
