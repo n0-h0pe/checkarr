@@ -114,9 +114,16 @@ below applies. With **both** set:
 
 The credential field(s) shown change based on the service type:
 
-- **Radarr/Sonarr/Lidarr/Whisparr/Prowlarr/Jellyfin/Chaptarr/Generic** - a
-  single **API key** field (Settings > General > API Key for the *arr apps;
-  Jellyfin: Dashboard > API Keys). Only needed for authenticated checks.
+- **Radarr/Sonarr/Lidarr/Whisparr/Prowlarr/Chaptarr/Generic** - a single
+  **API key** field (Settings > General > API Key for the *arr apps). Only
+  needed for authenticated checks.
+- **Jellyfin** - an **API key** field (Dashboard > API Keys), plus optional
+  **Admin username** + **Admin password** fields. The API key alone covers
+  the basic health check, but some admin-only endpoints (library scanning,
+  the filesystem path check) reject it even when it belongs to an admin - a
+  known Jellyfin inconsistency. Filling in both admin fields logs in as that
+  account instead for just those specific calls; leave them blank and those
+  two features simply keep trying the API key, same as before.
 - **Plex** - the field is labeled **X-Plex-Token**. Click **"Sign in to
   Plex"** next to it to get one without copying it out of your browser's dev
   tools: it opens Plex's own sign-in page in a popup, and once you authorize
@@ -142,7 +149,7 @@ poll interval override (see below).
 | Lidarr, Whisparr | Same as Radarr/Sonarr - both are Servarr-family apps with the same API shape (Lidarr on API v1, Whisparr on v3) |
 | Prowlarr | Web UI, API status, health/notifications feed (no root folders to check) |
 | Plex | Web UI (`/web/index.html`), `/identity` liveness, Remote Access status (plex.tv + plex.direct reachability), library/path checks via API (see "Scanning libraries automatically") |
-| Jellyfin | Web UI, `/health` endpoint, library/path checks via API (admin key required - see below) |
+| Jellyfin | Web UI, `/health` endpoint, library/path checks via API (admin-only endpoints - see "Credentials" above) |
 | Chaptarr | Web UI only for now - I couldn't verify its API shape, so it isn't assumed to be Servarr-compatible. Add `http_200`/`keyword_match` custom checks as needed; let me know if it does follow the Servarr API and I'll wire up full support. |
 | qBittorrent | Web UI + real login verification (Username/Password against the WebUI API) + free disk space via API |
 | Deluge | Web UI + real login verification (Password only) + free disk space via API |
@@ -177,7 +184,7 @@ a library): it skips any path that already has a check.
 | `plex_remote_access` | Plex | Checks plex.tv for this server's registered connections and actually tries to reach its public `plex.direct` address; reports OK (direct), degraded (relay-only), or failing (nothing registered). Needs the Plex token and outbound internet access. Polled every 10 minutes by default (see below) since it depends on an external API. |
 | `plex_filesystem_path` | Plex | Checks a path exists and is non-empty via Plex's own folder-browse API (the same one its "Add Library" picker uses) - no volume mount needed |
 | `jellyfin_health` | Jellyfin | Hits Jellyfin's `/health` endpoint |
-| `jellyfin_filesystem_path` | Jellyfin | Checks a path exists and is non-empty via Jellyfin's `/Environment/DirectoryContents` API - no volume mount needed. Needs an administrator API key. |
+| `jellyfin_filesystem_path` | Jellyfin | Checks a path exists and is non-empty via Jellyfin's `/Environment/DirectoryContents` API - no volume mount needed. Admin-only endpoint - see "Credentials" above if the API key gets rejected here. |
 | `qbittorrent_login` | qBittorrent | Confirms the configured Username/Password actually logs in via the WebUI API; a no-op OK if neither is set |
 | `deluge_login` | Deluge | Confirms the configured Password actually logs in via the WebUI JSON-RPC API; a no-op OK if not set |
 | `qbittorrent_disk_space` | qBittorrent | Free space on qBittorrent's default save path via its WebUI API - see "Torrent client disk space" below |
@@ -260,18 +267,22 @@ clears them, and leaving the page with changes pending prompts you first.
 
 Click **Edit layout** in the top bar to rearrange the dashboard - drag and
 resize only work in this mode, so normal day-to-day viewing can't
-accidentally bump a card out of place. Click it again (**Done editing**)
-when you're finished; it's not remembered across page loads, so the
-dashboard always opens in plain view.
+accidentally bump a card out of place. It also pauses the dashboard's normal
+auto-refresh (the periodic status poll, and reacting to a browser window
+resize) for as long as you're editing, so nothing rearranges itself out from
+under you mid-drag; everything catches up the moment you click **Done
+editing**, which isn't remembered across page loads - the dashboard always
+opens back in plain view.
 
 While editing:
 
-- Drag a card by its title bar to move it anywhere on the grid - it snaps to
-  an invisible grid. Drop it somewhere empty and it just moves there; drop
-  it on or across other cards and whatever's in the way gets pushed straight
-  down out of your way (cascading further if that push then overlaps
-  something else) rather than refusing the move - there's always somewhere
-  for a card to land.
+- Drag a card from anywhere on it (except the resize handle and its own
+  buttons) to move it anywhere on the grid - it snaps to an invisible grid.
+  Drop it somewhere empty and it just moves there; drop it on or across
+  other cards and whatever's in the way gets pushed straight down out of
+  your way (cascading further if that push then overlaps something else)
+  rather than refusing the move - there's always somewhere for a card to
+  land.
 - Every card has a drag handle in its bottom-right corner (like a resizable
   window) - drag it to make the card wider or taller. Cards can't go below
   the default 16x10 grid-unit size. If a card ends up shorter than its check

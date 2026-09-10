@@ -27,6 +27,12 @@ class Service(Base):
     # password) - one encrypted slot, reused.
     username: Mapped[str | None] = mapped_column(String(255), nullable=True)
     api_key_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Jellyfin only: some admin-only endpoints (library listing, filesystem
+    # browsing) reject the plain API key even when it belongs to an admin -
+    # a known Jellyfin inconsistency. Setting both this and `username` (as
+    # the admin account's username) makes those specific calls log in as
+    # that user instead of using the API key - see jellyfin_client.py.
+    jellyfin_admin_password_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
     verify_ssl: Mapped[bool] = mapped_column(Boolean, default=True)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     poll_interval_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
@@ -46,6 +52,9 @@ class Service(Base):
 
     def has_api_key(self) -> bool:
         return bool(self.api_key_encrypted)
+
+    def has_jellyfin_admin_password(self) -> bool:
+        return bool(self.jellyfin_admin_password_encrypted)
 
     def get_targets(self) -> list[tuple[str, str]]:
         """(label, url) pairs for whichever of local/remote address are set."""

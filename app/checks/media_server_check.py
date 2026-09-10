@@ -5,6 +5,7 @@ from urllib.parse import quote
 
 import httpx
 
+from ..jellyfin_client import JellyfinAdminAuthError, get_jellyfin_admin_token
 from ..plex_client import plex_tv_headers
 from .base import STATUS_FAIL, STATUS_OK, STATUS_WARN, CheckOutcome
 
@@ -187,25 +188,41 @@ async def check_plex_filesystem_path(
 
 
 async def check_jellyfin_filesystem_path(
-    client: httpx.AsyncClient, base_url: str, api_key: str | None, config: dict
+    client: httpx.AsyncClient,
+    base_url: str,
+    api_key: str | None,
+    config: dict,
+    admin_username: str | None = None,
+    admin_password: str | None = None,
 ) -> CheckOutcome:
     """Checks a path exists and is non-empty using Jellyfin's own
     /Environment/DirectoryContents endpoint - the same one its server
     dashboard's folder picker uses. No bind-mount needed.
 
-    Requires an *administrator* API key/token - this endpoint is
-    admin-only. A 403 here most likely means the configured key belongs to
-    a non-admin user.
+    Requires an *administrator* token - this endpoint is admin-only, and the
+    configured API key sometimes gets rejected here even when it belongs to
+    an admin (a known Jellyfin inconsistency). When an admin username/
+    password is set on the service, this logs in as that user instead (see
+    jellyfin_client) and uses the resulting token, which admin-only
+    endpoints accept reliably.
     """
     path = config.get("path")
     min_entries = config.get("min_entries", 1)
     if not path:
         return CheckOutcome(STATUS_FAIL, "No 'Path in Jellyfin container' configured", None)
 
-    url = base_url.rstrip("/") + "/Environment/DirectoryContents"
-    headers = {"X-Emby-Token": api_key} if api_key else {}
-
     start = time.perf_counter()
+    token = api_key
+    if admin_username and admin_password:
+        try:
+            token = await get_jellyfin_admin_token(client, base_url, admin_username, admin_password)
+        except JellyfinAdminAuthError as exc:
+            elapsed = (time.perf_counter() - start) * 1000
+            return CheckOutcome(STATUS_FAIL, f"Admin login failed: {exc}", elapsed)
+
+    url = base_url.rstrip("/") + "/Environment/DirectoryContents"
+    headers = {"X-Emby-Token": token} if token else {}
+
     try:
         resp = await client.get(
             url, headers=headers, params={"path": path, "includeFiles": "true", "includeDirectories": "true"}
@@ -215,11 +232,12 @@ async def check_jellyfin_filesystem_path(
         return CheckOutcome(STATUS_FAIL, f"Could not browse {path} via Jellyfin's API: {exc}", elapsed)
     elapsed = (time.perf_counter() - start) * 1000
 
+    denied_hint = "" if (admin_username and admin_password) else " - try setting an admin username/password on this service instead of (or alongside) the API key"
     if resp.status_code == 401:
-        return CheckOutcome(STATUS_FAIL, "API key rejected (HTTP 401)", elapsed)
+        return CheckOutcome(STATUS_FAIL, f"Rejected (HTTP 401){denied_hint}", elapsed)
     if resp.status_code == 403:
         return CheckOutcome(
-            STATUS_FAIL, "API key rejected (HTTP 403) - this endpoint needs an administrator account/key", elapsed
+            STATUS_FAIL, f"Rejected (HTTP 403) - this endpoint needs an administrator account{denied_hint}", elapsed
         )
     if resp.status_code != 200:
         return CheckOutcome(

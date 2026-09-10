@@ -52,7 +52,7 @@ async function runNow(serviceId) {
   } catch (e) {
     toast("Run failed: " + e.message, true);
   }
-  if (state.tab === "dashboard") loadDashboardAdmin();
+  if (state.tab === "dashboard" && !layoutEditMode) loadDashboardAdmin();
   if (state.tab === "settings") loadSettings();
 }
 
@@ -361,7 +361,7 @@ function renderChecksPanel(svc) {
     el("div", { class: "checks-grid-header", text: "Check Type" }),
     el("div", { class: "checks-grid-header", text: "Name" }),
     el("div", { class: "checks-grid-header", text: "Alert level" }),
-    el("div", { class: "checks-grid-header" }),
+    el("div", { class: "checks-grid-header", text: "Actions" }),
   ]);
   for (const c of svc.checks) {
     appendCheckGridRow(grid, svc, c);
@@ -453,11 +453,20 @@ async function scanLibraries(svc) {
 
 // ---------- service modal ----------
 
+const DEFAULT_USERNAME_HINT = "(optional - leave blank if this instance has no auth)";
 const CREDENTIAL_MODES = {
   plex: { keyLabel: "X-Plex-Token", showUsername: false, showPlexSignin: true },
-  qbittorrent: { keyLabel: "Password", showUsername: true, showPlexSignin: false },
-  rtorrent: { keyLabel: "Password", showUsername: true, showPlexSignin: false },
-  deluge: { keyLabel: "Password", showUsername: true, showPlexSignin: false },
+  qbittorrent: { keyLabel: "Password", showUsername: true, showPlexSignin: false, usernameHint: DEFAULT_USERNAME_HINT },
+  rtorrent: { keyLabel: "Password", showUsername: true, showPlexSignin: false, usernameHint: DEFAULT_USERNAME_HINT },
+  deluge: { keyLabel: "Password", showUsername: true, showPlexSignin: false, usernameHint: DEFAULT_USERNAME_HINT },
+  jellyfin: {
+    keyLabel: "API key",
+    showUsername: true,
+    showPlexSignin: false,
+    usernameLabel: "Admin username",
+    usernameHint: "(optional - see \"Admin password\" below)",
+    showJellyfinAdmin: true,
+  },
 };
 
 function credentialModeFor(type) {
@@ -468,7 +477,10 @@ function updateCredentialFieldsForType(type) {
   const mode = credentialModeFor(type);
   $("#svc-key-label").childNodes[0].textContent = mode.keyLabel + " ";
   $("#svc-username-field").hidden = !mode.showUsername;
+  $("#svc-username-label").childNodes[0].textContent = (mode.usernameLabel || "Username") + " ";
+  $("#svc-username-hint").textContent = mode.usernameHint || "";
   $("#svc-plex-signin").hidden = !mode.showPlexSignin;
+  $("#svc-jellyfin-admin-field").hidden = !mode.showJellyfinAdmin;
 }
 
 function applyServiceTypeDefaults(type, { autofillName } = {}) {
@@ -503,6 +515,9 @@ function openServiceModal(svc = null) {
   $("#svc-username").value = svc && svc.username ? svc.username : "";
   $("#svc-key").value = "";
   $("#svc-key-hint").textContent = svc && svc.has_api_key ? "(already set - leave blank to keep)" : "";
+  $("#svc-jellyfin-admin-password").value = "";
+  $("#svc-jellyfin-admin-password-hint").textContent =
+    svc && svc.has_jellyfin_admin_password ? "(already set - leave blank to keep)" : "(optional, paired with the Admin username above)";
   $("#svc-interval").value = svc && svc.poll_interval_seconds ? svc.poll_interval_seconds : "";
   $("#svc-verify-ssl").checked = svc ? svc.verify_ssl : true;
   $("#svc-enabled").checked = svc ? svc.enabled : true;
@@ -642,6 +657,8 @@ async function submitServiceForm(ev) {
   };
   const key = $("#svc-key").value;
   if (key) payload.api_key = key;
+  const jellyfinAdminPassword = $("#svc-jellyfin-admin-password").value;
+  if (jellyfinAdminPassword) payload.jellyfin_admin_password = jellyfinAdminPassword;
 
   try {
     if (id) {
@@ -863,7 +880,7 @@ async function init() {
 
   let resizeTimer = null;
   window.addEventListener("resize", () => {
-    if (state.tab !== "dashboard") return;
+    if (state.tab !== "dashboard" || layoutEditMode) return;
     clearTimeout(resizeTimer);
     resizeTimer = setTimeout(loadDashboardAdmin, 200);
   });
@@ -877,7 +894,7 @@ async function init() {
 
   document.body.classList.add("wide-main"); // dashboard is the default active tab
   loadDashboardAdmin();
-  setInterval(() => { if (state.tab === "dashboard") loadDashboardAdmin(); }, 30000);
+  setInterval(() => { if (state.tab === "dashboard" && !layoutEditMode) loadDashboardAdmin(); }, 30000);
   setInterval(() => { if (state.tab === "notifications") loadNotifications(); }, 30000);
 }
 

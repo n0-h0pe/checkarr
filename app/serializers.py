@@ -15,6 +15,7 @@ def serialize_service(service: models.Service) -> schemas.ServiceOut:
         poll_interval_seconds=service.poll_interval_seconds,
         notes=service.notes,
         has_api_key=bool(service.api_key_encrypted),
+        has_jellyfin_admin_password=bool(service.jellyfin_admin_password_encrypted),
         created_at=service.created_at,
         updated_at=service.updated_at,
         checks=[

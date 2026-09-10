@@ -7,6 +7,8 @@ import xml.etree.ElementTree as ET
 
 import httpx
 
+from .jellyfin_client import JellyfinAdminAuthError, get_jellyfin_admin_token
+
 
 class LibraryScanError(Exception):
     pass
@@ -43,21 +45,39 @@ async def scan_plex_libraries(client: httpx.AsyncClient, base_url: str, api_key:
     return results
 
 
-async def scan_jellyfin_libraries(client: httpx.AsyncClient, base_url: str, api_key: str | None) -> list[tuple[str, str]]:
-    """Returns (library_name, path) pairs from GET /Library/VirtualFolders."""
-    if not api_key:
-        raise LibraryScanError("No API key configured")
+async def scan_jellyfin_libraries(
+    client: httpx.AsyncClient,
+    base_url: str,
+    api_key: str | None,
+    admin_username: str | None = None,
+    admin_password: str | None = None,
+) -> list[tuple[str, str]]:
+    """Returns (library_name, path) pairs from GET /Library/VirtualFolders -
+    an admin-only endpoint. Prefers logging in as the configured admin
+    account (see jellyfin_client) over the plain API key when both admin
+    username and password are set, since the API key alone sometimes isn't
+    enough here even when it belongs to an admin.
+    """
+    token = api_key
+    if admin_username and admin_password:
+        try:
+            token = await get_jellyfin_admin_token(client, base_url, admin_username, admin_password)
+        except JellyfinAdminAuthError as exc:
+            raise LibraryScanError(str(exc)) from exc
+    if not token:
+        raise LibraryScanError("No API key or admin username/password configured")
 
     url = base_url.rstrip("/") + "/Library/VirtualFolders"
     try:
-        resp = await client.get(url, headers={"X-Emby-Token": api_key})
+        resp = await client.get(url, headers={"X-Emby-Token": token})
     except httpx.RequestError as exc:
         raise LibraryScanError(f"Could not reach {url}: {exc}") from exc
 
+    denied_hint = "" if (admin_username and admin_password) else " - try setting an admin username/password on this service instead of (or alongside) the API key"
     if resp.status_code == 401:
-        raise LibraryScanError("API key rejected (HTTP 401)")
+        raise LibraryScanError(f"Rejected (HTTP 401){denied_hint}")
     if resp.status_code == 403:
-        raise LibraryScanError("API key rejected (HTTP 403) - this endpoint needs an administrator account/key")
+        raise LibraryScanError(f"Rejected (HTTP 403) - this endpoint needs an administrator account{denied_hint}")
     if resp.status_code != 200:
         raise LibraryScanError(f"{url} returned HTTP {resp.status_code}")
 
