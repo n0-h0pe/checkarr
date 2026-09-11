@@ -9,7 +9,7 @@ from ..connection_test import test_connection
 from ..database import get_db
 from ..library_scan import LibraryScanError, scan_jellyfin_libraries, scan_plex_libraries
 from ..scheduler import schedule_service, unschedule_service
-from ..security import decrypt_secret, encrypt_secret, require_auth
+from ..security import apply_secret_field, require_auth, resolve_secret
 from ..serializers import serialize_service as _out
 
 router = APIRouter(prefix="/api/services", tags=["services"], dependencies=[Depends(require_auth)])
@@ -37,11 +37,18 @@ def create_service(payload: schemas.ServiceCreate, db: Session = Depends(get_db)
         remote_url=payload.remote_url.rstrip("/") if payload.remote_url else None,
         check_both_targets=payload.check_both_targets,
         username=payload.username or None,
-        api_key_encrypted=encrypt_secret(payload.api_key),
-        jellyfin_admin_password_encrypted=encrypt_secret(payload.jellyfin_admin_password),
         enabled=payload.enabled,
         poll_interval_seconds=payload.poll_interval_seconds,
         notes=payload.notes,
+    )
+    apply_secret_field(
+        service, "api_key_encrypted", "api_key_env_var",
+        use_env=payload.api_key_use_env, env_var=payload.api_key_env_var, literal_value=payload.api_key,
+    )
+    apply_secret_field(
+        service, "jellyfin_admin_password_encrypted", "jellyfin_admin_password_env_var",
+        use_env=payload.jellyfin_admin_password_use_env, env_var=payload.jellyfin_admin_password_env_var,
+        literal_value=payload.jellyfin_admin_password,
     )
     db.add(service)
     db.flush()
@@ -117,14 +124,16 @@ def update_service(service_id: int, payload: schemas.ServiceUpdate, db: Session 
         service.check_both_targets = payload.check_both_targets
     if payload.username is not None:
         service.username = payload.username or None
-    if payload.clear_api_key:
-        service.api_key_encrypted = None
-    elif payload.api_key:
-        service.api_key_encrypted = encrypt_secret(payload.api_key)
-    if payload.clear_jellyfin_admin_password:
-        service.jellyfin_admin_password_encrypted = None
-    elif payload.jellyfin_admin_password:
-        service.jellyfin_admin_password_encrypted = encrypt_secret(payload.jellyfin_admin_password)
+    apply_secret_field(
+        service, "api_key_encrypted", "api_key_env_var",
+        use_env=payload.api_key_use_env, env_var=payload.api_key_env_var, literal_value=payload.api_key,
+        clear=payload.clear_api_key,
+    )
+    apply_secret_field(
+        service, "jellyfin_admin_password_encrypted", "jellyfin_admin_password_env_var",
+        use_env=payload.jellyfin_admin_password_use_env, env_var=payload.jellyfin_admin_password_env_var,
+        literal_value=payload.jellyfin_admin_password, clear=payload.clear_jellyfin_admin_password,
+    )
     if payload.enabled is not None:
         service.enabled = payload.enabled
     if payload.poll_interval_seconds is not None:
@@ -199,8 +208,8 @@ async def scan_libraries(service_id: int, db: Session = Depends(get_db)):
     if not base_url:
         raise HTTPException(400, "Service has no address configured")
 
-    api_key = decrypt_secret(service.api_key_encrypted)
-    jellyfin_admin_password = decrypt_secret(service.jellyfin_admin_password_encrypted)
+    api_key = resolve_secret(service.api_key_env_var, service.api_key_encrypted)
+    jellyfin_admin_password = resolve_secret(service.jellyfin_admin_password_env_var, service.jellyfin_admin_password_encrypted)
     check_type = "plex_filesystem_path" if service.type == "plex" else "jellyfin_filesystem_path"
 
     async with httpx.AsyncClient(timeout=settings.http_timeout_seconds, verify=False) as client:

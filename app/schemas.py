@@ -100,7 +100,11 @@ class ServiceBase(BaseModel):
 
 class ServiceCreate(ServiceBase):
     api_key: str | None = None
+    api_key_use_env: bool | None = None
+    api_key_env_var: str | None = None
     jellyfin_admin_password: str | None = None
+    jellyfin_admin_password_use_env: bool | None = None
+    jellyfin_admin_password_env_var: str | None = None
 
 
 class ServiceUpdate(BaseModel):
@@ -113,8 +117,12 @@ class ServiceUpdate(BaseModel):
     username: str | None = None
     api_key: str | None = None
     clear_api_key: bool = False
+    api_key_use_env: bool | None = None
+    api_key_env_var: str | None = None
     jellyfin_admin_password: str | None = None
     clear_jellyfin_admin_password: bool = False
+    jellyfin_admin_password_use_env: bool | None = None
+    jellyfin_admin_password_env_var: str | None = None
     enabled: bool | None = None
     poll_interval_seconds: int | None = None
     notes: str | None = None
@@ -124,7 +132,9 @@ class ServiceOut(ServiceBase):
     model_config = ConfigDict(from_attributes=True)
     id: int
     has_api_key: bool
+    api_key_env_var: str | None = None
     has_jellyfin_admin_password: bool
+    jellyfin_admin_password_env_var: str | None = None
     created_at: datetime
     updated_at: datetime
     checks: list[CheckDefinitionOut] = Field(default_factory=list)
@@ -170,6 +180,7 @@ class ConnectionTestRequest(BaseModel):
     local_url: str | None = None
     remote_url: str | None = None
     api_key: str | None = None
+    api_key_env_var: str | None = None
     username: str | None = None
 
 
@@ -261,6 +272,8 @@ class NotificationChannelBase(BaseModel):
 
 class NotificationChannelCreate(NotificationChannelBase):
     secret: str | None = None
+    secret_use_env: bool | None = None
+    secret_env_var: str | None = None
 
 
 class NotificationChannelUpdate(BaseModel):
@@ -271,12 +284,15 @@ class NotificationChannelUpdate(BaseModel):
     notify_on_fail: bool | None = None
     secret: str | None = None
     clear_secret: bool = False
+    secret_use_env: bool | None = None
+    secret_env_var: str | None = None
 
 
 class NotificationChannelOut(NotificationChannelBase):
     model_config = ConfigDict(from_attributes=True)
     id: int
     has_secret: bool
+    secret_env_var: str | None = None
     created_at: datetime
     updated_at: datetime
 

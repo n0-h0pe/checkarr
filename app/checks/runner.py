@@ -1,7 +1,7 @@
 import httpx
 
 from ..models import CheckDefinition, Service
-from ..security import decrypt_secret
+from ..security import resolve_secret
 from .base import STATUS_FAIL, CheckOutcome
 from .arr_check import (
     check_arr_disk_space,
@@ -76,7 +76,7 @@ ALWAYS_BOTH_TARGETS_TYPES = {"http_200"}
 async def run_check(
     client: httpx.AsyncClient, service: Service, check: CheckDefinition, base_url: str | None
 ) -> CheckOutcome:
-    api_key = decrypt_secret(service.api_key_encrypted)
+    api_key = resolve_secret(service.api_key_env_var, service.api_key_encrypted)
     config = check.config or {}
     ctype = check.type
 
@@ -112,7 +112,7 @@ async def run_check(
         if ctype == "jellyfin_health":
             return await check_jellyfin_health(client, base_url, api_key, config)
         if ctype == "jellyfin_filesystem_path":
-            jellyfin_admin_password = decrypt_secret(service.jellyfin_admin_password_encrypted)
+            jellyfin_admin_password = resolve_secret(service.jellyfin_admin_password_env_var, service.jellyfin_admin_password_encrypted)
             return await check_jellyfin_filesystem_path(
                 client, base_url, api_key, config, service.username, jellyfin_admin_password
             )

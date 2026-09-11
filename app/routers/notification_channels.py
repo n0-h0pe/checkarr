@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from .. import models, schemas
 from ..alerting import send_via_channel
 from ..database import get_db
-from ..security import encrypt_secret, require_auth
+from ..security import apply_secret_field, require_auth
 from ..serializers import serialize_notification_channel as _out
 
 router = APIRouter(prefix="/api/notification-channels", tags=["notification-channels"], dependencies=[Depends(require_auth)])
@@ -25,9 +25,12 @@ def create_channel(payload: schemas.NotificationChannelCreate, db: Session = Dep
         type=payload.type,
         enabled=payload.enabled,
         config=payload.config,
-        secret_encrypted=encrypt_secret(payload.secret),
         notify_on_warn=payload.notify_on_warn,
         notify_on_fail=payload.notify_on_fail,
+    )
+    apply_secret_field(
+        channel, "secret_encrypted", "secret_env_var",
+        use_env=payload.secret_use_env, env_var=payload.secret_env_var, literal_value=payload.secret,
     )
     db.add(channel)
     db.commit()
@@ -51,10 +54,11 @@ def update_channel(channel_id: int, payload: schemas.NotificationChannelUpdate, 
         channel.notify_on_warn = payload.notify_on_warn
     if payload.notify_on_fail is not None:
         channel.notify_on_fail = payload.notify_on_fail
-    if payload.clear_secret:
-        channel.secret_encrypted = None
-    elif payload.secret:
-        channel.secret_encrypted = encrypt_secret(payload.secret)
+    apply_secret_field(
+        channel, "secret_encrypted", "secret_env_var",
+        use_env=payload.secret_use_env, env_var=payload.secret_env_var, literal_value=payload.secret,
+        clear=payload.clear_secret,
+    )
 
     db.commit()
     db.refresh(channel)

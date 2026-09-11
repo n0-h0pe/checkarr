@@ -13,8 +13,10 @@ def serialize_service(service: models.Service) -> schemas.ServiceOut:
         enabled=service.enabled,
         poll_interval_seconds=service.poll_interval_seconds,
         notes=service.notes,
-        has_api_key=bool(service.api_key_encrypted),
-        has_jellyfin_admin_password=bool(service.jellyfin_admin_password_encrypted),
+        has_api_key=bool(service.api_key_encrypted or service.api_key_env_var),
+        api_key_env_var=service.api_key_env_var,
+        has_jellyfin_admin_password=bool(service.jellyfin_admin_password_encrypted or service.jellyfin_admin_password_env_var),
+        jellyfin_admin_password_env_var=service.jellyfin_admin_password_env_var,
         created_at=service.created_at,
         updated_at=service.updated_at,
         checks=[
@@ -32,7 +34,8 @@ def serialize_notification_channel(channel: models.NotificationChannel) -> schem
         config=channel.config or {},
         notify_on_warn=channel.notify_on_warn,
         notify_on_fail=channel.notify_on_fail,
-        has_secret=bool(channel.secret_encrypted),
+        has_secret=bool(channel.secret_encrypted or channel.secret_env_var),
+        secret_env_var=channel.secret_env_var,
         created_at=channel.created_at,
         updated_at=channel.updated_at,
     )

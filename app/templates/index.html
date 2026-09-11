@@ -216,11 +216,19 @@
         <div class="field">
           <label id="svc-key-label">API key <span class="hint" id="svc-key-hint"></span></label>
           <input type="password" id="svc-key" placeholder="leave blank to keep existing / not required">
+          <label class="field checkbox" style="margin-top:6px;">
+            <input type="checkbox" id="svc-key-use-env">
+            <span>Use environment variable</span>
+          </label>
           <button type="button" class="small" id="svc-plex-signin" hidden style="margin-top:8px;">Sign in to Plex</button>
         </div>
         <div class="field" id="svc-jellyfin-admin-field" hidden>
           <label>Admin password <span class="hint" id="svc-jellyfin-admin-password-hint">(optional, paired with the Admin username above)</span></label>
           <input type="password" id="svc-jellyfin-admin-password" placeholder="leave blank to keep existing / not required">
+          <label class="field checkbox" style="margin-top:6px;">
+            <input type="checkbox" id="svc-jellyfin-admin-password-use-env">
+            <span>Use environment variable</span>
+          </label>
           <div class="hint">Some admin-only Jellyfin endpoints (library scanning, filesystem checks) reject the API key above even when it belongs to an admin - a known Jellyfin inconsistency. Setting both fields here logs in as this account instead for just those calls; the API key above still covers the basic health check either way.</div>
         </div>
         <div class="field">

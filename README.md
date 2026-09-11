@@ -19,7 +19,7 @@ shows one consolidated view of what's healthy, what's degraded, and why.
 - Quick-edit controls on every check's row in Settings (Enabled, and for Plex/Jellyfin path checks, the empty-path severity and minimum-entries count) - no need to open Edit for a one-field change. These stage locally with an obvious "unsaved changes" banner and explicit Save/Discard, so a stray click can't silently change what's being monitored.
 - An "Edit layout" mode for the dashboard: drag cards anywhere and resize them from the corner, snapped to an invisible grid, saved as named/switchable layouts that adapt to how wide your window is. Custom layouts can also show a curated subset of cards (add/remove per layout) alongside the always-complete, undeletable "All Services" layout. See "Dashboard layouts" below.
 - A responsive layout on every page - the dashboard, Settings, History, and Notifications all adapt down to a phone-width screen, admin and public alike. On a card too narrow to show a check's full result message, that message shortens to something like "200 OK" or "Files OK" instead of just clipping mid-sentence.
-- API keys are encrypted at rest (Fernet/AES) and never echoed back to the browser.
+- API keys are encrypted at rest (Fernet/AES) and never echoed back to the browser. Every secret field (service API keys, the Jellyfin admin password, a notification channel's secret) can instead be sourced from an environment variable set on the container, so it never touches the database at all - see "Secrets from environment variables" below.
 - Historic results stored in SQLite, with a History tab and per-service uptime strip on the dashboard. Both share one time-range dropdown in the top bar (admin and public both) - anywhere from just the last poll up to a full week - the uptime strip greys out any slice of that range nothing was actually polled in. History itself loads incrementally as you scroll rather than capping out after a few hundred rows, its columns are configurable and reorderable, and the current view exports to CSV - see "History" below.
 - How long check history sticks around before being deleted is configurable (default 7 days) - pruned once every that-many days, at a time you set, see "Log Pruning" below.
 - A dedicated **SSL certificate validity check**, generated automatically for every `https://` address a service has - real, strict certificate validation (trust chain, hostname, expiry), independent of and unaffected by any other check. See "SSL certificate checks" below.
@@ -146,6 +146,9 @@ The credential field(s) shown change based on the service type:
 A sensible set of default checks is created automatically based on the
 type - add more from the service's expanded row, each with its own optional
 poll interval override (see below).
+
+Every one of these credential fields has a **Use environment variable**
+checkbox next to it - see "Secrets from environment variables" below.
 
 ## Supported services
 
@@ -522,13 +525,43 @@ comes with exposing the full admin app:
 Runs by default; set `HC_PUBLIC_DASHBOARD_ENABLED=false` to turn it off
 entirely (then you don't need to publish port 8090 either).
 
+## Secrets from environment variables
+
+Every password/API-key field in the app - a service's API key, its Jellyfin
+admin password, a notification channel's secret (e.g. the SMTP password) -
+has a **Use environment variable** checkbox next to it. Check it and type
+the *name* of an environment variable (e.g. `RADARR_API_KEY`) set on the
+container instead of pasting the secret itself; the app reads that variable
+at the moment it's needed rather than storing anything for it.
+
+Switching a field to this mode immediately deletes whatever was stored for
+it (encrypted or not) from the database, so the secret stops existing in
+`/config` entirely - the point of this mode, for anyone who'd rather manage
+secrets via their container/orchestrator's own mechanism (Docker secrets, an
+env file kept outside the bind-mounted config volume, a secrets manager
+injecting env vars, etc.) than have this app hold them at rest at all.
+Switching back to typing the secret directly works the same in reverse - the
+env var name is dropped and a fresh value is required, since there's nothing
+left in the database to fall back to.
+
+An environment variable named this way only needs to be visible to the
+container process - it doesn't need an `HC_` prefix or any other special
+naming, and isn't read from `.env` unless your Docker setup already passes
+`.env` through as the container's environment. If the named variable isn't
+actually set (or is empty) when a check or notification runs, that secret is
+treated as unconfigured and logged as a warning, same as if the field had
+been left blank.
+
 ## Security notes
 
 - API keys are encrypted with Fernet before being stored in SQLite, using a
   key from `HC_APP_SECRET_KEY` if set, otherwise a key generated on first run
   and persisted to `/config/secret.key`. **Set `HC_APP_SECRET_KEY` and back it
   up** - if the generated key file is lost, stored API keys can't be
-  decrypted and services will need their keys re-entered.
+  decrypted and services will need their keys re-entered. This only applies
+  to secrets actually stored in the database - one sourced from an
+  environment variable (see "Secrets from environment variables" above)
+  never touches this encryption at all, by design.
 - The admin web UI/API (port 8080) has no authentication by default (fine on
   a trusted LAN behind your own reverse proxy/VPN). Set `HC_AUTH_USERNAME`
   and `HC_AUTH_PASSWORD` in `.env` to require HTTP Basic Auth for it, or put

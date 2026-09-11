@@ -697,11 +697,13 @@ function openServiceModal(svc = null) {
   $("#svc-remote-url").value = svc && svc.remote_url ? svc.remote_url : "";
   $("#svc-check-both").checked = svc ? !!svc.check_both_targets : false;
   $("#svc-username").value = svc && svc.username ? svc.username : "";
-  $("#svc-key").value = "";
-  $("#svc-key-hint").textContent = svc && svc.has_api_key ? "(already set - leave blank to keep)" : "";
-  $("#svc-jellyfin-admin-password").value = "";
+  setSecretFieldState($("#svc-key"), $("#svc-key-use-env"), svc && svc.api_key_env_var);
+  $("#svc-key-hint").textContent = svc && svc.has_api_key && !svc.api_key_env_var ? "(already set - leave blank to keep)" : "";
+  setSecretFieldState($("#svc-jellyfin-admin-password"), $("#svc-jellyfin-admin-password-use-env"), svc && svc.jellyfin_admin_password_env_var);
   $("#svc-jellyfin-admin-password-hint").textContent =
-    svc && svc.has_jellyfin_admin_password ? "(already set - leave blank to keep)" : "(optional, paired with the Admin username above)";
+    svc && svc.has_jellyfin_admin_password && !svc.jellyfin_admin_password_env_var
+      ? "(already set - leave blank to keep)"
+      : "(optional, paired with the Admin username above)";
   $("#svc-interval").value = svc && svc.poll_interval_seconds ? svc.poll_interval_seconds : "";
   $("#svc-enabled").checked = svc ? svc.enabled : true;
   $("#svc-notes").value = svc && svc.notes ? svc.notes : "";
@@ -754,6 +756,7 @@ async function testServiceConnection() {
   if (localUrl) setConnStatus("local", "pending", "…");
   if (remoteUrl) setConnStatus("remote", "pending", "…");
 
+  const apiKey = readSecretField($("#svc-key"), $("#svc-key-use-env"));
   let result;
   try {
     result = await api("/api/services/test-connection", {
@@ -762,7 +765,8 @@ async function testServiceConnection() {
         type,
         local_url: localUrl || null,
         remote_url: remoteUrl || null,
-        api_key: $("#svc-key").value || null,
+        api_key: apiKey.literal,
+        api_key_env_var: apiKey.envVar,
       }),
     });
   } catch (e) {
@@ -812,6 +816,10 @@ async function startPlexSignIn() {
     if (res.token) {
       clearInterval(plexAuthTimer);
       plexAuthTimer = null;
+      // A live sign-in always produces a literal token - drop out of
+      // env-var mode if it was on, so the field actually shows/sends it.
+      $("#svc-key-use-env").checked = false;
+      syncSecretFieldAppearance($("#svc-key"), $("#svc-key-use-env"));
       $("#svc-key").value = res.token;
       $("#svc-key-hint").textContent = "(filled in from Plex sign-in)";
       if (!popup.closed) popup.close();
@@ -837,10 +845,24 @@ async function submitServiceForm(ev) {
     poll_interval_seconds: $("#svc-interval").value ? parseInt($("#svc-interval").value, 10) : null,
     notes: $("#svc-notes").value.trim() || null,
   };
-  const key = $("#svc-key").value;
-  if (key) payload.api_key = key;
-  const jellyfinAdminPassword = $("#svc-jellyfin-admin-password").value;
-  if (jellyfinAdminPassword) payload.jellyfin_admin_password = jellyfinAdminPassword;
+
+  const apiKey = readSecretField($("#svc-key"), $("#svc-key-use-env"));
+  if (apiKey.useEnv && !apiKey.envVar) {
+    toast("Enter an environment variable name for the API key, or turn that toggle off", true);
+    return;
+  }
+  payload.api_key_use_env = apiKey.useEnv;
+  payload.api_key_env_var = apiKey.envVar;
+  if (apiKey.literal) payload.api_key = apiKey.literal;
+
+  const jellyfinAdminPassword = readSecretField($("#svc-jellyfin-admin-password"), $("#svc-jellyfin-admin-password-use-env"));
+  if (jellyfinAdminPassword.useEnv && !jellyfinAdminPassword.envVar) {
+    toast("Enter an environment variable name for the Jellyfin admin password, or turn that toggle off", true);
+    return;
+  }
+  payload.jellyfin_admin_password_use_env = jellyfinAdminPassword.useEnv;
+  payload.jellyfin_admin_password_env_var = jellyfinAdminPassword.envVar;
+  if (jellyfinAdminPassword.literal) payload.jellyfin_admin_password = jellyfinAdminPassword.literal;
 
   try {
     if (id) {
@@ -1113,8 +1135,8 @@ function openChannelModal(ch = null) {
   }
   typeSelect.disabled = !!ch;
   typeSelect.value = ch ? ch.type : typeSelect.options[0]?.value;
-  typeSelect.onchange = () => renderChannelDynamicFields(typeSelect.value, {}, false);
-  renderChannelDynamicFields(typeSelect.value, ch ? ch.config : {}, ch ? ch.has_secret : false);
+  typeSelect.onchange = () => renderChannelDynamicFields(typeSelect.value, {}, false, null);
+  renderChannelDynamicFields(typeSelect.value, ch ? ch.config : {}, ch ? ch.has_secret : false, ch ? ch.secret_env_var : null);
 
   $("#channel-modal").classList.remove("hidden");
 }
@@ -1123,7 +1145,7 @@ function closeChannelModal() {
   $("#channel-modal").classList.add("hidden");
 }
 
-function renderChannelDynamicFields(channelType, existingConfig = {}, hasSecret = false) {
+function renderChannelDynamicFields(channelType, existingConfig = {}, hasSecret = false, existingEnvVar = null) {
   const container = $("#chn-dynamic-fields");
   container.innerHTML = "";
   const meta = channelTypesFor().find((t) => t.type === channelType);
@@ -1151,9 +1173,18 @@ function renderChannelDynamicFields(channelType, existingConfig = {}, hasSecret 
       input = el("input", {
         type: "password",
         id: `chn-field-${f.key}`,
-        placeholder: hasSecret ? "(already set - leave blank to keep)" : "",
+        placeholder: hasSecret && !existingEnvVar ? "(already set - leave blank to keep)" : "",
         autocomplete: "new-password",
       });
+      fieldWrap.appendChild(input);
+      const useEnvCheckbox = el("input", { type: "checkbox", id: `chn-field-${f.key}-use-env` });
+      fieldWrap.appendChild(
+        el("label", { class: "field checkbox", style: "margin-top:6px;" }, [useEnvCheckbox, el("span", { text: "Use environment variable" })])
+      );
+      initSecretField(input, useEnvCheckbox);
+      setSecretFieldState(input, useEnvCheckbox, existingEnvVar);
+      container.appendChild(fieldWrap);
+      continue;
     } else {
       input = el("input", { type: "text", id: `chn-field-${f.key}`, value: value });
     }
@@ -1169,17 +1200,22 @@ async function submitChannelForm(ev) {
   const meta = channelTypesFor().find((t) => t.type === channelType);
 
   const config = {};
-  let secret = null;
+  let secretField = null;
   for (const f of meta.fields) {
     const input = $(`#chn-field-${f.key}`);
     if (!input) continue;
     if (f.secret) {
-      if (input.value) secret = input.value;
-      continue; // secret fields never go into config - see NotificationChannel.secret_encrypted
+      // secret fields never go into config - see NotificationChannel.secret_encrypted/secret_env_var
+      secretField = readSecretField(input, $(`#chn-field-${f.key}-use-env`));
+      continue;
     }
     if (f.kind === "number") config[f.key] = input.value === "" ? null : Number(input.value);
     else if (f.kind === "checkbox") config[f.key] = input.checked;
     else config[f.key] = input.value;
+  }
+  if (secretField && secretField.useEnv && !secretField.envVar) {
+    toast("Enter an environment variable name for the secret field, or turn that toggle off", true);
+    return;
   }
 
   const payload = {
@@ -1189,7 +1225,11 @@ async function submitChannelForm(ev) {
     notify_on_fail: $("#chn-notify-fail").checked,
     enabled: $("#chn-enabled").checked,
   };
-  if (secret) payload.secret = secret;
+  if (secretField) {
+    payload.secret_use_env = secretField.useEnv;
+    payload.secret_env_var = secretField.envVar;
+    if (secretField.literal) payload.secret = secretField.literal;
+  }
 
   try {
     if (channelId) {
@@ -1710,6 +1750,8 @@ async function init() {
   $("#service-form").addEventListener("submit", submitServiceForm);
   $("#svc-test-connection").addEventListener("click", testServiceConnection);
   $("#svc-plex-signin").addEventListener("click", startPlexSignIn);
+  initSecretField($("#svc-key"), $("#svc-key-use-env"));
+  initSecretField($("#svc-jellyfin-admin-password"), $("#svc-jellyfin-admin-password-use-env"));
   $("#check-cancel").addEventListener("click", closeCheckModal);
   $("#check-form").addEventListener("submit", submitCheckForm);
   $("#show-resolved").addEventListener("change", loadNotifications);

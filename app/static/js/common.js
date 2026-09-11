@@ -152,6 +152,57 @@ function statusLabel(s) {
   return { ok: "OK", warn: "Warning", fail: "Failing", unknown: "Unknown", disabled: "Disabled" }[s] || s;
 }
 
+// ---------- secret fields (env var toggle) ----------
+//
+// Every password/API-key field can either hold the secret directly
+// (encrypted at rest) or a plain environment variable NAME to read it from
+// at runtime instead - the "Use environment variable" checkbox next to the
+// field. Switching to env-var mode clears whatever's stored server-side
+// (see security.apply_secret_field); switching back to literal mode clears
+// the env var name and needs a fresh value, since there's nothing stored
+// left to fall back to once cleaned up. Shared by the service modal's API
+// key/Jellyfin admin password fields (app.js) and the notification channel
+// modal's dynamic secret field (also app.js).
+
+function syncSecretFieldAppearance(input, checkbox) {
+  const useEnv = checkbox.checked;
+  input.type = useEnv ? "text" : "password";
+  input.autocomplete = useEnv ? "off" : "new-password";
+  input.placeholder = useEnv
+    ? "Environment variable name, e.g. RADARR_API_KEY"
+    : input.dataset.literalPlaceholder || "";
+}
+
+// Wires the checkbox once (idempotent to call again - addEventListener
+// on the same function reference is a no-op the second time). Switching
+// modes always starts the field blank rather than carrying over whatever
+// was typed for the other mode.
+function initSecretField(input, checkbox) {
+  input.dataset.literalPlaceholder = input.dataset.literalPlaceholder ?? input.placeholder;
+  checkbox.addEventListener("change", () => {
+    input.value = "";
+    syncSecretFieldAppearance(input, checkbox);
+  });
+  syncSecretFieldAppearance(input, checkbox);
+}
+
+// existingEnvVar: the currently-saved env var name, or falsy if this
+// secret is (or would be) stored literally instead. Env var NAMES aren't
+// secret, so - unlike a literal value, never echoed back - the current one
+// is shown directly in the field, editable in place.
+function setSecretFieldState(input, checkbox, existingEnvVar) {
+  checkbox.checked = !!existingEnvVar;
+  input.value = existingEnvVar || "";
+  syncSecretFieldAppearance(input, checkbox);
+}
+
+function readSecretField(input, checkbox) {
+  if (checkbox.checked) {
+    return { useEnv: true, envVar: input.value.trim(), literal: null };
+  }
+  return { useEnv: false, envVar: null, literal: input.value || null };
+}
+
 // A short (a handful of characters) stand-in for a check's full message, for
 // screens too narrow to show both a check's name and its full message on
 // one line (see .msg-short/.msg-full in style.css) - a quick pattern match

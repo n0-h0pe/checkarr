@@ -76,6 +76,71 @@ def decrypt_secret(ciphertext: str | None) -> str | None:
         return None
 
 
+def resolve_secret(env_var: str | None, encrypted: str | None) -> str | None:
+    """Every secret field (Service.api_key, Service.jellyfin_admin_password,
+    NotificationChannel.secret) can be sourced from an environment variable
+    instead of the encrypted database column - see apply_secret_field below,
+    which enforces that at most one of the two is ever populated at a time.
+    Reads the env var fresh on every call (not cached) since it's cheap and
+    keeps this in sync with whatever the container's actually been given."""
+    if env_var:
+        value = os.environ.get(env_var)
+        if not value:
+            logger.warning(
+                "Environment variable %r (configured as a secret source) is not set - "
+                "treating the secret as unconfigured",
+                env_var,
+            )
+        return value or None
+    return decrypt_secret(encrypted)
+
+
+def apply_secret_field(
+    obj,
+    encrypted_attr: str,
+    env_var_attr: str,
+    *,
+    use_env: bool | None,
+    env_var: str | None,
+    literal_value: str | None,
+    clear: bool = False,
+) -> None:
+    """Applies one secret field's "use environment variable" toggle in
+    place, on either a Service or a NotificationChannel (encrypted_attr/
+    env_var_attr name whichever pair of columns apply).
+
+    - use_env=True switches to env-var mode: env_var is required, and any
+      stored encrypted secret is cleared - the point of this mode is that
+      the secret no longer lives in the database/on disk at all.
+    - use_env=False switches to (or stays in) literal mode: the env var
+      name is cleared, and if a literal_value was actually given, it
+      replaces the stored secret (a blank value keeps whatever's already
+      stored, same "leave blank to keep existing" convention this had
+      before env-var mode existed).
+    - use_env=None means this request didn't address the mode at all -
+      only applies a literal_value if one was given (and, in that case,
+      also switches off env-var mode, since providing a literal value is
+      an unambiguous signal). Keeps older/direct API callers that only
+      ever send the literal secret field working unchanged.
+    - clear=True (either mode) unsets the secret entirely rather than
+      leaving the existing one in place.
+    """
+    if use_env is True:
+        if not env_var or not env_var.strip():
+            raise HTTPException(400, "Environment variable name is required")
+        setattr(obj, encrypted_attr, None)
+        setattr(obj, env_var_attr, env_var.strip())
+        return
+    if use_env is False:
+        setattr(obj, env_var_attr, None)
+    if clear:
+        setattr(obj, encrypted_attr, None)
+    elif literal_value:
+        setattr(obj, encrypted_attr, encrypt_secret(literal_value))
+        if use_env is None:
+            setattr(obj, env_var_attr, None)
+
+
 def mask_secret(plaintext_len_hint: str | None) -> str | None:
     if not plaintext_len_hint:
         return None

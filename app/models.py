@@ -27,12 +27,19 @@ class Service(Base):
     # password) - one encrypted slot, reused.
     username: Mapped[str | None] = mapped_column(String(255), nullable=True)
     api_key_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # When set, the API key/password is read from this environment variable
+    # at call time instead (see security.resolve_secret) and
+    # api_key_encrypted is kept empty - "Use environment variable" in the
+    # UI, for keeping secrets out of the database/config volume entirely.
+    # At most one of the pair is ever populated - see security.apply_secret_field.
+    api_key_env_var: Mapped[str | None] = mapped_column(String(255), nullable=True)
     # Jellyfin only: some admin-only endpoints (library listing, filesystem
     # browsing) reject the plain API key even when it belongs to an admin -
     # a known Jellyfin inconsistency. Setting both this and `username` (as
     # the admin account's username) makes those specific calls log in as
     # that user instead of using the API key - see jellyfin_client.py.
     jellyfin_admin_password_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
+    jellyfin_admin_password_env_var: Mapped[str | None] = mapped_column(String(255), nullable=True)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     poll_interval_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -57,10 +64,10 @@ class Service(Base):
     )
 
     def has_api_key(self) -> bool:
-        return bool(self.api_key_encrypted)
+        return bool(self.api_key_encrypted or self.api_key_env_var)
 
     def has_jellyfin_admin_password(self) -> bool:
-        return bool(self.jellyfin_admin_password_encrypted)
+        return bool(self.jellyfin_admin_password_encrypted or self.jellyfin_admin_password_env_var)
 
     def get_targets(self) -> list[tuple[str, str]]:
         """(label, url) pairs for whichever of local/remote address are set."""
@@ -167,9 +174,11 @@ class NotificationChannel(Base):
     non-secret setting for that type (e.g. email's smtp_host/port/username/
     from_address/to_addresses); `secret_encrypted` is the one secret slot a
     channel type needs (email's SMTP password), encrypted the same way
-    Service.api_key_encrypted is - never stored or returned in plaintext.
-    notify_on_warn/notify_on_fail gate which severity tier of alert this
-    channel receives (see alerting.dispatch_alert)."""
+    Service.api_key_encrypted is - never stored or returned in plaintext -
+    or sourced from an environment variable instead via secret_env_var (see
+    security.apply_secret_field/resolve_secret). notify_on_warn/
+    notify_on_fail gate which severity tier of alert this channel receives
+    (see alerting.dispatch_alert)."""
 
     __tablename__ = "notification_channels"
 
@@ -179,13 +188,16 @@ class NotificationChannel(Base):
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     config: Mapped[dict] = mapped_column(JSON, default=dict)
     secret_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Same "Use environment variable" toggle as Service.api_key_env_var -
+    # see security.apply_secret_field/resolve_secret.
+    secret_env_var: Mapped[str | None] = mapped_column(String(255), nullable=True)
     notify_on_warn: Mapped[bool] = mapped_column(Boolean, default=True)
     notify_on_fail: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
 
     def has_secret(self) -> bool:
-        return bool(self.secret_encrypted)
+        return bool(self.secret_encrypted or self.secret_env_var)
 
 
 class ServiceGroup(Base):
