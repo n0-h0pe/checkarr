@@ -67,7 +67,10 @@ SERVICE_SCOPED_TYPES = {"filesystem_path", "plex_remote_access", "ftp_path"}
 # both addresses by default - everything else in TARGET_SCOPED_TYPES runs
 # against local only. Reachability of the public/remote entry point is
 # useful to know even when you don't want to double up on API-heavy checks.
-ALWAYS_BOTH_TARGETS_TYPES = {"http_200", "ssl_certificate"}
+# (ssl_certificate isn't here - it has its own https-only target selection
+# in poller.py, since "both" doesn't make sense for a check that's not
+# meaningful against a non-https address in the first place.)
+ALWAYS_BOTH_TARGETS_TYPES = {"http_200"}
 
 
 async def run_check(

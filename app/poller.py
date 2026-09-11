@@ -84,7 +84,14 @@ async def poll_service(service_id: int) -> None:
                 jobs.append((check, None, None))
                 continue
 
-            if suffix_targets and not service.check_both_targets and check.type not in ALWAYS_BOTH_TARGETS_TYPES:
+            if check.type == "ssl_certificate":
+                # Always every https target, regardless of check_both_targets
+                # - unlike the "both" toggle below (which is about not
+                # doubling up API-heavy checks), a cert check against a
+                # non-https address isn't a second useful data point, it's
+                # meaningless, so it's excluded rather than included.
+                selected = [t for t in targets if t[1].lower().startswith("https://")]
+            elif suffix_targets and not service.check_both_targets and check.type not in ALWAYS_BOTH_TARGETS_TYPES:
                 # Default when both addresses are set: everything except the
                 # web UI check runs against the local address only.
                 selected = [t for t in targets if t[0] == "local"] or targets

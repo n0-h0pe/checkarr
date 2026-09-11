@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Checkarr Status</title>
-  <link rel="stylesheet" href="/static/css/style.css">
+  <link rel="stylesheet" href="/static/css/style.css?v={{ version }}">
 </head>
 <body class="public-page{{ ' wide-main' if page == 'dashboard' else '' }}">
   {% if page == "dashboard" %}
@@ -71,7 +71,7 @@
   {% endif %}
 
   <script>window.PUBLIC_PAGE = "{{ page }}";</script>
-  <script src="/static/js/common.js"></script>
-  <script src="/static/js/public.js"></script>
+  <script src="/static/js/common.js?v={{ version }}"></script>
+  <script src="/static/js/public.js?v={{ version }}"></script>
 </body>
 </html>

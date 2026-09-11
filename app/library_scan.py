@@ -7,7 +7,7 @@ import xml.etree.ElementTree as ET
 
 import httpx
 
-from .jellyfin_client import JELLYFIN_AUTH_HEADERS, JellyfinAdminAuthError, get_jellyfin_admin_token
+from .jellyfin_client import JellyfinAdminAuthError, get_jellyfin_admin_token, jellyfin_auth_headers
 
 
 class LibraryScanError(Exception):
@@ -69,7 +69,7 @@ async def scan_jellyfin_libraries(
 
     url = base_url.rstrip("/") + "/Library/VirtualFolders"
     try:
-        resp = await client.get(url, headers={"X-Emby-Token": token, **JELLYFIN_AUTH_HEADERS})
+        resp = await client.get(url, headers=jellyfin_auth_headers(token))
     except httpx.RequestError as exc:
         raise LibraryScanError(f"Could not reach {url}: {exc}") from exc
 
