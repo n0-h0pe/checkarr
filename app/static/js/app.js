@@ -722,6 +722,16 @@ const CREDENTIAL_MODES = {
     usernameHint: "(optional - see \"Admin password\" below)",
     showJellyfinAdmin: true,
   },
+  immich: {
+    keyLabel: "API key",
+    showUsername: false,
+    showPlexSignin: false,
+    keyHelp:
+      "Create a dedicated key for Checkarr under your account menu (top right) > Account Settings > API Keys > New API Key. " +
+      "Immich lets a key be scoped to specific permissions instead of full access - for least privilege, grant only " +
+      '"Server" (read-only server info/statistics) and "Job" (read-only job status), which is everything these checks use. ' +
+      "No asset, album, user, or admin permissions are needed.",
+  },
 };
 
 // Grouping (and alphabetical order within each group) for the Add/Edit
@@ -729,10 +739,10 @@ const CREDENTIAL_MODES = {
 // SERVICE_TYPES itself. Kept in sync by hand; every type in
 // state.meta.service_types is expected to appear in exactly one of these.
 const SERVICE_TYPE_CATEGORIES = [
-  { label: "Arr Stack", types: ["chaptarr", "lidarr", "prowlarr", "radarr", "sonarr", "whisparr"] },
-  { label: "Downloaders", types: ["deluge", "qbittorrent", "rtorrent", "rutorrent"] },
+  { label: "Arr Stack", types: ["chaptarr", "lidarr", "prowlarr", "radarr", "sonarr", "sportarr", "whisparr"] },
+  { label: "Downloaders", types: ["cleanuparr", "deluge", "qbittorrent", "rtorrent", "rutorrent"] },
   { label: "Media Servers", types: ["immich", "jellyfin", "plex"] },
-  { label: "Other", types: ["generic", "jellyseerr", "overseerr"] },
+  { label: "Other", types: ["dispatcharr", "generic", "jellyseerr", "overseerr"] },
 ];
 
 function serviceTypeLabel(type) {
@@ -752,6 +762,8 @@ function updateCredentialFieldsForType(type) {
   $("#svc-username-hint").textContent = mode.usernameHint || "";
   $("#svc-plex-signin").hidden = !mode.showPlexSignin;
   $("#svc-jellyfin-admin-field").hidden = !mode.showJellyfinAdmin;
+  $("#svc-key-help").textContent = mode.keyHelp || "";
+  $("#svc-key-help").hidden = !mode.keyHelp;
 }
 
 function applyServiceTypeDefaults(type, { autofillName } = {}) {

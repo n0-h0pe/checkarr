@@ -40,10 +40,19 @@ poll interval override (see "Per-check poll interval" below).
 
 The credential field(s) shown change based on the service type:
 
-- **Radarr / Sonarr / Lidarr / Whisparr / Prowlarr / Chaptarr / Seerr /
-  Jellyseerr / Immich / Generic**: a single API key field (Settings >
-  General > API Key in the app itself, or Account Settings > API Keys for
-  Immich). Only needed for authenticated checks.
+- **Radarr / Sonarr / Lidarr / Whisparr / Prowlarr / Chaptarr / Sportarr /
+  Seerr / Jellyseerr / Dispatcharr / Cleanuparr / Generic**: a single API
+  key field (Settings > General > API Key in the app itself, where that
+  app has one). Only needed for authenticated checks - Dispatcharr,
+  Sportarr, and Cleanuparr don't have any yet (see "Supported services"
+  below), so it's unused for them for now.
+- **Immich**: a single API key field, created under your account menu (top
+  right) > Account Settings > API Keys > New API Key. Immich lets a key be
+  scoped to specific permissions instead of granted full access - for least
+  privilege, tick only "Server" (read-only server info/statistics) and
+  "Job" (read-only job status), which is everything `immich_server_status`,
+  `immich_storage`, and `immich_jobs` use between them. No asset, album,
+  user, or admin permissions are needed.
 - **Jellyfin**: an API key field (Dashboard > API Keys), plus optional
   admin username and admin password fields. The API key alone covers the
   basic health check, but some admin-only endpoints (library scanning, the
@@ -77,12 +86,15 @@ see [DeployingDocker.md](DeployingDocker.md).
 | Plex | Web UI, identity liveness, Remote Access status, library/path checks via API |
 | Jellyfin | Web UI, health endpoint, library/path checks via API (admin-only endpoints, see Credentials above) |
 | Chaptarr | Web UI only for now, its API shape hasn't been verified as Servarr-compatible. Add `http_200`/`keyword_match` checks as needed. |
+| Sportarr | Web UI only for now, same reason as Chaptarr - it's new enough that its API shape hasn't been verified. Add `http_200`/`keyword_match` checks as needed. |
 | qBittorrent | Web UI, real login verification, free disk space via API |
 | Deluge | Web UI, real login verification, free disk space via API |
+| Cleanuparr | Web UI only for now, its API hasn't been integrated yet. Add `http_200`/`keyword_match` checks as needed. |
 | rTorrent | No web UI check (there's genuinely nothing to reach) - just its XML-RPC interface, see below. Use this for a bare rTorrent with no ruTorrent in front of it. |
 | ruTorrent | Web UI (ruTorrent's own, at `/rutorrent/` by default) plus the XML-RPC interface, defaulted to ruTorrent's httprpc plugin path. Use this instead of rTorrent above whenever ruTorrent is actually what's fronting it - see below, they're separate types because their correct defaults differ. |
 | Seerr, Jellyseerr | Web UI, API status, and a check that TMDB is reachable through the app. Jellyseerr is an API-compatible fork of Seerr, so both get identical checks. |
 | Immich | Web UI, API status (library counts), free disk space, background job queue failures |
+| Dispatcharr | Web UI only for now, its API hasn't been integrated yet. Add `http_200`/`keyword_match` checks as needed. |
 | Generic | Web UI checks only, for anything else |
 
 Any service, regardless of type, can also have `filesystem_path`,

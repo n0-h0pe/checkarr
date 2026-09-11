@@ -554,6 +554,15 @@ table th { color: var(--text-dim); font-weight: 600; font-size: 12px; text-trans
 .instant-sdt-info { display: flex; flex-direction: column; gap: 2px; }
 .instant-sdt-countdown { color: var(--warn); }
 .instant-sdt-actions { display: flex; gap: 6px; flex-shrink: 0; }
+/* The generic `.field input[type=number], .field select { width: 100% }`
+   rule above fights a flex row of the two: with no override, the select
+   also tries to claim 100% of the row for its own flex-basis, squeezing
+   the number input down to almost nothing (and its spinner arrows with
+   it). Explicit widths here settle who gets how much of the row instead
+   of leaving it to that fight. */
+.instant-sdt-duration { display: flex; gap: 8px; max-width: 320px; }
+.instant-sdt-duration input[type=number] { width: 100px; flex: 0 0 100px; }
+.instant-sdt-duration select { width: auto; flex: 1 1 auto; }
 
 /* Scheduled Down Time: each schedule is a card (not a table row) since it
    carries a variable-length list of group checkboxes beneath its own

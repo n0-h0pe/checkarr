@@ -29,6 +29,10 @@ SERVICE_TYPE_ICONS = {
     "overseerr": f"{_ICON_BASE}/overseerr.svg",
     "jellyseerr": f"{_ICON_BASE}/jellyseerr.svg",
     "immich": f"{_ICON_BASE}/immich.svg",
+    "dispatcharr": f"{_ICON_BASE}/dispatcharr.svg",
+    "sportarr": f"{_ICON_BASE}/sportarr.svg",
+    # No svg in dashboard-icons for this one (yet) - it does have a png.
+    "cleanuparr": "https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/cleanuparr.png",
 }
 
 # Used to autofill the Name field and the Local address placeholder when a
@@ -51,6 +55,9 @@ SERVICE_TYPE_DEFAULTS = {
     "overseerr": {"name": "Seerr", "port": 5055},
     "jellyseerr": {"name": "Jellyseerr", "port": 5055},
     "immich": {"name": "Immich", "port": 2283},
+    "dispatcharr": {"name": "Dispatcharr", "port": 9191},
+    "sportarr": {"name": "Sportarr", "port": None},
+    "cleanuparr": {"name": "Cleanuparr", "port": None},
     "generic": {"name": "", "port": None},
 }
 

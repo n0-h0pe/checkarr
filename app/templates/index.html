@@ -237,6 +237,7 @@
             <span>Use environment variable</span>
           </label>
           <button type="button" class="small" id="svc-plex-signin" hidden style="margin-top:8px;">Sign in to Plex</button>
+          <div class="hint" id="svc-key-help" hidden></div>
         </div>
         <div class="field" id="svc-jellyfin-admin-field" hidden>
           <label>Admin password <span class="hint" id="svc-jellyfin-admin-password-hint">(optional, paired with the Admin username above)</span></label>
@@ -438,8 +439,8 @@
         <input type="hidden" id="instant-sdt-schedule-id">
         <div class="field">
           <label>For how long?</label>
-          <div style="display:flex; gap:8px; max-width:280px;">
-            <input type="number" id="instant-sdt-amount" min="1" step="1" required style="flex:1;">
+          <div class="instant-sdt-duration">
+            <input type="number" id="instant-sdt-amount" min="1" step="1" required>
             <select id="instant-sdt-unit">
               <option value="minutes">Minutes</option>
               <option value="hours">Hours</option>
