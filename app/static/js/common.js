@@ -2,7 +2,7 @@
 // dashboard (public.js). Keeps their read-only rendering identical without
 // the public surface ever importing anything that can mutate state.
 
-const state = { meta: null, services: [], statuses: [], channels: [], tab: "dashboard", activeLayout: null, lastGridColumns: null };
+const state = { meta: null, services: [], statuses: [], channels: [], groups: [], schedules: [], tab: "dashboard", activeLayout: null, lastGridColumns: null };
 
 // Dashboard tile grid: each track is one unit (px). A card's position/size
 // is stored as {x, y, w, h} in 1-based grid-line units and applied as

@@ -118,3 +118,21 @@ def get_or_create_active_layout(db: Session) -> models.DashboardLayout:
     db.commit()
     db.refresh(layout)
     return layout
+
+
+ALL_SERVICES_GROUP_NAME = "All Services"
+
+
+def get_or_create_all_services_group(db: Session) -> models.ServiceGroup:
+    """Seeds the one undeletable ServiceGroup every Scheduled Down Time
+    schedule can target to cover every service - idempotent, called once at
+    startup (see database.init_db). Its membership is never stored (see
+    ServiceGroup's docstring); this only ever needs to exist once."""
+    group = db.query(models.ServiceGroup).filter_by(is_default=True).first()
+    if group:
+        return group
+    group = models.ServiceGroup(name=ALL_SERVICES_GROUP_NAME, is_default=True)
+    db.add(group)
+    db.commit()
+    db.refresh(group)
+    return group

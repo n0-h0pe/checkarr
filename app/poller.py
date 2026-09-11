@@ -10,6 +10,7 @@ from .checks.base import STATUS_FAIL, STATUS_WARN, NotificationItem
 from .checks.runner import ALWAYS_BOTH_TARGETS_TYPES, SERVICE_SCOPED_TYPES, run_check
 from .config import settings
 from .database import SessionLocal
+from .downtime import is_suppressed
 from .models import CheckDefinition, CheckResult, Notification, Service
 
 # Notification.severity -> alert tier (see NotificationChannel.notify_on_warn/
@@ -201,6 +202,11 @@ async def poll_service(service_id: int) -> None:
         _prune_old_results(db, service.id)
 
         for tier, subject, body in alerts_to_send:
+            # Scheduled Down Time only ever gates this dispatch - the check
+            # result/notification above was already recorded normally either
+            # way, so the dashboard and Notifications tab are unaffected.
+            if is_suppressed(db, service.id, tier, now):
+                continue
             # Fire-and-forget: dispatch_alert opens its own DB session and
             # does blocking network I/O per channel, off the event loop -
             # never blocks or fails the poll loop itself.

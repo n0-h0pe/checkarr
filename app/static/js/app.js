@@ -16,6 +16,7 @@ function switchSettingsSubTab(subtab) {
   $all(".sub-tab-btn").forEach((b) => b.classList.toggle("active", b.dataset.subtab === subtab));
   $all(".subtab-panel").forEach((p) => p.classList.toggle("active", p.id === `subtab-${subtab}`));
   if (subtab === "channels") loadChannels();
+  if (subtab === "downtime") loadServiceGroups().then(loadSchedules);
 }
 
 function switchTab(tab) {
@@ -1138,6 +1139,368 @@ async function testChannelFromModal() {
   statusEl.textContent = (result.ok ? "✓ " : "✕ ") + result.message;
 }
 
+// ---------- settings: scheduled down time ----------
+
+// Schedule times are entered/shown in the browser's local time and
+// converted to/from UTC ISO strings at the API boundary - same convention
+// as every other timestamp in this app (see relTime/fmtTime in common.js).
+// parseTs (common.js) treats a 'Z'-less ISO string from the API as UTC;
+// the Date it produces then reports back in local time via these getters.
+function toLocalDateInput(d) {
+  const p = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+function toLocalTimeInput(d) {
+  const p = (n) => String(n).padStart(2, "0");
+  return `${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+function addDaysToDateInput(dateStr, n) {
+  const d = new Date(`${dateStr}T00:00:00`);
+  d.setDate(d.getDate() + n);
+  return toLocalDateInput(d);
+}
+
+function serviceNameById(id) {
+  const s = state.services.find((sv) => sv.id === id);
+  return s ? s.name : `#${id}`;
+}
+
+// ---- service groups ----
+
+async function loadServiceGroups() {
+  try {
+    state.groups = await api("/api/service-groups");
+  } catch (e) {
+    toast("Failed to load service groups: " + e.message, true);
+    return;
+  }
+  renderGroupsFromState();
+  // A group's name/membership can appear on schedule cards (the "applies
+  // to" checkboxes) - keep those in sync too, no extra fetch needed since
+  // the schedules themselves haven't changed, just how a group renders.
+  renderSchedulesFromState();
+}
+
+function renderGroupsFromState() {
+  const body = $("#groups-body");
+  body.innerHTML = "";
+  for (const g of state.groups) {
+    body.appendChild(renderGroupRow(g));
+  }
+}
+
+function renderGroupRow(g) {
+  const tr = el("tr", {});
+  tr.appendChild(el("td", { "data-label": "Name", text: g.name }));
+  const svcLabel = g.is_default
+    ? `All services (${g.service_ids.length})`
+    : g.service_ids.map(serviceNameById).join(", ") || "(none)";
+  tr.appendChild(el("td", { "data-label": "Services", text: svcLabel }));
+  const actions = g.is_default
+    ? [el("span", { class: "text-dim", text: "built-in" })]
+    : [
+        el("button", { class: "small", onclick: () => openGroupModal(g) }, "Edit"),
+        el("button", { class: "small danger", onclick: () => deleteGroup(g) }, "Delete"),
+      ];
+  tr.appendChild(el("td", {}, el("div", { style: "display:flex; gap:6px;" }, actions)));
+  return tr;
+}
+
+function openGroupModal(g = null) {
+  $("#group-modal-title").textContent = g ? "Edit group" : "Add group";
+  $("#grp-id").value = g ? g.id : "";
+  $("#grp-name").value = g ? g.name : "";
+
+  const list = $("#grp-services-list");
+  list.innerHTML = "";
+  const memberIds = new Set(g ? g.service_ids : []);
+  for (const svc of state.services) {
+    const inputId = `grp-svc-${svc.id}`;
+    const input = el("input", { type: "checkbox", id: inputId });
+    input.checked = memberIds.has(svc.id);
+    input.dataset.serviceId = svc.id;
+    list.appendChild(el("div", { class: "field checkbox" }, [input, el("label", { for: inputId, text: svc.name })]));
+  }
+  $("#group-modal").classList.remove("hidden");
+}
+
+function closeGroupModal() {
+  $("#group-modal").classList.add("hidden");
+}
+
+async function submitGroupForm(ev) {
+  ev.preventDefault();
+  const groupId = $("#grp-id").value;
+  const serviceIds = $all("#grp-services-list input[type=checkbox]")
+    .filter((i) => i.checked)
+    .map((i) => Number(i.dataset.serviceId));
+  const payload = { name: $("#grp-name").value.trim(), service_ids: serviceIds };
+
+  try {
+    if (groupId) {
+      await api(`/api/service-groups/${groupId}`, { method: "PUT", body: JSON.stringify(payload) });
+    } else {
+      await api("/api/service-groups", { method: "POST", body: JSON.stringify(payload) });
+    }
+    toast("Group saved");
+    closeGroupModal();
+    loadServiceGroups();
+  } catch (e) {
+    toast("Save failed: " + e.message, true);
+  }
+}
+
+async function deleteGroup(g) {
+  if (!confirm(`Delete group "${g.name}"?`)) return;
+  try {
+    await api(`/api/service-groups/${g.id}`, { method: "DELETE" });
+    toast("Group deleted");
+    loadServiceGroups();
+  } catch (e) {
+    toast("Delete failed: " + e.message, true);
+  }
+}
+
+// ---- schedules ----
+
+function describeSchedule(s) {
+  const start = new Date(parseTs(s.start_at));
+  const end = new Date(parseTs(s.end_at));
+  const timeFmt = (d) => d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  const dateFmt = (d) => d.toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" });
+  const timeRange = `${timeFmt(start)} – ${timeFmt(end)}`;
+
+  let base;
+  if (s.recurrence === "once") {
+    base = `Once: ${dateFmt(start)} ${timeFmt(start)} → ${dateFmt(end)} ${timeFmt(end)}`;
+  } else if (s.recurrence === "daily") {
+    base = `Daily, ${timeRange}`;
+  } else if (s.recurrence === "weekly") {
+    base = `Weekly on ${start.toLocaleDateString([], { weekday: "long" })}, ${timeRange}`;
+  } else if (s.recurrence === "monthly") {
+    base = `Monthly on day ${start.getDate()}, ${timeRange}`;
+  } else {
+    base = `Yearly on ${start.toLocaleDateString([], { month: "long", day: "numeric" })}, ${timeRange}`;
+  }
+  if (s.recurrence !== "once" && s.repeat_until) {
+    base += ` (until ${dateFmt(new Date(`${s.repeat_until}T00:00:00`))})`;
+  }
+  return base;
+}
+
+async function loadSchedules() {
+  try {
+    state.schedules = await api("/api/downtime-schedules");
+  } catch (e) {
+    toast("Failed to load schedules: " + e.message, true);
+    return;
+  }
+  renderSchedulesFromState();
+}
+
+function renderSchedulesFromState() {
+  const list = $("#schedules-list");
+  if (!list) return;
+  list.innerHTML = "";
+  if (state.schedules.length === 0) {
+    list.appendChild(el("div", { class: "empty-state", text: "No schedules configured" }));
+    return;
+  }
+  for (const s of state.schedules) {
+    list.appendChild(renderScheduleCard(s));
+  }
+}
+
+function renderScheduleCard(s) {
+  const card = el("div", { class: "schedule-card" });
+
+  const badges = [
+    s.suppress_warn ? el("span", { class: "badge warn", text: "Warn" }) : null,
+    s.suppress_fail ? el("span", { class: "badge fail", text: "Fail" }) : null,
+    !s.enabled ? el("span", { class: "badge disabled", text: "disabled" }) : null,
+  ];
+  card.appendChild(
+    el("div", { class: "schedule-card-header" }, [
+      el("div", {}, [
+        el("strong", { text: s.name }),
+        el("div", { class: "text-dim schedule-card-desc", text: describeSchedule(s) }),
+      ]),
+      el("div", { class: "schedule-card-actions" }, [
+        ...badges,
+        el("button", { class: "small", onclick: () => openScheduleModal(s) }, "Edit"),
+        el("button", { class: "small danger", onclick: () => deleteSchedule(s) }, "Delete"),
+      ]),
+    ])
+  );
+
+  const groupsWrap = el("div", { class: "schedule-card-groups" }, [
+    el("span", { class: "text-dim", text: "Applies to:" }),
+  ]);
+  for (const g of state.groups) {
+    const inputId = `sch-${s.id}-grp-${g.id}`;
+    const input = el("input", { type: "checkbox", id: inputId });
+    input.checked = s.group_ids.includes(g.id);
+    input.addEventListener("change", () => toggleScheduleGroup(s, g.id, input.checked));
+    groupsWrap.appendChild(el("label", { class: "schedule-group-toggle", for: inputId }, [input, ` ${g.name}`]));
+  }
+  card.appendChild(groupsWrap);
+  return card;
+}
+
+async function toggleScheduleGroup(schedule, groupId, checked) {
+  const groupIds = new Set(schedule.group_ids);
+  if (checked) groupIds.add(groupId); else groupIds.delete(groupId);
+  schedule.group_ids = Array.from(groupIds);
+  try {
+    await api(`/api/downtime-schedules/${schedule.id}`, {
+      method: "PUT",
+      body: JSON.stringify({ group_ids: schedule.group_ids }),
+    });
+  } catch (e) {
+    toast("Could not update schedule's groups: " + e.message, true);
+  }
+}
+
+function updateScheduleFieldsForRecurrence(recurrence) {
+  const isOnce = recurrence === "once";
+  const isDaily = recurrence === "daily";
+  $("#sch-end-date-field").hidden = !isOnce;
+  $("#sch-repeat-until-field").hidden = isOnce;
+  $("#sch-start-date-field").hidden = isDaily;
+
+  const label = $("#sch-start-date-label");
+  const hint = $("#sch-start-date-hint");
+  if (recurrence === "weekly") {
+    label.textContent = "Date";
+    hint.textContent = "Repeats every week on this date's weekday.";
+  } else if (recurrence === "monthly") {
+    label.textContent = "Date";
+    hint.textContent = "Repeats every month on this date's day of month.";
+  } else if (recurrence === "yearly") {
+    label.textContent = "Date";
+    hint.textContent = "Repeats every year on this date's month and day.";
+  } else {
+    label.textContent = "Start date";
+    hint.textContent = "";
+  }
+}
+
+function openScheduleModal(s = null) {
+  $("#schedule-modal-title").textContent = s ? "Edit schedule" : "Add schedule";
+  $("#sch-id").value = s ? s.id : "";
+  $("#sch-name").value = s ? s.name : "";
+
+  const recurrence = s ? s.recurrence : "once";
+  $("#sch-recurrence").value = recurrence;
+  $("#sch-recurrence").disabled = !!s;
+  $("#sch-recurrence").onchange = () => updateScheduleFieldsForRecurrence($("#sch-recurrence").value);
+
+  const startLocal = s ? new Date(parseTs(s.start_at)) : new Date(Date.now() + 3600000);
+  const endLocal = s ? new Date(parseTs(s.end_at)) : new Date(Date.now() + 2 * 3600000);
+  $("#sch-start-date").value = toLocalDateInput(startLocal);
+  $("#sch-start-time").value = toLocalTimeInput(startLocal);
+  $("#sch-end-date").value = toLocalDateInput(endLocal);
+  $("#sch-end-time").value = toLocalTimeInput(endLocal);
+  $("#sch-repeat-until").value = s && s.repeat_until ? s.repeat_until : "";
+  $("#sch-suppress-warn").checked = s ? s.suppress_warn : true;
+  $("#sch-suppress-fail").checked = s ? s.suppress_fail : true;
+  $("#sch-enabled").checked = s ? s.enabled : true;
+
+  updateScheduleFieldsForRecurrence(recurrence);
+  $("#schedule-modal").classList.remove("hidden");
+}
+
+function closeScheduleModal() {
+  $("#schedule-modal").classList.add("hidden");
+}
+
+async function submitScheduleForm(ev) {
+  ev.preventDefault();
+  const scheduleId = $("#sch-id").value;
+  const recurrence = $("#sch-recurrence").value;
+  const startTime = $("#sch-start-time").value;
+  const endTime = $("#sch-end-time").value;
+  if (!startTime || !endTime) {
+    toast("Set both a start and end time", true);
+    return;
+  }
+
+  let startDateStr, endDateStr;
+  if (recurrence === "once") {
+    startDateStr = $("#sch-start-date").value;
+    endDateStr = $("#sch-end-date").value;
+    if (!startDateStr || !endDateStr) {
+      toast("Set both a start and end date", true);
+      return;
+    }
+  } else if (recurrence === "daily") {
+    // No user-facing date for Daily - anchored to today; only the time
+    // window (and whether it crosses midnight) actually matters.
+    startDateStr = toLocalDateInput(new Date());
+    endDateStr = endTime <= startTime ? addDaysToDateInput(startDateStr, 1) : startDateStr;
+  } else {
+    startDateStr = $("#sch-start-date").value;
+    if (!startDateStr) {
+      toast("Set a date", true);
+      return;
+    }
+    endDateStr = endTime <= startTime ? addDaysToDateInput(startDateStr, 1) : startDateStr;
+  }
+
+  const startAt = new Date(`${startDateStr}T${startTime}:00`);
+  const endAt = new Date(`${endDateStr}T${endTime}:00`);
+  if (endAt <= startAt) {
+    toast("End must be after start", true);
+    return;
+  }
+
+  const suppressWarn = $("#sch-suppress-warn").checked;
+  const suppressFail = $("#sch-suppress-fail").checked;
+  if (!suppressWarn && !suppressFail) {
+    toast("Suppress at least Warn or Fail", true);
+    return;
+  }
+
+  const payload = {
+    name: $("#sch-name").value.trim(),
+    recurrence,
+    start_at: startAt.toISOString(),
+    end_at: endAt.toISOString(),
+    suppress_warn: suppressWarn,
+    suppress_fail: suppressFail,
+    enabled: $("#sch-enabled").checked,
+  };
+  if (recurrence !== "once") {
+    const repeatUntil = $("#sch-repeat-until").value;
+    if (repeatUntil) payload.repeat_until = repeatUntil;
+    else if (scheduleId) payload.clear_repeat_until = true;
+  }
+
+  try {
+    if (scheduleId) {
+      await api(`/api/downtime-schedules/${scheduleId}`, { method: "PUT", body: JSON.stringify(payload) });
+    } else {
+      await api("/api/downtime-schedules", { method: "POST", body: JSON.stringify(payload) });
+    }
+    toast("Schedule saved");
+    closeScheduleModal();
+    loadSchedules();
+  } catch (e) {
+    toast("Save failed: " + e.message, true);
+  }
+}
+
+async function deleteSchedule(s) {
+  if (!confirm(`Delete schedule "${s.name}"?`)) return;
+  try {
+    await api(`/api/downtime-schedules/${s.id}`, { method: "DELETE" });
+    toast("Schedule deleted");
+    loadSchedules();
+  } catch (e) {
+    toast("Delete failed: " + e.message, true);
+  }
+}
+
 // ---------- init ----------
 
 async function init() {
@@ -1174,6 +1537,12 @@ async function init() {
   $("#channel-cancel").addEventListener("click", closeChannelModal);
   $("#channel-form").addEventListener("submit", submitChannelForm);
   $("#chn-test").addEventListener("click", testChannelFromModal);
+  $("#add-group-btn").addEventListener("click", () => openGroupModal());
+  $("#group-cancel").addEventListener("click", closeGroupModal);
+  $("#group-form").addEventListener("submit", submitGroupForm);
+  $("#add-schedule-btn").addEventListener("click", () => openScheduleModal());
+  $("#schedule-cancel").addEventListener("click", closeScheduleModal);
+  $("#schedule-form").addEventListener("submit", submitScheduleForm);
 
   let resizeTimer = null;
   let lastViewportWidth = window.innerWidth;

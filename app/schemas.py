@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -277,3 +277,74 @@ class NotificationChannelOut(NotificationChannelBase):
 class NotificationChannelTestResult(BaseModel):
     ok: bool
     message: str
+
+
+RECURRENCE_TYPES = ["once", "daily", "weekly", "monthly", "yearly"]
+
+
+class ServiceGroupBase(BaseModel):
+    name: str
+
+
+class ServiceGroupCreate(ServiceGroupBase):
+    service_ids: list[int] = Field(default_factory=list)
+
+
+class ServiceGroupUpdate(BaseModel):
+    name: str | None = None
+    service_ids: list[int] | None = None
+
+
+class ServiceGroupOut(ServiceGroupBase):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    is_default: bool
+    service_ids: list[int]
+    created_at: datetime
+    updated_at: datetime
+
+
+class DowntimeScheduleBase(BaseModel):
+    name: str
+    recurrence: str
+    start_at: datetime
+    end_at: datetime
+    repeat_until: date | None = None
+    suppress_warn: bool = True
+    suppress_fail: bool = True
+    enabled: bool = True
+
+    @model_validator(mode="after")
+    def _validate(self):
+        if self.recurrence not in RECURRENCE_TYPES:
+            raise ValueError(f"Unknown recurrence '{self.recurrence}'")
+        if not self.suppress_warn and not self.suppress_fail:
+            raise ValueError("A schedule must suppress at least Warn or Fail")
+        if self.end_at <= self.start_at:
+            raise ValueError("End must be after start")
+        return self
+
+
+class DowntimeScheduleCreate(DowntimeScheduleBase):
+    group_ids: list[int] = Field(default_factory=list)
+
+
+class DowntimeScheduleUpdate(BaseModel):
+    name: str | None = None
+    recurrence: str | None = None
+    start_at: datetime | None = None
+    end_at: datetime | None = None
+    repeat_until: date | None = None
+    clear_repeat_until: bool = False
+    suppress_warn: bool | None = None
+    suppress_fail: bool | None = None
+    enabled: bool | None = None
+    group_ids: list[int] | None = None
+
+
+class DowntimeScheduleOut(DowntimeScheduleBase):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    group_ids: list[int]
+    created_at: datetime
+    updated_at: datetime
