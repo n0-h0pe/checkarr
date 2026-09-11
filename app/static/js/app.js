@@ -731,7 +731,7 @@ const CREDENTIAL_MODES = {
 const SERVICE_TYPE_CATEGORIES = [
   { label: "Arr Stack", types: ["chaptarr", "lidarr", "prowlarr", "radarr", "sonarr", "whisparr"] },
   { label: "Downloaders", types: ["deluge", "qbittorrent", "rtorrent", "rutorrent"] },
-  { label: "Media Servers", types: ["jellyfin", "plex"] },
+  { label: "Media Servers", types: ["immich", "jellyfin", "plex"] },
   { label: "Other", types: ["generic", "jellyseerr", "overseerr"] },
 ];
 
@@ -1529,17 +1529,22 @@ async function loadSchedules() {
     return;
   }
   renderSchedulesFromState();
+  renderInstantSdtBar();
 }
 
+// Regular, user-authored schedules only - an is_instant one (from
+// "Instantly start SDT") never appears as a card here, it gets its own
+// banner instead (see renderInstantSdtBar below).
 function renderSchedulesFromState() {
   const list = $("#schedules-list");
   if (!list) return;
   list.innerHTML = "";
-  if (state.schedules.length === 0) {
+  const regular = state.schedules.filter((s) => !s.is_instant);
+  if (regular.length === 0) {
     list.appendChild(el("div", { class: "empty-state", text: "No schedules configured" }));
     return;
   }
-  for (const s of state.schedules) {
+  for (const s of regular) {
     list.appendChild(renderScheduleCard(s));
   }
 }
@@ -1734,6 +1739,154 @@ async function deleteSchedule(s) {
   }
 }
 
+// ---------- instant SDT ----------
+
+// "Instantly start SDT" is a quick-start shortcut for the same suppression
+// mechanism as a regular schedule - it just creates a DowntimeSchedule
+// behind the scenes (recurrence "once", covering All Services, is_instant:
+// true) instead of walking through the full Add schedule form, and renders
+// as its own banner (with a live countdown, Cancel, and Extend) rather than
+// a card in the Schedules list. See DowntimeSchedule.is_instant's docstring.
+let instantSdtCountdownTimer = null;
+
+function activeInstantSdt() {
+  // Expired instant schedules are reaped server-side on every
+  // /api/downtime-schedules fetch (see routers/downtime.py), so anything
+  // is_instant still in state.schedules is currently running.
+  return state.schedules.find((s) => s.is_instant) || null;
+}
+
+function formatCountdown(ms) {
+  if (ms <= 0) return "0s";
+  const totalSeconds = Math.floor(ms / 1000);
+  const days = Math.floor(totalSeconds / 86400);
+  const hours = Math.floor((totalSeconds % 86400) / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  const parts = [];
+  if (days) parts.push(`${days}d`);
+  if (days || hours) parts.push(`${hours}h`);
+  if (days || hours || minutes) parts.push(`${minutes}m`);
+  if (!days && !hours) parts.push(`${seconds}s`);
+  return parts.join(" ");
+}
+
+function renderInstantSdtBar() {
+  const bar = $("#instant-sdt-bar");
+  if (!bar) return;
+  clearInterval(instantSdtCountdownTimer);
+  instantSdtCountdownTimer = null;
+  bar.innerHTML = "";
+
+  const schedule = activeInstantSdt();
+  if (!schedule) {
+    bar.appendChild(
+      el("button", { type: "button", class: "primary", onclick: () => openInstantSdtDialog("start") }, "⚡ Instantly start SDT")
+    );
+    return;
+  }
+
+  const endMs = parseTs(schedule.end_at);
+  const countdown = el("strong", { class: "instant-sdt-countdown" });
+  const banner = el("div", { class: "instant-sdt-banner" }, [
+    el("div", { class: "instant-sdt-info" }, [
+      el("span", { text: "⚡ Instant SDT active - all alerts suppressed" }),
+      el("span", { class: "text-dim" }, ["Ends in ", countdown]),
+    ]),
+    el("div", { class: "instant-sdt-actions" }, [
+      el("button", { class: "small", onclick: () => openInstantSdtDialog("extend", schedule) }, "Extend"),
+      el("button", { class: "small danger", onclick: () => cancelInstantSdt(schedule) }, "Cancel"),
+    ]),
+  ]);
+  bar.appendChild(banner);
+
+  const tick = () => {
+    const remaining = endMs - Date.now();
+    if (remaining <= 0) {
+      clearInterval(instantSdtCountdownTimer);
+      instantSdtCountdownTimer = null;
+      loadSchedules();
+      return;
+    }
+    countdown.textContent = formatCountdown(remaining);
+  };
+  tick();
+  instantSdtCountdownTimer = setInterval(tick, 1000);
+}
+
+function openInstantSdtDialog(mode, schedule = null) {
+  $("#instant-sdt-modal-title").textContent = mode === "extend" ? "Extend Instant SDT" : "Instantly start SDT";
+  $("#instant-sdt-submit").textContent = mode === "extend" ? "Extend" : "Start";
+  $("#instant-sdt-mode").value = mode;
+  $("#instant-sdt-schedule-id").value = schedule ? schedule.id : "";
+  $("#instant-sdt-amount").value = "30";
+  $("#instant-sdt-unit").value = "minutes";
+  $("#instant-sdt-modal").classList.remove("hidden");
+}
+
+function closeInstantSdtDialog() {
+  $("#instant-sdt-modal").classList.add("hidden");
+}
+
+const INSTANT_SDT_UNIT_MS = { minutes: 60000, hours: 3600000, days: 86400000 };
+
+async function submitInstantSdtForm(ev) {
+  ev.preventDefault();
+  const amount = parseFloat($("#instant-sdt-amount").value);
+  const unit = $("#instant-sdt-unit").value;
+  if (!amount || amount <= 0) {
+    toast("Enter a duration greater than 0", true);
+    return;
+  }
+  const durationMs = amount * (INSTANT_SDT_UNIT_MS[unit] || INSTANT_SDT_UNIT_MS.minutes);
+  const mode = $("#instant-sdt-mode").value;
+
+  try {
+    if (mode === "extend") {
+      const scheduleId = $("#instant-sdt-schedule-id").value;
+      const schedule = state.schedules.find((s) => String(s.id) === scheduleId);
+      const currentEnd = schedule ? parseTs(schedule.end_at) : Date.now();
+      const newEnd = new Date(Math.max(currentEnd, Date.now()) + durationMs);
+      await api(`/api/downtime-schedules/${scheduleId}`, {
+        method: "PUT",
+        body: JSON.stringify({ end_at: newEnd.toISOString() }),
+      });
+      toast("Instant SDT extended");
+    } else {
+      const defaultGroup = state.groups.find((g) => g.is_default);
+      const now = new Date();
+      const payload = {
+        name: "Instant SDT",
+        recurrence: "once",
+        start_at: now.toISOString(),
+        end_at: new Date(now.getTime() + durationMs).toISOString(),
+        suppress_warn: true,
+        suppress_fail: true,
+        enabled: true,
+        group_ids: defaultGroup ? [defaultGroup.id] : [],
+        is_instant: true,
+      };
+      await api("/api/downtime-schedules", { method: "POST", body: JSON.stringify(payload) });
+      toast("Instant SDT started");
+    }
+    closeInstantSdtDialog();
+    loadSchedules();
+  } catch (e) {
+    toast("Failed: " + e.message, true);
+  }
+}
+
+async function cancelInstantSdt(schedule) {
+  if (!confirm("Cancel the active Instant SDT?")) return;
+  try {
+    await api(`/api/downtime-schedules/${schedule.id}`, { method: "DELETE" });
+    toast("Instant SDT canceled");
+    loadSchedules();
+  } catch (e) {
+    toast("Cancel failed: " + e.message, true);
+  }
+}
+
 // ---------- settings: log & history pruning ----------
 
 function renderPruneLastRun(lastPrunedAt) {
@@ -1892,6 +2045,8 @@ async function init() {
   $("#add-schedule-btn").addEventListener("click", () => openScheduleModal());
   $("#schedule-cancel").addEventListener("click", closeScheduleModal);
   $("#schedule-form").addEventListener("submit", submitScheduleForm);
+  $("#instant-sdt-cancel").addEventListener("click", closeInstantSdtDialog);
+  $("#instant-sdt-form").addEventListener("submit", submitInstantSdtForm);
   $("#pruning-form").addEventListener("submit", submitPruningForm);
   $("#prune-now-btn").addEventListener("click", pruneNow);
   $("#dashboard-settings-form").addEventListener("submit", submitDashboardSettingsForm);

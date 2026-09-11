@@ -232,8 +232,8 @@ body.wide-main main { max-width: none; }
    breathing room). */
 .card-header .title span:last-child.title-fade {
   text-overflow: clip;
-  -webkit-mask-image: linear-gradient(to right, black 80%, transparent 100%);
-  mask-image: linear-gradient(to right, black 80%, transparent 100%);
+  -webkit-mask-image: linear-gradient(to right, black calc(100% - 10px), transparent 100%);
+  mask-image: linear-gradient(to right, black calc(100% - 10px), transparent 100%);
 }
 /* Run now/History (and, in edit mode, the remove-card button) sit next to
    the status badge instead of their own row at the card's bottom - shorter,
@@ -242,6 +242,19 @@ body.wide-main main { max-width: none; }
 .card-header-right { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
 .card-header-actions { display: flex; gap: 6px; }
 .card-remove-btn { padding: 4px 7px; line-height: 1; }
+/* Compact cards: the status badge must always stay on the header's first
+   line, however narrow the card gets while resizing in edit mode - no
+   wrapping it below the title the way full cards' Run now/History group
+   can. The title fades into it instead (.title-fade above) rather than the
+   badge ever giving up its spot. */
+.card-compact .card-header { flex-wrap: nowrap; }
+/* The remove button doesn't get a say in that layout at all - it's pulled
+   out of flex flow entirely and floated just left of the badge, so a
+   too-narrow card never has to choose between wrapping it and shrinking the
+   title around it. It's fine for it to overlap a faded-out title: it only
+   ever shows in edit mode and disappears the moment editing ends. */
+.card-compact .card-header-right { position: relative; }
+.card-compact .card-remove-btn { position: absolute; top: 50%; right: 100%; transform: translateY(-50%); margin-right: 6px; z-index: 1; }
 
 /* Everything between the header and the action buttons (sub-line, uptime
    strip, check list) - kept in its own flex-column wrapper, rather than
@@ -527,6 +540,20 @@ table th { color: var(--text-dim); font-weight: 600; font-size: 12px; text-trans
 .severity-toggle.fail { border-color: rgba(229,72,77,.4); color: var(--fail); }
 .severity-toggle.warn { border-color: rgba(245,166,35,.4); color: var(--warn); }
 .severity-toggle:hover { border-color: var(--accent); }
+
+/* "Instantly start SDT" - the button (nothing active) or banner (one
+   active) sits above the Service Groups panel, not inside it, so it reads
+   as a status line for the whole downtime feature rather than one more row
+   of settings. */
+#instant-sdt-bar:not(:empty) { margin-bottom: 14px; }
+.instant-sdt-banner {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;
+  background: rgba(245,166,35,.12); border: 1px solid rgba(245,166,35,.4); border-radius: var(--radius);
+  padding: 10px 14px;
+}
+.instant-sdt-info { display: flex; flex-direction: column; gap: 2px; }
+.instant-sdt-countdown { color: var(--warn); }
+.instant-sdt-actions { display: flex; gap: 6px; flex-shrink: 0; }
 
 /* Scheduled Down Time: each schedule is a card (not a table row) since it
    carries a variable-length list of group checkboxes beneath its own

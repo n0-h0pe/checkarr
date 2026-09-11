@@ -13,6 +13,7 @@ from .arr_check import (
 from .filesystem_check import check_filesystem_path
 from .ftp_check import check_ftp_path
 from .http_check import check_http_200, check_keyword_match
+from .immich_check import check_immich_jobs, check_immich_server_status, check_immich_storage
 from .media_server_check import (
     check_jellyfin_filesystem_path,
     check_jellyfin_health,
@@ -56,6 +57,9 @@ TARGET_SCOPED_TYPES = {
     "overseerr_status",
     "overseerr_tmdb_status",
     "ssl_certificate",
+    "immich_server_status",
+    "immich_storage",
+    "immich_jobs",
 }
 
 # Checks that don't care which URL is configured - the poller runs these
@@ -134,6 +138,12 @@ async def run_check(
             return await check_overseerr_tmdb_status(client, base_url, api_key, config)
         if ctype == "ssl_certificate":
             return await check_ssl_certificate(base_url, config)
+        if ctype == "immich_server_status":
+            return await check_immich_server_status(client, base_url, api_key, config)
+        if ctype == "immich_storage":
+            return await check_immich_storage(client, base_url, api_key, config)
+        if ctype == "immich_jobs":
+            return await check_immich_jobs(client, base_url, api_key, config)
         return CheckOutcome(STATUS_FAIL, f"Unknown check type '{ctype}'", None)
     except Exception as exc:  # noqa: BLE001 - a broken check must not kill the poll loop
         return CheckOutcome(STATUS_FAIL, f"Check raised an unexpected error: {exc}", None)
@@ -203,4 +213,8 @@ def default_checks_for_service_type(service_type: str) -> list[dict]:
     if service_type in OVERSEERR_TYPES:
         checks.append({"name": "API status", "type": "overseerr_status", "config": {}, "is_builtin": True})
         checks.append({"name": "TMDB reachable", "type": "overseerr_tmdb_status", "config": {}, "is_builtin": True})
+    if service_type == "immich":
+        checks.append({"name": "API status", "type": "immich_server_status", "config": {}, "is_builtin": True})
+        checks.append({"name": "Free disk space", "type": "immich_storage", "config": {}, "is_builtin": True})
+        checks.append({"name": "Background jobs", "type": "immich_jobs", "config": {}, "is_builtin": True})
     return checks

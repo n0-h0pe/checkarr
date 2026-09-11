@@ -41,8 +41,9 @@ poll interval override (see "Per-check poll interval" below).
 The credential field(s) shown change based on the service type:
 
 - **Radarr / Sonarr / Lidarr / Whisparr / Prowlarr / Chaptarr / Seerr /
-  Jellyseerr / Generic**: a single API key field (Settings > General > API
-  Key in the app itself). Only needed for authenticated checks.
+  Jellyseerr / Immich / Generic**: a single API key field (Settings >
+  General > API Key in the app itself, or Account Settings > API Keys for
+  Immich). Only needed for authenticated checks.
 - **Jellyfin**: an API key field (Dashboard > API Keys), plus optional
   admin username and admin password fields. The API key alone covers the
   basic health check, but some admin-only endpoints (library scanning, the
@@ -81,6 +82,7 @@ see [DeployingDocker.md](DeployingDocker.md).
 | rTorrent | No web UI check (there's genuinely nothing to reach) - just its XML-RPC interface, see below. Use this for a bare rTorrent with no ruTorrent in front of it. |
 | ruTorrent | Web UI (ruTorrent's own, at `/rutorrent/` by default) plus the XML-RPC interface, defaulted to ruTorrent's httprpc plugin path. Use this instead of rTorrent above whenever ruTorrent is actually what's fronting it - see below, they're separate types because their correct defaults differ. |
 | Seerr, Jellyseerr | Web UI, API status, and a check that TMDB is reachable through the app. Jellyseerr is an API-compatible fork of Seerr, so both get identical checks. |
+| Immich | Web UI, API status (library counts), free disk space, background job queue failures |
 | Generic | Web UI checks only, for anything else |
 
 Any service, regardless of type, can also have `filesystem_path`,
@@ -153,19 +155,23 @@ path that already has a check.
 | `overseerr_status` | Seerr, Jellyseerr | Confirms the API is reachable and the API key is valid |
 | `overseerr_tmdb_status` | Seerr, Jellyseerr | Confirms TMDB is reachable through it, see below |
 | `ssl_certificate` | any | Validates the actual TLS certificate for an `https://` address, see below |
+| `immich_server_status` | Immich | Confirms the API is reachable and the API key is valid, reports photo/video counts |
+| `immich_storage` | Immich | Free disk space via the app's own API, as a percentage of total capacity |
+| `immich_jobs` | Immich | Flags any background job queue (thumbnails, metadata, facial recognition, etc.) with failed jobs |
 
 ### Disk space
 
-`arr_disk_space` and `qbittorrent_disk_space`/`deluge_disk_space` all
-report free space as a percentage of total capacity, with two adjustable
-thresholds in the Add/Edit check panel: Warn below % free (default 10) and
-Fail below % free (default 3).
+`arr_disk_space`, `immich_storage`, and `qbittorrent_disk_space`/
+`deluge_disk_space` all report free space as a percentage of total
+capacity, with two adjustable thresholds in the Add/Edit check panel: Warn
+below % free (default 10) and Fail below % free (default 3).
 
 They differ in where the numbers come from:
 
-- `arr_disk_space` reads both free and total space straight from the app's
-  own API, so the percentage thresholds work immediately. Leave Path blank
-  to check every disk the app reports on and flag whichever is lowest.
+- `arr_disk_space` and `immich_storage` both read free and total space
+  straight from the app's own API, so the percentage thresholds work
+  immediately. For `arr_disk_space`, leave Path blank to check every disk
+  the app reports on and flag whichever is lowest.
 - `qbittorrent_disk_space`/`deluge_disk_space` only get free space from
   their APIs, not total capacity, so there's nothing to compute a
   percentage against until you fill in "Total disk size (GB)" yourself.

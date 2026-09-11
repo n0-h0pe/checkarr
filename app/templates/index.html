@@ -124,6 +124,7 @@
       </div>
 
       <div class="subtab-panel" id="subtab-downtime">
+        <div id="instant-sdt-bar"></div>
         <div class="panel">
           <div class="panel-header">
             <h2>Service Groups</h2>
@@ -424,6 +425,32 @@
         <div class="modal-actions">
           <button type="button" id="schedule-cancel">Cancel</button>
           <button type="submit" class="primary">Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="modal-backdrop hidden" id="instant-sdt-modal">
+    <div class="modal">
+      <h3 id="instant-sdt-modal-title">Instantly start SDT</h3>
+      <form id="instant-sdt-form">
+        <input type="hidden" id="instant-sdt-mode" value="start">
+        <input type="hidden" id="instant-sdt-schedule-id">
+        <div class="field">
+          <label>For how long?</label>
+          <div style="display:flex; gap:8px; max-width:280px;">
+            <input type="number" id="instant-sdt-amount" min="1" step="1" required style="flex:1;">
+            <select id="instant-sdt-unit">
+              <option value="minutes">Minutes</option>
+              <option value="hours">Hours</option>
+              <option value="days">Days</option>
+            </select>
+          </div>
+          <div class="hint">Suppresses Warn and Fail alerts for every service, starting now.</div>
+        </div>
+        <div class="modal-actions">
+          <button type="button" id="instant-sdt-cancel">Cancel</button>
+          <button type="submit" class="primary" id="instant-sdt-submit">Start</button>
         </div>
       </form>
     </div>

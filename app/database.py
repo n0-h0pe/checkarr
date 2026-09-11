@@ -120,6 +120,10 @@ def _run_migrations() -> None:
         if "is_compact" not in layout_cols:
             conn.exec_driver_sql("ALTER TABLE dashboard_layouts ADD COLUMN is_compact BOOLEAN DEFAULT 0")
 
+        downtime_cols = _table_columns(conn, "downtime_schedules")
+        if "is_instant" not in downtime_cols:
+            conn.exec_driver_sql("ALTER TABLE downtime_schedules ADD COLUMN is_instant BOOLEAN DEFAULT 0")
+
         channel_cols = _table_columns(conn, "notification_channels")
         if "secret_env_var" not in channel_cols:
             conn.exec_driver_sql("ALTER TABLE notification_channels ADD COLUMN secret_env_var VARCHAR(255)")

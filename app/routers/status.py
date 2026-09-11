@@ -18,7 +18,7 @@ def get_status(db: Session = Depends(get_db)):
 def get_history_route(
     service_ids: list[int] = Query([]),
     check_id: int | None = Query(None),
-    minutes: int = Query(1440, ge=1, le=10080),
+    minutes: int = Query(1440, ge=0, le=10080),
     limit: int = Query(100, ge=1, le=5000),
     before_id: int | None = Query(None),
     db: Session = Depends(get_db),

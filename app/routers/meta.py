@@ -28,6 +28,7 @@ SERVICE_TYPE_ICONS = {
     "rutorrent": f"{_ICON_BASE}/rutorrent.svg",
     "overseerr": f"{_ICON_BASE}/overseerr.svg",
     "jellyseerr": f"{_ICON_BASE}/jellyseerr.svg",
+    "immich": f"{_ICON_BASE}/immich.svg",
 }
 
 # Used to autofill the Name field and the Local address placeholder when a
@@ -49,6 +50,7 @@ SERVICE_TYPE_DEFAULTS = {
     "rutorrent": {"name": "ruTorrent", "port": None},
     "overseerr": {"name": "Seerr", "port": 5055},
     "jellyseerr": {"name": "Jellyseerr", "port": 5055},
+    "immich": {"name": "Immich", "port": 2283},
     "generic": {"name": "", "port": None},
 }
 
@@ -289,6 +291,29 @@ CHECK_TYPE_META = [
         "applies_to": SERVICE_TYPES,
         "fields": [
             {"key": "expiry_warn_days", "label": "Warn when expiring within (days)", "kind": "number", "default": 14},
+        ],
+    },
+    {
+        "type": "immich_server_status",
+        "label": "API reachable (Server statistics)",
+        "applies_to": ["immich"],
+        "fields": [],
+    },
+    {
+        "type": "immich_storage",
+        "label": "Free disk space via API",
+        "applies_to": ["immich"],
+        "fields": [
+            {"key": "warn_percent", "label": "Warn below % free", "kind": "number", "default": 10},
+            {"key": "fail_percent", "label": "Fail below % free", "kind": "number", "default": 3},
+        ],
+    },
+    {
+        "type": "immich_jobs",
+        "label": "Background job queues (failed job count)",
+        "applies_to": ["immich"],
+        "fields": [
+            {"key": "warn_failed_jobs", "label": "Warn at this many failed jobs", "kind": "number", "default": 1},
         ],
     },
 ]

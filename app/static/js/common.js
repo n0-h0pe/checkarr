@@ -79,12 +79,16 @@ state.uptimeRange = loadUptimeRange();
 // Carries the picker's own minutes straight through - no more rounding up
 // to whole hours, which used to collapse every sub-hour option (last poll,
 // 1/3/5/10/15/30 min, 1 hour) into one identical "last hour" request.
-// "Just the last poll" (0 minutes) never reaches this - the uptime strip
-// special-cases it before ever calling this (see loadUptimeStrip above),
-// and it's the History tab's own minimum service to floor it if needed.
+// "Just the last poll" (0 minutes) is passed through as 0, not floored to
+// 1 - the uptime strip special-cases it before ever calling this (see
+// loadUptimeStrip above) so it never actually sends 0 itself, but the
+// History tab calls this directly and relies on 0 reaching /api/history
+// unchanged, where it means "latest result per check", not "last minute"
+// (see queries.get_history's docstring - a 1-minute window would come back
+// empty for any service polled less often than once a minute).
 function uptimeRangeMinutes() {
   const range = UPTIME_RANGES.find((r) => r.value === state.uptimeRange) || UPTIME_RANGES.find((r) => r.value === DEFAULT_UPTIME_RANGE);
-  return Math.max(1, range.minutes);
+  return range.minutes;
 }
 
 // Shared by both the admin header and the public dashboard's equivalent bar
@@ -421,7 +425,7 @@ function resolveCollisions(draggedId, positions) {
 function renderServiceCard(s, opts = {}, pos, positions) {
   const svc = s.service;
   const card = el("div", {
-    class: "card",
+    class: `card${opts.compact ? " card-compact" : ""}`,
     style: `grid-column: ${pos.x} / span ${pos.w}; grid-row: ${pos.y} / span ${pos.h};`,
   });
   card.dataset.serviceId = svc.id;
@@ -902,6 +906,17 @@ async function loadDashboard(cardOpts = {}) {
 
 // ---------- notifications (shared) ----------
 
+// Empty-state copy for "nothing in warn or fail" - one picked at random on
+// each render rather than a single fixed line, since this is the view
+// you'll load over and over on a healthy system and the same joke gets old
+// fast.
+const NOTHING_TO_REPORT_LINES = [
+  "It's quiet... too quiet...",
+  "Nothing to see here!",
+  "Clean bill of health.",
+  "I forgot to code this bit... Just kidding! There's no notifications.",
+];
+
 // "Notifications" here means "checks currently in warn/fail" (see
 // queries.get_active_issues) - not models.Notification, which is a
 // separate, narrower feed the arr_health check type populates from each
@@ -920,7 +935,8 @@ async function loadNotifications() {
   if (!list) return;
   list.innerHTML = "";
   if (items.length === 0) {
-    list.appendChild(el("div", { class: "empty-state", text: "Nothing in warn or fail right now \u{1F389}" }));
+    const line = NOTHING_TO_REPORT_LINES[Math.floor(Math.random() * NOTHING_TO_REPORT_LINES.length)];
+    list.appendChild(el("div", { class: "empty-state", text: line }));
     return;
   }
   for (const n of items) {
