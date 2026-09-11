@@ -9,12 +9,12 @@ from fastapi.templating import Jinja2Templates
 from . import scheduler as scheduler_module
 from .config import settings
 from .database import init_db
-from .routers import checks_bulk, dashboard_layouts, downtime, log_pruning, meta, notification_channels, notifications, plex_auth, services, status
+from .routers import checks_bulk, dashboard_layouts, dashboard_settings, downtime, log_pruning, meta, notification_channels, notifications, plex_auth, services, status
 from .security import require_auth
 from .version import VERSION
 
 logging.basicConfig(level=settings.log_level)
-logger = logging.getLogger("healthchecker")
+logger = logging.getLogger("checkarr")
 
 
 @asynccontextmanager
@@ -38,6 +38,7 @@ app.include_router(meta.router)
 app.include_router(plex_auth.router)
 app.include_router(checks_bulk.router)
 app.include_router(dashboard_layouts.router)
+app.include_router(dashboard_settings.router)
 app.include_router(notification_channels.router)
 app.include_router(downtime.router)
 app.include_router(log_pruning.router)

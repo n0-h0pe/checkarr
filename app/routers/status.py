@@ -16,11 +16,11 @@ def get_status(db: Session = Depends(get_db)):
 
 @router.get("/history", response_model=list[schemas.CheckResultOut])
 def get_history_route(
-    service_id: int = Query(...),
+    service_ids: list[int] = Query([]),
     check_id: int | None = Query(None),
-    hours: int = Query(24, ge=1, le=24 * 30),
+    minutes: int = Query(1440, ge=1, le=10080),
     limit: int = Query(100, ge=1, le=5000),
     before_id: int | None = Query(None),
     db: Session = Depends(get_db),
 ):
-    return get_history(db, service_id, check_id, hours, limit, before_id)
+    return get_history(db, service_ids, check_id, minutes, limit, before_id)

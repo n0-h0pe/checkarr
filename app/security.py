@@ -11,7 +11,7 @@ from fastapi.security import HTTPBasic, HTTPBasicCredentials
 
 from .config import settings
 
-logger = logging.getLogger("healthchecker.security")
+logger = logging.getLogger("checkarr.security")
 
 _fernet: Fernet | None = None
 

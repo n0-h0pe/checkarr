@@ -278,15 +278,16 @@ class DowntimeScheduleGroup(Base):
 
 class LogPruningSettings(Base):
     """Singleton row (exactly one, seeded at startup - see
-    queries.get_or_create_log_pruning_settings) configuring the one daily
-    scheduled job (see log_pruning.py, scheduler.schedule_log_pruning) that
-    deletes CheckResult rows older than `retention_days` across every
-    service. `prune_hour`/`prune_minute` are UTC (the frontend converts
-    from/to the browser's local time at the API boundary, same convention as
-    Scheduled Down Time's schedule times). `last_pruned_at` drives
-    log_pruning.catch_up_if_needed - if the configured time already passed
-    since the last prune (e.g. the container was offline at 2am), it prunes
-    immediately at startup instead of waiting up to 24h for the next run."""
+    queries.get_or_create_log_pruning_settings) configuring the recurring
+    housekeeping job (see housekeeping.run_housekeeping, scheduled every 30
+    minutes by scheduler.schedule_housekeeping) that deletes CheckResult
+    ("Log & History") rows older than `retention_days` across every service.
+    No time-of-day setting - it just runs on a fixed interval and deletes
+    whatever currently qualifies. `prune_hour`/`prune_minute` are legacy
+    columns from the old once-daily-at-a-time schedule; left in place
+    (unused) rather than dropped, per this file's migration convention of
+    only ever adding columns. `last_pruned_at` is just an informational
+    "last ran at" readout now."""
 
     __tablename__ = "log_pruning_settings"
 
@@ -295,4 +296,39 @@ class LogPruningSettings(Base):
     prune_hour: Mapped[int] = mapped_column(Integer, default=2)
     prune_minute: Mapped[int] = mapped_column(Integer, default=0)
     last_pruned_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
+
+
+class SelfMonitoringState(Base):
+    """Singleton row tracking Checkarr's own health, checked every
+    housekeeping run (see housekeeping.check_disk_space). `disk_space_tier`
+    is the last tier ('warn'/'fail') an alert was already sent for, or None
+    when free space is currently fine - alerts only fire on a *transition*
+    between tiers, the same "don't re-alert every cycle while it stays bad"
+    rule poller.py already applies to regular checks."""
+
+    __tablename__ = "self_monitoring_state"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    disk_space_tier: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
+
+
+class DashboardSettings(Base):
+    """Singleton row (see queries.get_or_create_dashboard_settings)
+    controlling what the public dashboard port (8090) shows, independent of
+    whatever layout the admin app currently has active/is editing.
+    `public_layout_id` is a loose reference (no FK constraint, same style as
+    DashboardLayout.card_service_ids' loose id lists) to a DashboardLayout -
+    falls back to the default "All Services" layout if unset or if that
+    layout was since deleted. `public_compact` hides each card's individual
+    check rows on the public dashboard only, leaving just the status badge
+    and uptime history - the admin app always shows full detail regardless
+    of this flag."""
+
+    __tablename__ = "dashboard_settings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    public_layout_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    public_compact: Mapped[bool] = mapped_column(Boolean, default=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)

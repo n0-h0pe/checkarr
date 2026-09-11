@@ -65,14 +65,18 @@ function saveUptimeRange(value) {
 
 state.uptimeRange = loadUptimeRange();
 
-// The /api/history `hours` query param the current uptime range maps to -
+// The /api/history `minutes` query param the current uptime range maps to -
 // shared by the dashboard's uptime strip and the History tab, which both
 // read off the one top-bar dropdown now (see initUptimeRangeSelect below).
-// Backend requires >=1 (`ge=1`), so "just the last poll" (0 minutes) still
-// has to ask for *something* - 1 hour is the smallest meaningful window.
-function uptimeRangeHours() {
+// Carries the picker's own minutes straight through - no more rounding up
+// to whole hours, which used to collapse every sub-hour option (last poll,
+// 1/3/5/10/15/30 min, 1 hour) into one identical "last hour" request.
+// "Just the last poll" (0 minutes) never reaches this - the uptime strip
+// special-cases it before ever calling this (see loadUptimeStrip above),
+// and it's the History tab's own minimum service to floor it if needed.
+function uptimeRangeMinutes() {
   const range = UPTIME_RANGES.find((r) => r.value === state.uptimeRange) || UPTIME_RANGES.find((r) => r.value === DEFAULT_UPTIME_RANGE);
-  return Math.min(720, Math.max(1, Math.ceil(range.minutes / 60)));
+  return Math.max(1, range.minutes);
 }
 
 // Shared by both the admin header and the public dashboard's equivalent bar
@@ -457,25 +461,30 @@ function renderServiceCard(s, opts = {}, pos, positions) {
   const strip = el("div", { class: "uptime-strip", id: `strip-${svc.id}` });
   body.appendChild(strip);
 
-  const checksBox = el("div", { class: "card-checks" });
-  for (const r of s.latest_results) {
-    checksBox.appendChild(
-      el("div", { class: "check-row" }, [
-        el("div", { class: "name" }, [
-          el("span", { class: `dot ${r.status}` }),
-          el("span", { class: "label", text: r.check_name }),
-        ]),
-        el("div", { class: "msg", title: r.message }, [
-          el("span", { class: "msg-full", text: r.message }),
-          el("span", { class: "msg-short", text: shortCheckSummary(r.check_type, r.status, r.message) }),
-        ]),
-      ])
-    );
+  // Compact mode (public dashboard only, Settings > Dashboard Settings) -
+  // status badge, address/last-checked line, and uptime history all stay;
+  // just the per-check breakdown is skipped.
+  if (!opts.compact) {
+    const checksBox = el("div", { class: "card-checks" });
+    for (const r of s.latest_results) {
+      checksBox.appendChild(
+        el("div", { class: "check-row" }, [
+          el("div", { class: "name" }, [
+            el("span", { class: `dot ${r.status}` }),
+            el("span", { class: "label", text: r.check_name }),
+          ]),
+          el("div", { class: "msg", title: r.message }, [
+            el("span", { class: "msg-full", text: r.message }),
+            el("span", { class: "msg-short", text: shortCheckSummary(r.check_type, r.status, r.message) }),
+          ]),
+        ])
+      );
+    }
+    if (s.latest_results.length === 0) {
+      checksBox.appendChild(el("div", { class: "check-row" }, [el("span", { class: "text-dim", text: "No results yet" })]));
+    }
+    body.appendChild(checksBox);
   }
-  if (s.latest_results.length === 0) {
-    checksBox.appendChild(el("div", { class: "check-row" }, [el("span", { class: "text-dim", text: "No results yet" })]));
-  }
-  body.appendChild(checksBox);
   card.appendChild(body);
 
   if (opts.editable) {
@@ -760,7 +769,7 @@ async function loadUptimeStrip(serviceId) {
 
   let rows;
   try {
-    rows = await api(`/api/history?service_id=${serviceId}&hours=${uptimeRangeHours()}&limit=2000`);
+    rows = await api(`/api/history?service_ids=${serviceId}&minutes=${uptimeRangeMinutes()}&limit=2000`);
   } catch (_) {
     return;
   }
@@ -862,38 +871,37 @@ async function loadDashboard(cardOpts = {}) {
 
 // ---------- notifications (shared) ----------
 
+// "Notifications" here means "checks currently in warn/fail" (see
+// queries.get_active_issues) - not models.Notification, which is a
+// separate, narrower feed the arr_health check type populates from each
+// arr's own health API for its own alert dispatch. A whole service being
+// unreachable shows up here (its checks fail) even though it can never
+// produce an arr_health notification of its own.
 async function loadNotifications() {
-  const showResolvedBox = $("#show-resolved");
-  const activeOnly = showResolvedBox ? !showResolvedBox.checked : true;
   let items;
   try {
-    items = await api(`/api/notifications?active_only=${activeOnly}`);
+    items = await api("/api/notifications");
   } catch (e) {
     toast("Failed to load notifications: " + e.message, true);
     return;
   }
-  const statuses = await ensureStatuses();
-  const svcById = new Map(statuses.map((s) => [s.service.id, s.service]));
   const list = $("#notifications-list");
   if (!list) return;
   list.innerHTML = "";
   if (items.length === 0) {
-    list.appendChild(el("div", { class: "empty-state", text: "No notifications \u{1F389}" }));
+    list.appendChild(el("div", { class: "empty-state", text: "Nothing in warn or fail right now \u{1F389}" }));
     return;
   }
   for (const n of items) {
-    const svc = svcById.get(n.service_id);
     const row = el("div", { class: "notif-row" }, [
       el("div", { class: "top" }, [
-        el("span", { class: `badge ${n.severity}`, text: n.severity }),
-        el("span", { class: "service-name", text: svc ? svc.name : `Service #${n.service_id}` }),
-        n.resolved ? el("span", { class: "badge ok", text: "resolved" }) : null,
+        typeIcon(n.service_type),
+        el("span", { class: `badge ${n.status}`, text: n.status }),
+        el("span", { class: "service-name", text: n.service_name }),
+        el("span", { class: "text-dim", text: n.check_name }),
       ]),
       el("div", { class: "msg", text: n.message }),
-      el("div", { class: "meta" }, [
-        `first seen ${fmtTime(n.first_seen)} · last seen ${fmtTime(n.last_seen)}`,
-        n.wiki_url ? el("span", {}, [" · ", el("a", { href: n.wiki_url, target: "_blank", rel: "noopener", text: "more info" })]) : null,
-      ]),
+      el("div", { class: "meta", text: `last checked ${relTime(n.timestamp)}` }),
     ]);
     list.appendChild(row);
   }
@@ -905,9 +913,13 @@ async function loadNotifications() {
 // set (kept lean out of the box) but is one toggle away. `value` is the
 // plain-text form used both for the table cell fallback and CSV export;
 // `renderCell`, where present, overrides just the table's DOM rendering
-// (a colored badge for Status) without affecting the CSV value.
+// (a colored badge for Status) without affecting the CSV value. `nowrap`
+// exempts a column from the ellipsis-truncation every other column gets -
+// only Time uses it, so it's never forced onto two lines (see
+// renderHistoryHeader/historyRowElement and the .col-nowrap CSS rule).
 const HISTORY_COLUMNS = {
-  time: { label: "Time", value: (r) => fmtTime(r.timestamp) },
+  time: { label: "Time", value: (r) => fmtTime(r.timestamp), nowrap: true },
+  service: { label: "Service", value: (r) => serviceNameById(r.service_id) },
   check: { label: "Check", value: (r) => r.check_name },
   type: { label: "Type", value: (r) => r.check_type },
   status: {
@@ -918,8 +930,17 @@ const HISTORY_COLUMNS = {
   response: { label: "Response", value: (r) => (r.response_time_ms ? `${Math.round(r.response_time_ms)} ms` : "-") },
   message: { label: "Message", value: (r) => r.message },
 };
-const DEFAULT_HISTORY_COLUMNS = ["time", "check", "status", "response", "message"];
+const DEFAULT_HISTORY_COLUMNS = ["time", "service", "check", "status", "response", "message"];
 const HISTORY_PAGE_SIZE = 100;
+
+// CheckResultOut only ever carries a service_id, not a name - the History
+// tab already has every service's name in hand from ensureStatuses (it's
+// what the services filter modal itself is built from), so there's no need
+// for the backend to repeat it on every single row.
+function serviceNameById(serviceId) {
+  const s = state.statuses.find((s) => s.service.id === serviceId);
+  return s ? s.service.name : `Service #${serviceId}`;
+}
 
 function loadHistoryColumns() {
   const raw = getCookie("hc_history_columns");
@@ -931,17 +952,92 @@ function saveHistoryColumns() {
 }
 state.historyColumns = loadHistoryColumns();
 
+function loadHistoryColumnWidths() {
+  const raw = getCookie("hc_history_column_widths");
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch (_) {
+    return {};
+  }
+}
+function saveHistoryColumnWidths() {
+  setCookie("hc_history_column_widths", JSON.stringify(state.historyColumnWidths), 365);
+}
+state.historyColumnWidths = loadHistoryColumnWidths();
+
+// Which services' history currently shows - defaults to none every load
+// (not persisted), so the table stays empty (and fast - nothing is
+// fetched) until the user actually picks at least one.
+state.historySelectedServiceIds = [];
+
 function historyTable() {
   const body = $("#history-body");
   return body ? body.closest("table") : null;
+}
+
+// A <colgroup> gives each column an actual bounded width to truncate
+// against (table-layout:fixed alone isn't enough without one) and is what
+// column resizing below actually adjusts.
+function renderHistoryColgroup() {
+  const table = historyTable();
+  if (!table) return;
+  let colgroup = table.querySelector("colgroup");
+  if (!colgroup) {
+    colgroup = el("colgroup");
+    table.insertBefore(colgroup, table.firstChild);
+  }
+  colgroup.innerHTML = "";
+  for (const key of state.historyColumns) {
+    const width = state.historyColumnWidths[key];
+    colgroup.appendChild(el("col", width ? { style: `width:${width}px` } : {}));
+  }
 }
 
 function renderHistoryHeader() {
   const table = historyTable();
   const thead = table && table.querySelector("thead");
   if (!thead) return;
+  renderHistoryColgroup();
   thead.innerHTML = "";
-  thead.appendChild(el("tr", {}, state.historyColumns.map((key) => el("th", { text: HISTORY_COLUMNS[key].label }))));
+  thead.appendChild(
+    el(
+      "tr",
+      {},
+      state.historyColumns.map((key, i) => {
+        const col = HISTORY_COLUMNS[key];
+        const th = el("th", { class: col.nowrap ? "col-nowrap" : "" }, col.label);
+        // No handle after the last column - nothing to its right to resize against.
+        if (i < state.historyColumns.length - 1) {
+          const handle = el("div", { class: "col-resize-handle" });
+          attachColumnResizeHandle(handle, key);
+          th.appendChild(handle);
+        }
+        return th;
+      })
+    )
+  );
+}
+
+function attachColumnResizeHandle(handle, key) {
+  handle.addEventListener("pointerdown", (e) => {
+    e.preventDefault();
+    const th = handle.parentElement;
+    const startWidth = th.getBoundingClientRect().width;
+    const startX = e.clientX;
+    const onMove = (ev) => {
+      state.historyColumnWidths[key] = Math.max(50, Math.round(startWidth + (ev.clientX - startX)));
+      renderHistoryColgroup();
+    };
+    const onUp = () => {
+      document.removeEventListener("pointermove", onMove);
+      document.removeEventListener("pointerup", onUp);
+      saveHistoryColumnWidths();
+    };
+    document.addEventListener("pointermove", onMove);
+    document.addEventListener("pointerup", onUp);
+  });
 }
 
 function historyRowElement(r) {
@@ -950,7 +1046,11 @@ function historyRowElement(r) {
     {},
     state.historyColumns.map((key) => {
       const col = HISTORY_COLUMNS[key];
-      return el("td", { "data-label": col.label }, col.renderCell ? col.renderCell(r) : col.value(r));
+      return el(
+        "td",
+        { "data-label": col.label, class: col.nowrap ? "col-nowrap" : "" },
+        col.renderCell ? col.renderCell(r) : col.value(r)
+      );
     })
   );
 }
@@ -967,26 +1067,29 @@ function ensureHistoryObserver() {
   );
 }
 
-// Resets to page 1 - called on service/range change and whenever the
-// column set changes (simplest way to keep already-rendered rows in sync
-// with a new column list, and cheap enough at this page size to just do).
+function historyServiceIdsQuery() {
+  return state.historySelectedServiceIds.map((id) => `service_ids=${id}`).join("&");
+}
+
+// Resets to page 1 - called on service-selection/range change and whenever
+// the column set changes (simplest way to keep already-rendered rows in
+// sync with a new column list, and cheap enough at this page size to just
+// do).
 async function loadHistoryTab() {
-  const select = $("#history-service");
-  if (!select) return;
-  if (select.options.length === 0) {
-    const statuses = await ensureStatuses();
-    for (const s of statuses) {
-      select.appendChild(el("option", { value: s.service.id, text: s.service.name }));
-    }
-    if (!select.value && statuses.length) select.value = statuses[0].service.id;
-  }
+  updateHistoryServicesButton();
   renderHistoryHeader();
   state.historyBeforeId = null;
   state.historyExhausted = false;
   state.historyLoading = false;
   const body = $("#history-body");
+  if (!body) return;
   body.innerHTML = "";
-  if (!select.value) return;
+  if (state.historySelectedServiceIds.length === 0) {
+    body.appendChild(
+      el("tr", {}, el("td", { colspan: String(Math.max(1, state.historyColumns.length)), class: "empty-state", text: "Pick at least one service above" }))
+    );
+    return;
+  }
   await loadMoreHistoryRows();
 }
 
@@ -999,15 +1102,14 @@ async function loadHistoryTab() {
 // doesn't matter which - loads more automatically.
 async function loadMoreHistoryRows() {
   if (state.historyLoading || state.historyExhausted) return;
-  const select = $("#history-service");
-  if (!select || !select.value) return;
+  if (state.historySelectedServiceIds.length === 0) return;
   state.historyLoading = true;
 
   let rows;
   try {
     const cursor = state.historyBeforeId != null ? `&before_id=${state.historyBeforeId}` : "";
     rows = await api(
-      `/api/history?service_id=${select.value}&hours=${uptimeRangeHours()}&limit=${HISTORY_PAGE_SIZE}${cursor}`
+      `/api/history?${historyServiceIdsQuery()}&minutes=${uptimeRangeMinutes()}&limit=${HISTORY_PAGE_SIZE}${cursor}`
     );
   } catch (e) {
     toast("Failed to load history: " + e.message, true);
@@ -1041,6 +1143,49 @@ async function loadMoreHistoryRows() {
     historyObserver.observe(sentinel);
   }
   state.historyLoading = false;
+}
+
+// ---------- history: service filter ----------
+
+function historyServicesButtonLabel() {
+  const n = state.historySelectedServiceIds.length;
+  return n === 0 ? "Services" : `Services (${n})`;
+}
+
+function updateHistoryServicesButton() {
+  const btn = $("#history-services-btn");
+  if (btn) btn.textContent = historyServicesButtonLabel();
+}
+
+function setHistorySelectedServices(ids) {
+  state.historySelectedServiceIds = ids.slice();
+  updateHistoryServicesButton();
+}
+
+async function openHistoryServicesModal() {
+  const statuses = await ensureStatuses();
+  const list = $("#history-services-list");
+  if (!list) return;
+  list.innerHTML = "";
+  const selected = new Set(state.historySelectedServiceIds);
+  for (const s of statuses) {
+    const checkbox = el("input", { type: "checkbox" });
+    checkbox.checked = selected.has(s.service.id);
+    checkbox.addEventListener("change", () => {
+      if (checkbox.checked) selected.add(s.service.id);
+      else selected.delete(s.service.id);
+      setHistorySelectedServices([...selected]);
+      loadHistoryTab();
+    });
+    list.appendChild(el("label", { class: "column-row" }, [checkbox, el("span", { text: s.service.name })]));
+  }
+  const modal = $("#history-services-modal");
+  if (modal) modal.classList.remove("hidden");
+}
+
+function closeHistoryServicesModal() {
+  const modal = $("#history-services-modal");
+  if (modal) modal.classList.add("hidden");
 }
 
 // ---------- history: column customization ----------
@@ -1097,8 +1242,7 @@ function csvEscape(value) {
 }
 
 async function exportHistoryCsv() {
-  const select = $("#history-service");
-  if (!select || !select.value) return;
+  if (state.historySelectedServiceIds.length === 0) return;
   const btn = $("#history-export-btn");
   const originalLabel = btn ? btn.textContent : "";
   if (btn) {
@@ -1117,7 +1261,7 @@ async function exportHistoryCsv() {
     for (let page = 0; page < MAX_PAGES; page++) {
       const cursor = beforeId != null ? `&before_id=${beforeId}` : "";
       const rows = await api(
-        `/api/history?service_id=${select.value}&hours=${uptimeRangeHours()}&limit=${EXPORT_PAGE_SIZE}${cursor}`
+        `/api/history?${historyServiceIdsQuery()}&minutes=${uptimeRangeMinutes()}&limit=${EXPORT_PAGE_SIZE}${cursor}`
       );
       allRows.push(...rows);
       if (rows.length < EXPORT_PAGE_SIZE) break;
@@ -1138,9 +1282,12 @@ async function exportHistoryCsv() {
 
   const blob = new Blob([lines.join("\r\n")], { type: "text/csv;charset=utf-8;" });
   const url = URL.createObjectURL(blob);
-  const serviceName = (select.options[select.selectedIndex]?.text || "history").replace(/[^\w-]+/g, "_");
+  const label =
+    state.historySelectedServiceIds.length === 1
+      ? serviceNameById(state.historySelectedServiceIds[0]).replace(/[^\w-]+/g, "_")
+      : `${state.historySelectedServiceIds.length}_services`;
   const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
-  const link = el("a", { href: url, download: `checkarr-history-${serviceName}-${stamp}.csv` });
+  const link = el("a", { href: url, download: `checkarr-history-${label}-${stamp}.csv` });
   document.body.appendChild(link);
   link.click();
   link.remove();

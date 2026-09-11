@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 
 import httpx
 
-from .alerting import dispatch_alert
+from .alerting import queue_alert
 from .checks.base import STATUS_FAIL, STATUS_WARN, NotificationItem
 from .checks.runner import ALWAYS_BOTH_TARGETS_TYPES, SERVICE_SCOPED_TYPES, run_check
 from .config import settings
@@ -18,7 +18,7 @@ from .models import CheckDefinition, CheckResult, Notification, Service
 # alerted on.
 _NOTIFICATION_SEVERITY_TIER = {"warning": "warn", "error": "fail"}
 
-logger = logging.getLogger("healthchecker.poller")
+logger = logging.getLogger("checkarr.poller")
 
 
 def _fingerprint(item: NotificationItem) -> str:
@@ -213,9 +213,10 @@ async def poll_service(service_id: int) -> None:
             # way, so the dashboard and Notifications tab are unaffected.
             if is_suppressed(db, service.id, tier, now):
                 continue
-            # Fire-and-forget: dispatch_alert opens its own DB session and
-            # does blocking network I/O per channel, off the event loop -
-            # never blocks or fails the poll loop itself.
-            asyncio.create_task(asyncio.to_thread(dispatch_alert, tier, subject, body))
+            # Fire-and-forget: queue_alert holds this for a 10s coalescing
+            # window (see alerting.py) before it and anything else that
+            # fires in that window are sent as one combined alert - never
+            # blocks or fails the poll loop itself.
+            asyncio.create_task(queue_alert(tier, subject, body))
     finally:
         db.close()

@@ -5,7 +5,7 @@ from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
 from .config import settings
 
-logger = logging.getLogger("healthchecker.database")
+logger = logging.getLogger("checkarr.database")
 
 engine = create_engine(
     settings.database_url,
@@ -25,12 +25,19 @@ def init_db() -> None:
     _run_migrations()
     _migrate_dashboard_layout_cards()
 
-    from .queries import get_or_create_all_services_group, get_or_create_log_pruning_settings
+    from .queries import (
+        get_or_create_all_services_group,
+        get_or_create_dashboard_settings,
+        get_or_create_log_pruning_settings,
+        get_or_create_self_monitoring_state,
+    )
 
     db = SessionLocal()
     try:
         get_or_create_all_services_group(db)
         get_or_create_log_pruning_settings(db)
+        get_or_create_dashboard_settings(db)
+        get_or_create_self_monitoring_state(db)
     finally:
         db.close()
 

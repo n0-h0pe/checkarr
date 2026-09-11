@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 
 from . import schemas
 from .database import get_db
-from .queries import get_history, get_notifications, get_or_create_active_layout, get_service_statuses
+from .queries import get_active_issues, get_history, get_or_create_dashboard_settings, get_public_layout, get_service_statuses
 from .routers.meta import get_meta
 from .version import VERSION
 
@@ -29,24 +29,19 @@ def status(db: Session = Depends(get_db)):
 
 @public_app.get("/api/history", response_model=list[schemas.CheckResultOut])
 def history(
-    service_id: int = Query(...),
+    service_ids: list[int] = Query([]),
     check_id: int | None = Query(None),
-    hours: int = Query(24, ge=1, le=24 * 30),
+    minutes: int = Query(1440, ge=1, le=10080),
     limit: int = Query(100, ge=1, le=5000),
     before_id: int | None = Query(None),
     db: Session = Depends(get_db),
 ):
-    return get_history(db, service_id, check_id, hours, limit, before_id)
+    return get_history(db, service_ids, check_id, minutes, limit, before_id)
 
 
-@public_app.get("/api/notifications", response_model=list[schemas.NotificationOut])
-def notifications(
-    active_only: bool = Query(True),
-    service_id: int | None = Query(None),
-    limit: int = Query(200, ge=1, le=2000),
-    db: Session = Depends(get_db),
-):
-    return get_notifications(db, active_only, service_id, limit)
+@public_app.get("/api/notifications", response_model=list[schemas.ActiveIssueOut])
+def notifications(db: Session = Depends(get_db)):
+    return get_active_issues(db)
 
 
 @public_app.get("/api/meta")
@@ -56,7 +51,14 @@ def meta():
 
 @public_app.get("/api/dashboard-layouts/active", response_model=schemas.DashboardLayoutOut)
 def active_layout(db: Session = Depends(get_db)):
-    return get_or_create_active_layout(db)
+    return get_public_layout(db)
+
+
+@public_app.get("/api/dashboard-settings", response_model=schemas.DashboardSettingsOut)
+def dashboard_settings_route(db: Session = Depends(get_db)):
+    """Read-only mirror of the admin app's Dashboard Settings, just enough
+    (public_compact) for the public dashboard to know how to render itself."""
+    return get_or_create_dashboard_settings(db)
 
 
 @public_app.get("/", response_class=HTMLResponse)

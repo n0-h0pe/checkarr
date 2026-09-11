@@ -23,20 +23,31 @@
       <div class="panel-header">
         <h2>Check history</h2>
         <div style="display:flex; gap:8px; flex-wrap:wrap;">
-          <select id="history-service"></select>
+          <button type="button" class="small" id="history-services-btn">Services</button>
           <div class="uptime-range-control"><select id="uptime-range-select" title="History range"></select></div>
           <button type="button" class="small" id="history-columns-btn">Columns</button>
           <button type="button" class="small" id="history-export-btn">Export CSV</button>
         </div>
       </div>
       <div style="overflow-x:auto;">
-        <table>
+        <table class="history-table">
           <thead></thead>
           <tbody id="history-body"></tbody>
         </table>
       </div>
     </div>
   </main>
+
+  <div class="modal-backdrop hidden" id="history-services-modal">
+    <div class="modal">
+      <h3>Services</h3>
+      <div class="hint" style="margin-bottom:10px;">Nothing selected shows nothing - pick at least one.</div>
+      <div id="history-services-list"></div>
+      <div class="modal-actions">
+        <button type="button" class="primary" id="history-services-done">Done</button>
+      </div>
+    </div>
+  </div>
 
   <div class="modal-backdrop hidden" id="columns-modal">
     <div class="modal">
@@ -52,11 +63,8 @@
   <main>
     <div class="panel">
       <div class="panel-header">
-        <h2>Consolidated notifications</h2>
-        <label class="field checkbox" style="margin:0">
-          <input type="checkbox" id="show-resolved">
-          <span>Show resolved</span>
-        </label>
+        <h2>Notifications</h2>
+        <span class="text-dim">Checks currently in warn or fail</span>
       </div>
       <div id="notifications-list"></div>
     </div>

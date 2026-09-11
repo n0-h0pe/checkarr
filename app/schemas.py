@@ -167,6 +167,22 @@ class NotificationOut(BaseModel):
     resolved_at: datetime | None
 
 
+class ActiveIssueOut(BaseModel):
+    """One check currently sitting in warn/fail - what the Notifications tab
+    actually shows now (see queries.get_active_issues). Not tied to
+    models.Notification - that table is still populated separately by the
+    arr_health check type for its own richer wiki-linked alerts."""
+
+    service_id: int
+    service_name: str
+    service_type: str
+    check_name: str
+    check_type: str
+    status: str
+    message: str
+    timestamp: datetime
+
+
 class ServiceStatusOut(BaseModel):
     service: ServiceOut
     overall_status: str
@@ -376,17 +392,26 @@ class DowntimeScheduleOut(DowntimeScheduleBase):
 class LogPruningSettingsOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     retention_days: int
-    prune_hour: int
-    prune_minute: int
     last_pruned_at: datetime | None
     updated_at: datetime
 
 
 class LogPruningSettingsUpdate(BaseModel):
     retention_days: int | None = Field(default=None, ge=1, le=3650)
-    prune_hour: int | None = Field(default=None, ge=0, le=23)
-    prune_minute: int | None = Field(default=None, ge=0, le=59)
 
 
 class PruneNowResult(BaseModel):
     deleted: int
+
+
+class DashboardSettingsOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    public_layout_id: int | None
+    public_compact: bool
+    updated_at: datetime
+
+
+class DashboardSettingsUpdate(BaseModel):
+    public_layout_id: int | None = None
+    clear_public_layout: bool = False
+    public_compact: bool | None = None
