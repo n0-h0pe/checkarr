@@ -11,6 +11,7 @@ from .config import settings
 from .database import init_db
 from .routers import checks_bulk, dashboard_layouts, downtime, log_pruning, meta, notification_channels, notifications, plex_auth, services, status
 from .security import require_auth
+from .version import VERSION
 
 logging.basicConfig(level=settings.log_level)
 logger = logging.getLogger("healthchecker")
@@ -44,7 +45,7 @@ app.include_router(log_pruning.router)
 
 @app.get("/", response_class=HTMLResponse, dependencies=[Depends(require_auth)])
 def index(request: Request):
-    return templates.TemplateResponse(request, "index.html")
+    return templates.TemplateResponse(request, "index.html", {"version": VERSION})
 
 
 @app.get("/healthz")

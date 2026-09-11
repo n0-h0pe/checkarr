@@ -19,11 +19,25 @@ from .version import VERSION
 # reverse proxy is guaranteed to forward untouched, since it's a standard
 # header where X-Emby-Authorization is not always allow-listed by a
 # proxy config someone copied from an older guide).
-_CLIENT_AUTH_VALUE = f'MediaBrowser Client="Checkarr", Device="Checkarr", DeviceId="checkarr-healthcheck", Version="{VERSION}"'
+_CLIENT_AUTH_FIELDS = f'Client="Checkarr", Device="Checkarr", DeviceId="checkarr-healthcheck", Version="{VERSION}"'
 JELLYFIN_AUTH_HEADERS = {
-    "X-Emby-Authorization": _CLIENT_AUTH_VALUE,
-    "Authorization": _CLIENT_AUTH_VALUE,
+    "X-Emby-Authorization": f"MediaBrowser {_CLIENT_AUTH_FIELDS}",
+    "Authorization": f"MediaBrowser {_CLIENT_AUTH_FIELDS}",
 }
+
+
+def jellyfin_auth_headers(token: str | None = None) -> dict[str, str]:
+    """Same client-identification headers as JELLYFIN_AUTH_HEADERS, plus the
+    given access token/API key. The token is embedded directly in the
+    MediaBrowser auth string (Jellyfin's documented, preferred way to carry
+    it) *and* sent as the legacy X-Emby-Token header - some admin-gated
+    endpoints (e.g. /Library/VirtualFolders) have been observed rejecting a
+    token presented only via X-Emby-Token with a 401 even though it's valid,
+    while accepting the same token embedded in Authorization."""
+    if not token:
+        return dict(JELLYFIN_AUTH_HEADERS)
+    value = f'MediaBrowser {_CLIENT_AUTH_FIELDS}, Token="{token}"'
+    return {"X-Emby-Authorization": value, "Authorization": value, "X-Emby-Token": token}
 
 
 class JellyfinAdminAuthError(Exception):

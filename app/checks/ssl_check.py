@@ -31,8 +31,9 @@ async def check_ssl_certificate(base_url: str | None, config: dict) -> CheckOutc
     """Validates the actual TLS certificate for an https:// address -
     trusted chain, hostname match, not expired/expiring soon. Auto-generated
     for every https:// address a service has (see _maybe_add_ssl_check in
-    routers/services.py); harmless to run against a non-https target, it
-    just reports not applicable."""
+    routers/services.py); poller.py only ever schedules this against https
+    targets, so the "not applicable" branch below is just a defensive
+    fallback, not something normally hit."""
     if not base_url or not base_url.lower().startswith("https://"):
         return CheckOutcome(STATUS_OK, "Not applicable - address is not HTTPS")
 

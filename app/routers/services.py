@@ -63,11 +63,12 @@ def _maybe_add_ssl_check(service: models.Service, db: Session) -> None:
     """Auto-generates the dedicated SSL validity check the first time a
     service gets an https:// address, rather than requiring the user to add
     it by hand - mirrors how default_checks_for_service_type seeds other
-    builtins. Only adds one (it runs against whichever target(s) are https,
-    see ALWAYS_BOTH_TARGETS_TYPES in checks/runner.py) and never removes it,
-    so switching an address away from https just leaves it reporting "not
-    applicable" instead of silently deleting a check the user may have
-    customized (interval, alert level)."""
+    builtins. Only adds one (it runs against whichever target(s) are https -
+    never a plain http:// one, see poller.py's target selection for
+    ssl_certificate) and never removes it, so switching every address away
+    from https just leaves it not polled (last result stays put) instead of
+    silently deleting a check the user may have customized (interval, alert
+    level)."""
     has_https = any(u and u.startswith("https://") for u in (service.local_url, service.remote_url))
     if not has_https:
         return
