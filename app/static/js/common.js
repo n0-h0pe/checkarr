@@ -829,6 +829,12 @@ async function loadDashboard(cardOpts = {}) {
   if (!grid) return;
   grid.innerHTML = "";
 
+  // Compact is a property of the layout itself (DashboardLayout.is_compact,
+  // toggled from the "Compact view" button in the top bar), not a
+  // per-viewer display option - so admin and public both render a compact
+  // layout the same way, wherever it's shown.
+  const opts = { ...cardOpts, compact: !!(layout && layout.is_compact) };
+
   const visible = layoutVisibleStatuses(statuses, layout);
 
   if (visible.length === 0) {
@@ -854,7 +860,7 @@ async function loadDashboard(cardOpts = {}) {
 
   const positions = computeCardLayout(visible);
   for (const s of visible) {
-    grid.appendChild(renderServiceCard(s, cardOpts, positions.get(s.service.id), positions));
+    grid.appendChild(renderServiceCard(s, opts, positions.get(s.service.id), positions));
   }
   for (const s of visible) {
     loadUptimeStrip(s.service.id);

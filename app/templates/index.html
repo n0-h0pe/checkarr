@@ -13,6 +13,7 @@
       <div class="layout-controls">
         <select id="layout-select" title="Dashboard layout"></select>
         <button type="button" class="small" id="layout-edit-btn" title="Drag to move or resize dashboard cards">Edit layout</button>
+        <button type="button" class="small" id="layout-compact-btn" title="Hide individual checks on this layout, show only status and history">Compact view</button>
         <button type="button" class="small" id="layout-new-btn" title="Save current card sizes as a new layout">+ New</button>
         <button type="button" class="small" id="layout-rename-btn" title="Rename this layout">Rename</button>
         <button type="button" class="small danger" id="layout-delete-btn" title="Delete this layout">Delete</button>
@@ -173,12 +174,12 @@
             <h2>Dashboard Settings</h2>
           </div>
           <form id="dashboard-settings-form">
+            <div class="field checkbox">
+              <label><input type="checkbox" id="dashboard-settings-require-compact"> Restrict to compact layouts <span class="hint">(only layouts with Compact view on, from the Dashboard tab, can be picked below)</span></label>
+            </div>
             <div class="field">
               <label>Public dashboard layout <span class="hint">(what shows on port 8090)</span></label>
               <select id="dashboard-settings-layout" style="max-width:280px;"></select>
-            </div>
-            <div class="field checkbox">
-              <label><input type="checkbox" id="dashboard-settings-compact"> Compact dashboard (hide individual checks, show only service status and history)</label>
             </div>
             <div class="modal-actions" style="justify-content:flex-start;">
               <button type="submit" class="primary">Save</button>

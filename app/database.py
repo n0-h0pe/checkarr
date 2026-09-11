@@ -117,10 +117,24 @@ def _run_migrations() -> None:
             conn.exec_driver_sql("ALTER TABLE dashboard_layouts ADD COLUMN card_service_ids TEXT")
         if "is_default" not in layout_cols:
             conn.exec_driver_sql("ALTER TABLE dashboard_layouts ADD COLUMN is_default BOOLEAN DEFAULT 0")
+        if "is_compact" not in layout_cols:
+            conn.exec_driver_sql("ALTER TABLE dashboard_layouts ADD COLUMN is_compact BOOLEAN DEFAULT 0")
 
         channel_cols = _table_columns(conn, "notification_channels")
         if "secret_env_var" not in channel_cols:
             conn.exec_driver_sql("ALTER TABLE notification_channels ADD COLUMN secret_env_var VARCHAR(255)")
+
+        # dashboard_settings is guaranteed to exist by create_all() above by
+        # the time this runs. An install that already ran an earlier build
+        # of it briefly had `public_compact` (a flat force-compact flag)
+        # instead of today's `public_require_compact` (a restriction on
+        # which layouts can be pinned - compactness now lives on the layout
+        # itself, see DashboardLayout.is_compact above). The old column, if
+        # present, is simply left in place unused, same as every other
+        # renamed/retired column in this function.
+        settings_cols = _table_columns(conn, "dashboard_settings")
+        if "public_require_compact" not in settings_cols:
+            conn.exec_driver_sql("ALTER TABLE dashboard_settings ADD COLUMN public_require_compact BOOLEAN DEFAULT 0")
 
 
 def _migrate_dashboard_layout_cards() -> None:

@@ -68,6 +68,32 @@ async function loadDashboardAdmin() {
   });
   loadLayoutList();
   renderAddCardControl();
+  updateCompactBtn();
+}
+
+// Compact is saved on the layout itself (DashboardLayout.is_compact), not a
+// separate display toggle - so switching layouts also switches whether this
+// button reads as active, and a layout toggled compact here renders compact
+// on the public dashboard too if it's the one pinned there (see Dashboard
+// Settings).
+function updateCompactBtn() {
+  const btn = $("#layout-compact-btn");
+  if (!btn || !state.activeLayout) return;
+  btn.classList.toggle("primary", !!state.activeLayout.is_compact);
+}
+
+async function toggleLayoutCompact() {
+  if (!state.activeLayout) return;
+  try {
+    state.activeLayout = await api(`/api/dashboard-layouts/${state.activeLayout.id}`, {
+      method: "PUT",
+      body: JSON.stringify({ is_compact: !state.activeLayout.is_compact }),
+    });
+  } catch (e) {
+    toast("Could not change compact view: " + e.message, true);
+    return;
+  }
+  loadDashboardAdmin();
 }
 
 // Drag-to-move/resize only work while this is on - browsing the dashboard
@@ -131,9 +157,10 @@ async function loadLayoutList() {
   const select = $("#layout-select");
   select.innerHTML = "";
   for (const l of layouts) {
-    select.appendChild(
-      el("option", { value: l.id, text: l.is_default ? `${l.name} 🔒` : l.name, selected: l.is_active ? "selected" : null })
-    );
+    let text = l.name;
+    if (l.is_compact) text += " (compact)";
+    if (l.is_default) text += " 🔒";
+    select.appendChild(el("option", { value: l.id, text, selected: l.is_active ? "selected" : null }));
   }
   const deleteBtn = $("#layout-delete-btn");
   if (deleteBtn) {
@@ -225,10 +252,11 @@ async function newLayoutFromCurrent() {
   const cardServiceIds = isDefaultLayoutActive() || !state.activeLayout
     ? state.statuses.map((s) => s.service.id)
     : state.activeLayout.card_service_ids;
+  const isCompact = state.activeLayout ? !!state.activeLayout.is_compact : false;
   try {
     state.activeLayout = await api("/api/dashboard-layouts", {
       method: "POST",
-      body: JSON.stringify({ name, sizes, columns, card_service_ids: cardServiceIds }),
+      body: JSON.stringify({ name, sizes, columns, card_service_ids: cardServiceIds, is_compact: isCompact }),
     });
   } catch (e) {
     toast("Could not create layout: " + e.message, true);
@@ -1680,6 +1708,29 @@ async function submitPruningForm(ev) {
 
 // ---------- settings: dashboard settings ----------
 
+// Compactness lives on the layout itself now (DashboardLayout.is_compact,
+// toggled from the Dashboard tab's "Compact view" button) - "Restrict to
+// compact layouts" here only narrows which layouts this dropdown offers,
+// it doesn't force compact rendering on its own. Layouts are fetched once
+// per tab visit and re-filtered client-side as the checkbox is toggled,
+// no need to re-fetch for that.
+let dashboardSettingsLayouts = [];
+let dashboardSettingsPublicLayoutId = null;
+
+function renderDashboardSettingsLayoutSelect() {
+  const select = $("#dashboard-settings-layout");
+  const requireCompact = $("#dashboard-settings-require-compact").checked;
+  const options = requireCompact ? dashboardSettingsLayouts.filter((l) => l.is_compact) : dashboardSettingsLayouts;
+  select.innerHTML = "";
+  for (const l of options) {
+    let text = l.name;
+    if (l.is_compact) text += " (compact)";
+    if (l.is_default) text += " (default)";
+    select.appendChild(el("option", { value: l.id, text, selected: l.id === dashboardSettingsPublicLayoutId ? "selected" : null }));
+  }
+  if (!options.some((l) => l.id === dashboardSettingsPublicLayoutId)) select.value = "";
+}
+
 async function loadDashboardSettings() {
   let layouts, s;
   try {
@@ -1688,15 +1739,10 @@ async function loadDashboardSettings() {
     toast("Failed to load dashboard settings: " + e.message, true);
     return;
   }
-  const select = $("#dashboard-settings-layout");
-  select.innerHTML = "";
-  for (const l of layouts) {
-    select.appendChild(
-      el("option", { value: l.id, text: l.is_default ? `${l.name} (default)` : l.name, selected: l.id === s.public_layout_id ? "selected" : null })
-    );
-  }
-  if (s.public_layout_id == null) select.value = "";
-  $("#dashboard-settings-compact").checked = s.public_compact;
+  dashboardSettingsLayouts = layouts;
+  dashboardSettingsPublicLayoutId = s.public_layout_id;
+  $("#dashboard-settings-require-compact").checked = s.public_require_compact;
+  renderDashboardSettingsLayoutSelect();
 }
 
 async function submitDashboardSettingsForm(ev) {
@@ -1707,7 +1753,8 @@ async function submitDashboardSettingsForm(ev) {
       method: "PUT",
       body: JSON.stringify({
         public_layout_id: layoutId ? parseInt(layoutId, 10) : null,
-        public_compact: $("#dashboard-settings-compact").checked,
+        clear_public_layout: !layoutId,
+        public_require_compact: $("#dashboard-settings-require-compact").checked,
       }),
     });
     toast("Dashboard settings saved");
@@ -1764,6 +1811,7 @@ async function init() {
   $("#discard-changes-btn-bottom").addEventListener("click", discardChanges);
   $("#layout-select").addEventListener("change", onLayoutSelectChange);
   $("#layout-edit-btn").addEventListener("click", toggleLayoutEditMode);
+  $("#layout-compact-btn").addEventListener("click", toggleLayoutCompact);
   $("#layout-new-btn").addEventListener("click", newLayoutFromCurrent);
   $("#layout-rename-btn").addEventListener("click", renameActiveLayout);
   $("#layout-delete-btn").addEventListener("click", deleteActiveLayout);
@@ -1784,6 +1832,7 @@ async function init() {
   $("#pruning-form").addEventListener("submit", submitPruningForm);
   $("#prune-now-btn").addEventListener("click", pruneNow);
   $("#dashboard-settings-form").addEventListener("submit", submitDashboardSettingsForm);
+  $("#dashboard-settings-require-compact").addEventListener("change", renderDashboardSettingsLayoutSelect);
 
   let resizeTimer = null;
   let lastViewportWidth = window.innerWidth;

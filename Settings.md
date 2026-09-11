@@ -39,21 +39,40 @@ New saves the current arrangement as a new layout, Rename and Delete act on
 the one currently selected (Delete is disabled for All Services), and
 picking any layout from the dropdown switches the dashboard to it instantly.
 
+### Compact view
+
+Next to Edit layout, **Compact view** toggles whether the currently
+selected layout hides each card's individual check rows, leaving just the
+service name, status badge, and uptime history strip. This is a property of
+the layout itself, not a personal display preference: it's saved on that
+layout immediately (no separate Save step) and applies wherever that layout
+is shown, including the public dashboard if it's the one pinned there (see
+Dashboard Settings below). Switching to a different layout can switch
+Compact view's own state too, since it reflects whatever that layout was
+last saved as. A layout marked this way shows "(compact)" after its name in
+the layout dropdown.
+
+Useful for a wall-mounted display or anywhere you want "is it up" at a
+glance rather than a full breakdown, on a dedicated compact layout, or just
+to declutter your own view of a layout you normally use in full.
+
 ### Dashboard Settings (what the public port shows)
 
-Settings > Dashboard Settings controls what the public dashboard port
-(8090) shows, independent of whatever you currently have active in the
-admin app. Two options:
+Settings > Dashboard Settings controls which layout the public dashboard
+port (8090) shows, independent of whatever you currently have active in the
+admin app:
 
 - **Public dashboard layout**: pick any saved layout. The public port shows
   this one regardless of what admin is actively editing or has switched to,
   so you can rearrange your own view without disturbing what a housemate or
-  a status page pointed at port 8090 sees.
-- **Compact dashboard**: hides each card's individual check rows on the
-  public dashboard only, leaving just the service name, status badge, and
-  uptime history strip. Useful for a wall-mounted display or anywhere you
-  want "is it up" at a glance rather than a full breakdown. The admin app
-  always shows full detail regardless of this setting.
+  a status page pointed at port 8090 sees. Whether it renders compact
+  follows that layout's own Compact view setting, described above, there's
+  nothing separate to configure here for that.
+- **Restrict to compact layouts**: when checked, the dropdown above only
+  offers layouts that currently have Compact view on, guaranteeing the
+  public dashboard can never accidentally get pointed at a full, detailed
+  layout. Leave it unchecked to pick from every saved layout, compact or
+  not.
 
 ## History
 

@@ -249,6 +249,7 @@ class DashboardLayoutOut(BaseModel):
     card_service_ids: list[int]
     is_default: bool
     is_active: bool
+    is_compact: bool
     created_at: datetime
     updated_at: datetime
 
@@ -259,6 +260,7 @@ class DashboardLayoutSummary(BaseModel):
     name: str
     is_active: bool
     is_default: bool
+    is_compact: bool
 
 
 class DashboardLayoutCreate(BaseModel):
@@ -268,6 +270,7 @@ class DashboardLayoutCreate(BaseModel):
     # None -> server defaults to every currently-configured service, a
     # sensible starting point for a brand new layout the user then trims.
     card_service_ids: list[int] | None = None
+    is_compact: bool = False
 
 
 class DashboardLayoutUpdate(BaseModel):
@@ -275,6 +278,7 @@ class DashboardLayoutUpdate(BaseModel):
     sizes: dict[str, Any] | None = None
     columns: int | None = None
     card_service_ids: list[int] | None = None
+    is_compact: bool | None = None
 
 
 class NotificationChannelBase(BaseModel):
@@ -407,11 +411,11 @@ class PruneNowResult(BaseModel):
 class DashboardSettingsOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     public_layout_id: int | None
-    public_compact: bool
+    public_require_compact: bool
     updated_at: datetime
 
 
 class DashboardSettingsUpdate(BaseModel):
     public_layout_id: int | None = None
     clear_public_layout: bool = False
-    public_compact: bool | None = None
+    public_require_compact: bool | None = None
