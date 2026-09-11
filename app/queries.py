@@ -6,12 +6,11 @@ mutating or secret-bearing).
 
 from datetime import datetime, timedelta, timezone
 
-from fastapi import HTTPException
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from . import models, schemas
-from .checks.base import worst_status
+from .checks.base import STATUS_FAIL, STATUS_WARN, worst_status
 from .serializers import serialize_service
 
 
@@ -67,7 +66,12 @@ def get_service_statuses(db: Session) -> list[schemas.ServiceStatusOut]:
 
 
 def get_history(
-    db: Session, service_id: int, check_id: int | None, hours: int, limit: int, before_id: int | None = None
+    db: Session,
+    service_ids: list[int],
+    check_id: int | None,
+    minutes: int,
+    limit: int,
+    before_id: int | None = None,
 ) -> list[models.CheckResult]:
     """Ordered by id, not timestamp - id is assigned in insertion order,
     which for a given service's rows already matches timestamp order (ties
@@ -76,14 +80,22 @@ def get_history(
     isn't unique - a stable cursor for `before_id` to page against. Offset
     pagination would shift under new rows the poller keeps inserting while
     the user scrolls; a page always "older than id X" can't.
-    """
-    service = db.get(models.Service, service_id)
-    if not service:
-        raise HTTPException(404, "Service not found")
 
-    cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
+    `minutes`, not `hours` - the top-bar range picker offers sub-hour
+    options (1/3/5/10/15/30 minutes) that an hours-only cutoff couldn't
+    represent at all, silently collapsing every one of them to the same
+    "last hour" query.
+
+    `service_ids` empty means "nothing selected" (the History tab's
+    checkbox filter defaults to none checked) - returns no rows without
+    even querying, rather than every service's history.
+    """
+    if not service_ids:
+        return []
+
+    cutoff = datetime.now(timezone.utc) - timedelta(minutes=minutes)
     q = db.query(models.CheckResult).filter(
-        models.CheckResult.service_id == service_id, models.CheckResult.timestamp >= cutoff
+        models.CheckResult.service_id.in_(service_ids), models.CheckResult.timestamp >= cutoff
     )
     if check_id is not None:
         q = q.filter(models.CheckResult.check_id == check_id)
@@ -101,6 +113,45 @@ def get_notifications(
     if service_id is not None:
         q = q.filter(models.Notification.service_id == service_id)
     return q.order_by(models.Notification.last_seen.desc()).limit(limit).all()
+
+
+def get_active_issues(db: Session) -> list[schemas.ActiveIssueOut]:
+    """Every check currently sitting in warn/fail, across every service -
+    what the Notifications tab actually renders (see routers/notifications.py).
+    Same "latest result(s) per check" shape as get_service_statuses above,
+    just flattened across services and filtered to warn/fail instead of
+    folded into one worst-status-per-service badge."""
+    out: list[schemas.ActiveIssueOut] = []
+    for service in db.query(models.Service).filter_by(enabled=True).order_by(models.Service.name).all():
+        for check in service.checks:
+            latest_ts = (
+                db.query(func.max(models.CheckResult.timestamp))
+                .filter(models.CheckResult.check_id == check.id)
+                .scalar()
+            )
+            if latest_ts is None:
+                continue
+            results = (
+                db.query(models.CheckResult)
+                .filter(models.CheckResult.check_id == check.id, models.CheckResult.timestamp == latest_ts)
+                .all()
+            )
+            for r in results:
+                if r.status not in (STATUS_WARN, STATUS_FAIL):
+                    continue
+                out.append(
+                    schemas.ActiveIssueOut(
+                        service_id=service.id,
+                        service_name=service.name,
+                        service_type=service.type,
+                        check_name=r.check_name,
+                        check_type=r.check_type,
+                        status=r.status,
+                        message=r.message,
+                        timestamp=r.timestamp,
+                    )
+                )
+    return out
 
 
 def get_service_names(db: Session) -> list[tuple[int, str]]:
@@ -152,9 +203,9 @@ def get_or_create_all_services_group(db: Session) -> models.ServiceGroup:
 
 
 def get_or_create_log_pruning_settings(db: Session) -> models.LogPruningSettings:
-    """Seeds the singleton Log Pruning settings row (defaults: 7 days
-    retention, 2am UTC) - idempotent, called once at startup (see
-    database.init_db) and by log_pruning.py/routers/log_pruning.py
+    """Seeds the singleton Log & History Pruning settings row (default: 7
+    days retention) - idempotent, called once at startup (see
+    database.init_db) and by housekeeping.py/routers/log_pruning.py
     whenever the current settings are needed."""
     settings_row = db.query(models.LogPruningSettings).first()
     if settings_row:
@@ -164,3 +215,46 @@ def get_or_create_log_pruning_settings(db: Session) -> models.LogPruningSettings
     db.commit()
     db.refresh(settings_row)
     return settings_row
+
+
+def get_or_create_dashboard_settings(db: Session) -> models.DashboardSettings:
+    """Seeds the singleton Dashboard Settings row (defaults: no pinned
+    public layout - falls back to the default "All Services" layout - and
+    compact mode off) - idempotent, called once at startup (see
+    database.init_db) and by routers/dashboard_settings.py/public.py
+    whenever the current settings are needed."""
+    settings_row = db.query(models.DashboardSettings).first()
+    if settings_row:
+        return settings_row
+    settings_row = models.DashboardSettings()
+    db.add(settings_row)
+    db.commit()
+    db.refresh(settings_row)
+    return settings_row
+
+
+def get_or_create_self_monitoring_state(db: Session) -> models.SelfMonitoringState:
+    """Seeds the singleton row housekeeping.check_disk_space uses to only
+    alert on a tier transition rather than every 30-minute cycle."""
+    state = db.query(models.SelfMonitoringState).first()
+    if state:
+        return state
+    state = models.SelfMonitoringState()
+    db.add(state)
+    db.commit()
+    db.refresh(state)
+    return state
+
+
+def get_public_layout(db: Session) -> models.DashboardLayout:
+    """What the public dashboard port (8090) actually renders - independent
+    of whatever layout the admin app currently has active (see
+    get_or_create_active_layout above). Falls back to the default "All
+    Services" layout if no public layout is pinned, or if the one that was
+    pinned has since been deleted."""
+    settings_row = get_or_create_dashboard_settings(db)
+    if settings_row.public_layout_id is not None:
+        layout = db.get(models.DashboardLayout, settings_row.public_layout_id)
+        if layout:
+            return layout
+    return get_or_create_active_layout(db)

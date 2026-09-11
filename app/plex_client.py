@@ -8,7 +8,7 @@ from .version import VERSION
 
 # Fixed, non-secret identifier for this app as a Plex "client" - stable
 # across installs so a signed-in PIN authorization always maps back to us.
-PLEX_CLIENT_IDENTIFIER = "healthchecker-4b3f2a6e-9c1d-4a7b-9e2f-2f6a8c1d5e7b"
+PLEX_CLIENT_IDENTIFIER = "checkarr-4b3f2a6e-9c1d-4a7b-9e2f-2f6a8c1d5e7b"
 PLEX_PRODUCT = "Checkarr"
 
 

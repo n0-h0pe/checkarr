@@ -331,6 +331,24 @@ table { width: 100%; border-collapse: collapse; }
 table th, table td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--border); font-size: 13px; }
 table th { color: var(--text-dim); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .03em; }
 
+/* The History table only - table-layout:fixed plus its own <colgroup>
+   (rendered in common.js's renderHistoryColgroup) gives every column a real
+   bounded width to truncate against, so a long Message ellipsizes instead
+   of wrapping the row onto two lines. .col-nowrap (Time only) opts out of
+   that truncation - see HISTORY_COLUMNS' `nowrap` flag - so it never wraps
+   either, it just isn't forced to fit a fixed width. */
+.history-table { table-layout: fixed; }
+.history-table th, .history-table td {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; position: relative;
+}
+.history-table th.col-nowrap, .history-table td.col-nowrap { text-overflow: clip; }
+.history-table th { padding-right: 16px; }
+.col-resize-handle {
+  position: absolute; top: 0; right: 0; bottom: 0; width: 8px;
+  cursor: col-resize; touch-action: none;
+}
+.col-resize-handle:hover, .col-resize-handle:active { background: var(--accent); opacity: .4; }
+
 /* Settings' own inner tab strip (Services / Push Notifications) - same
    show/hide pattern as the top-level nav.tabs/.tab-panel, just smaller and
    unboxed since it's nested inside a tab that's already active. */
@@ -636,6 +654,13 @@ table th { color: var(--text-dim); font-weight: 600; font-size: 12px; text-trans
     letter-spacing: .03em;
     flex-shrink: 0;
   }
+
+  /* The History table's desktop-only column truncation/fixed-width rules
+     (.history-table above) would otherwise clip every stacked value here -
+     nothing is side-by-side on mobile, so there's nothing to truncate
+     against. Back to the plain stacked behavior every other table gets. */
+  .history-table { table-layout: auto; }
+  .history-table th, .history-table td { overflow: visible; text-overflow: clip; white-space: normal; }
 
   /* Same stacking approach for the checks-grid (a CSS Grid, not a <table> -
      see its own comment above for why), plus a rule between each group of

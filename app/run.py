@@ -12,7 +12,7 @@ import uvicorn
 from .config import settings
 
 logging.basicConfig(level=settings.log_level)
-logger = logging.getLogger("healthchecker.run")
+logger = logging.getLogger("checkarr.run")
 
 
 def _build_server(app, port: int) -> uvicorn.Server:

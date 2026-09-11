@@ -26,6 +26,7 @@ function switchSettingsSubTab(subtab) {
   if (subtab === "channels") loadChannels();
   if (subtab === "downtime") loadServiceGroups().then(loadSchedules);
   if (subtab === "pruning") loadLogPruningSettings();
+  if (subtab === "dashboard-settings") loadDashboardSettings();
 }
 
 function switchTab(tab) {
@@ -61,7 +62,7 @@ async function loadDashboardAdmin() {
     interactive: true,
     editable: layoutEditMode,
     onRunNow: runNow,
-    onHistory: (id) => { switchTab("history"); $("#history-service").value = id; loadHistoryTab(); },
+    onHistory: (id) => { switchTab("history"); setHistorySelectedServices([id]); loadHistoryTab(); },
     onLayoutChange: persistCardLayout,
     onRemoveCard: layoutEditMode && !isDefaultLayoutActive() ? removeCardFromLayout : null,
   });
@@ -1640,41 +1641,10 @@ async function deleteSchedule(s) {
   }
 }
 
-// ---------- settings: log pruning ----------
-
-// prune_hour/prune_minute are stored in UTC (no specific date attached -
-// just a daily time-of-day) - today's date is just a scratch reference to
-// convert through, same local<->UTC approach Scheduled Down Time uses.
-function utcHourMinuteToLocalTimeInput(hour, minute) {
-  const d = new Date();
-  d.setUTCHours(hour, minute, 0, 0);
-  return toLocalTimeInput(d);
-}
-function localTimeInputToUtcHourMinute(timeStr) {
-  const [h, m] = timeStr.split(":").map(Number);
-  const d = new Date();
-  d.setHours(h, m, 0, 0);
-  return { hour: d.getUTCHours(), minute: d.getUTCMinutes() };
-}
+// ---------- settings: log & history pruning ----------
 
 function renderPruneLastRun(lastPrunedAt) {
   $("#prune-last-run").textContent = "Last pruned: " + (lastPrunedAt ? relTime(lastPrunedAt) : "never");
-}
-
-// Reflects the actual schedule (schedule_log_pruning in scheduler.py) back
-// in plain language, since "every N days" - not daily - is easy to miss
-// from the two separate inputs alone.
-function renderPruneScheduleSummary() {
-  const el = $("#prune-schedule-summary");
-  if (!el) return;
-  const days = parseInt($("#prune-retention-days").value, 10);
-  const timeVal = $("#prune-time").value;
-  if (!days || days < 1 || !timeVal) {
-    el.textContent = "";
-    return;
-  }
-  const every = days === 1 ? "every day" : `every ${days} days`;
-  el.textContent = `Runs ${every}, at ${timeVal} - deleting check history older than ${days} day${days === 1 ? "" : "s"}.`;
 }
 
 async function loadLogPruningSettings() {
@@ -1682,36 +1652,65 @@ async function loadLogPruningSettings() {
   try {
     s = await api("/api/log-pruning-settings");
   } catch (e) {
-    toast("Failed to load log pruning settings: " + e.message, true);
+    toast("Failed to load log & history pruning settings: " + e.message, true);
     return;
   }
   $("#prune-retention-days").value = s.retention_days;
-  $("#prune-time").value = utcHourMinuteToLocalTimeInput(s.prune_hour, s.prune_minute);
   renderPruneLastRun(s.last_pruned_at);
-  renderPruneScheduleSummary();
 }
 
 async function submitPruningForm(ev) {
   ev.preventDefault();
   const retentionDays = parseInt($("#prune-retention-days").value, 10);
-  const timeVal = $("#prune-time").value;
   if (!retentionDays || retentionDays < 1) {
     toast("Enter a valid number of days", true);
     return;
   }
-  if (!timeVal) {
-    toast("Set a prune time", true);
-    return;
-  }
-  const { hour, minute } = localTimeInputToUtcHourMinute(timeVal);
   try {
     const s = await api("/api/log-pruning-settings", {
       method: "PUT",
-      body: JSON.stringify({ retention_days: retentionDays, prune_hour: hour, prune_minute: minute }),
+      body: JSON.stringify({ retention_days: retentionDays }),
     });
-    toast("Log pruning settings saved");
+    toast("Log & History Pruning settings saved");
     renderPruneLastRun(s.last_pruned_at);
-    renderPruneScheduleSummary();
+  } catch (e) {
+    toast("Save failed: " + e.message, true);
+  }
+}
+
+// ---------- settings: dashboard settings ----------
+
+async function loadDashboardSettings() {
+  let layouts, s;
+  try {
+    [layouts, s] = await Promise.all([api("/api/dashboard-layouts"), api("/api/dashboard-settings")]);
+  } catch (e) {
+    toast("Failed to load dashboard settings: " + e.message, true);
+    return;
+  }
+  const select = $("#dashboard-settings-layout");
+  select.innerHTML = "";
+  for (const l of layouts) {
+    select.appendChild(
+      el("option", { value: l.id, text: l.is_default ? `${l.name} (default)` : l.name, selected: l.id === s.public_layout_id ? "selected" : null })
+    );
+  }
+  if (s.public_layout_id == null) select.value = "";
+  $("#dashboard-settings-compact").checked = s.public_compact;
+}
+
+async function submitDashboardSettingsForm(ev) {
+  ev.preventDefault();
+  const layoutId = $("#dashboard-settings-layout").value;
+  try {
+    await api("/api/dashboard-settings", {
+      method: "PUT",
+      body: JSON.stringify({
+        public_layout_id: layoutId ? parseInt(layoutId, 10) : null,
+        public_compact: $("#dashboard-settings-compact").checked,
+      }),
+    });
+    toast("Dashboard settings saved");
   } catch (e) {
     toast("Save failed: " + e.message, true);
   }
@@ -1754,8 +1753,8 @@ async function init() {
   initSecretField($("#svc-jellyfin-admin-password"), $("#svc-jellyfin-admin-password-use-env"));
   $("#check-cancel").addEventListener("click", closeCheckModal);
   $("#check-form").addEventListener("submit", submitCheckForm);
-  $("#show-resolved").addEventListener("change", loadNotifications);
-  $("#history-service").addEventListener("change", loadHistoryTab);
+  $("#history-services-btn").addEventListener("click", openHistoryServicesModal);
+  $("#history-services-done").addEventListener("click", closeHistoryServicesModal);
   $("#history-columns-btn").addEventListener("click", openColumnsModal);
   $("#columns-done").addEventListener("click", closeColumnsModal);
   $("#history-export-btn").addEventListener("click", exportHistoryCsv);
@@ -1784,8 +1783,7 @@ async function init() {
   $("#schedule-form").addEventListener("submit", submitScheduleForm);
   $("#pruning-form").addEventListener("submit", submitPruningForm);
   $("#prune-now-btn").addEventListener("click", pruneNow);
-  $("#prune-retention-days").addEventListener("input", renderPruneScheduleSummary);
-  $("#prune-time").addEventListener("input", renderPruneScheduleSummary);
+  $("#dashboard-settings-form").addEventListener("submit", submitDashboardSettingsForm);
 
   let resizeTimer = null;
   let lastViewportWidth = window.innerWidth;

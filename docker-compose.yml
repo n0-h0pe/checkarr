@@ -1,7 +1,7 @@
 services:
-  healthchecker:
+  checkarr:
     build: .
-    container_name: healthchecker
+    container_name: checkarr
     restart: unless-stopped
     ports:
       - "8080:8080"

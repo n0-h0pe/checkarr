@@ -43,11 +43,8 @@
     <section class="tab-panel" id="tab-notifications">
       <div class="panel">
         <div class="panel-header">
-          <h2>Consolidated notifications</h2>
-          <label class="field checkbox" style="margin:0">
-            <input type="checkbox" id="show-resolved">
-            <span>Show resolved</span>
-          </label>
+          <h2>Notifications</h2>
+          <span class="text-dim">Checks currently in warn or fail</span>
         </div>
         <div id="notifications-list"></div>
       </div>
@@ -58,13 +55,13 @@
         <div class="panel-header">
           <h2>Check history</h2>
           <div style="display:flex; gap:8px;">
-            <select id="history-service"></select>
+            <button type="button" class="small" id="history-services-btn">Services</button>
             <button type="button" class="small" id="history-columns-btn">Columns</button>
             <button type="button" class="small" id="history-export-btn">Export CSV</button>
           </div>
         </div>
         <div style="overflow-x:auto;">
-          <table>
+          <table class="history-table">
             <thead></thead>
             <tbody id="history-body"></tbody>
           </table>
@@ -77,7 +74,8 @@
         <button class="sub-tab-btn active" data-subtab="services">Services</button>
         <button class="sub-tab-btn" data-subtab="channels">Push Notifications</button>
         <button class="sub-tab-btn" data-subtab="downtime">Scheduled Down Time</button>
-        <button class="sub-tab-btn" data-subtab="pruning">Log Pruning</button>
+        <button class="sub-tab-btn" data-subtab="pruning">Log &amp; History Pruning</button>
+        <button class="sub-tab-btn" data-subtab="dashboard-settings">Dashboard Settings</button>
       </div>
 
       <div class="subtab-panel active" id="subtab-services">
@@ -149,25 +147,41 @@
       <div class="subtab-panel" id="subtab-pruning">
         <div class="panel">
           <div class="panel-header">
-            <h2>Log Pruning</h2>
+            <h2>Log &amp; History Pruning</h2>
           </div>
           <form id="pruning-form">
             <div class="field">
-              <label>Prune logs after</label>
+              <label>Delete check history after</label>
               <div style="display:flex; align-items:center; gap:8px; max-width:220px;">
                 <input type="number" id="prune-retention-days" min="1" max="3650" required>
                 <span class="text-dim">days</span>
               </div>
             </div>
-            <div class="field">
-              <label>At time <span class="hint">(your local time)</span></label>
-              <input type="time" id="prune-time" style="max-width:200px;">
-            </div>
-            <div class="field text-dim" id="prune-schedule-summary"></div>
+            <div class="field text-dim">Runs automatically every 30 minutes - no time of day to set, it just checks regularly.</div>
             <div class="field text-dim" id="prune-last-run"></div>
             <div class="modal-actions" style="justify-content:flex-start;">
               <button type="submit" class="primary">Save</button>
               <button type="button" id="prune-now-btn">Prune now</button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <div class="subtab-panel" id="subtab-dashboard-settings">
+        <div class="panel">
+          <div class="panel-header">
+            <h2>Dashboard Settings</h2>
+          </div>
+          <form id="dashboard-settings-form">
+            <div class="field">
+              <label>Public dashboard layout <span class="hint">(what shows on port 8090)</span></label>
+              <select id="dashboard-settings-layout" style="max-width:280px;"></select>
+            </div>
+            <div class="field checkbox">
+              <label><input type="checkbox" id="dashboard-settings-compact"> Compact dashboard (hide individual checks, show only service status and history)</label>
+            </div>
+            <div class="modal-actions" style="justify-content:flex-start;">
+              <button type="submit" class="primary">Save</button>
             </div>
           </form>
         </div>
@@ -411,6 +425,17 @@
           <button type="submit" class="primary">Save</button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <div class="modal-backdrop hidden" id="history-services-modal">
+    <div class="modal">
+      <h3>Services</h3>
+      <div class="hint" style="margin-bottom:10px;">Nothing selected shows nothing - pick at least one.</div>
+      <div id="history-services-list"></div>
+      <div class="modal-actions">
+        <button type="button" class="primary" id="history-services-done">Done</button>
+      </div>
     </div>
   </div>
 
