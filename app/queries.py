@@ -108,20 +108,23 @@ def get_service_names(db: Session) -> list[tuple[int, str]]:
     return [(s.id, s.name) for s in db.query(models.Service).order_by(models.Service.name).all()]
 
 
-DEFAULT_LAYOUT_NAME = "Default"
+DEFAULT_LAYOUT_NAME = "All Services"
 
 
 def get_or_create_active_layout(db: Session) -> models.DashboardLayout:
     """Exactly one DashboardLayout is active at any time. Used both by the
     admin app (to know what to render/resize) and, read-only, by the public
-    dashboard (so it mirrors whatever layout is currently selected)."""
+    dashboard (so it mirrors whatever layout is currently selected). The
+    very first layout ever created for an install is seeded as the
+    protected, always-shows-every-service "All Services" layout (is_default)
+    - see DashboardLayout's docstring."""
     layout = db.query(models.DashboardLayout).filter_by(is_active=True).first()
     if layout:
         return layout
 
     layout = db.query(models.DashboardLayout).order_by(models.DashboardLayout.id).first()
     if not layout:
-        layout = models.DashboardLayout(name=DEFAULT_LAYOUT_NAME, sizes={}, is_active=True)
+        layout = models.DashboardLayout(name=DEFAULT_LAYOUT_NAME, sizes={}, is_active=True, is_default=True, card_service_ids=[])
         db.add(layout)
     else:
         layout.is_active = True

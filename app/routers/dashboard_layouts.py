@@ -28,7 +28,16 @@ def get_active_layout(db: Session = Depends(get_db)):
 @router.post("", response_model=schemas.DashboardLayoutOut, status_code=201)
 def create_layout(payload: schemas.DashboardLayoutCreate, db: Session = Depends(get_db)):
     db.query(models.DashboardLayout).filter_by(is_active=True).update({"is_active": False})
-    layout = models.DashboardLayout(name=payload.name, sizes=payload.sizes, columns=payload.columns, is_active=True)
+    card_service_ids = payload.card_service_ids
+    if card_service_ids is None:
+        card_service_ids = [sid for (sid,) in db.query(models.Service.id).all()]
+    layout = models.DashboardLayout(
+        name=payload.name,
+        sizes=payload.sizes,
+        columns=payload.columns,
+        card_service_ids=card_service_ids,
+        is_active=True,
+    )
     db.add(layout)
     db.commit()
     db.refresh(layout)
@@ -48,12 +57,16 @@ def update_layout(layout_id: int, payload: schemas.DashboardLayoutUpdate, db: Se
     layout = db.get(models.DashboardLayout, layout_id)
     if not layout:
         raise HTTPException(404, "Layout not found")
+    if payload.card_service_ids is not None and layout.is_default:
+        raise HTTPException(400, "The All Services layout always shows every service and can't be trimmed")
     if payload.name is not None:
         layout.name = payload.name
     if payload.sizes is not None:
         layout.sizes = payload.sizes
     if payload.columns is not None:
         layout.columns = payload.columns
+    if payload.card_service_ids is not None:
+        layout.card_service_ids = payload.card_service_ids
     db.commit()
     db.refresh(layout)
     return layout
@@ -76,6 +89,8 @@ def delete_layout(layout_id: int, db: Session = Depends(get_db)):
     layout = db.get(models.DashboardLayout, layout_id)
     if not layout:
         raise HTTPException(404, "Layout not found")
+    if layout.is_default:
+        raise HTTPException(400, "The All Services layout can't be deleted")
     was_active = layout.is_active
     db.delete(layout)
     db.commit()

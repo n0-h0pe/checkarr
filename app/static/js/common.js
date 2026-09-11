@@ -359,19 +359,41 @@ function renderServiceCard(s, opts = {}, pos, positions) {
   });
   card.dataset.serviceId = svc.id;
 
+  const headerRight = el("div", { class: "card-header-right" });
+  if (opts.interactive) {
+    headerRight.appendChild(
+      el("div", { class: "card-header-actions" }, [
+        el("button", { class: "small", onclick: () => opts.onRunNow && opts.onRunNow(svc.id) }, "Run now"),
+        el("button", { class: "small", onclick: () => opts.onHistory && opts.onHistory(svc.id) }, "History"),
+      ])
+    );
+  }
+  if (opts.editable && opts.onRemoveCard) {
+    headerRight.appendChild(
+      el("button", {
+        class: "small danger card-remove-btn",
+        title: "Remove from this layout",
+        onclick: (e) => { e.stopPropagation(); opts.onRemoveCard(svc.id); },
+        text: "✕",
+      })
+    );
+  }
+  headerRight.appendChild(
+    el("span", { class: `badge ${s.overall_status}` }, [
+      el("span", { class: `dot ${s.overall_status}` }),
+      statusLabel(s.overall_status),
+    ])
+  );
   card.appendChild(
     el("div", { class: "card-header" }, [
       el("div", { class: "title" }, [typeIcon(svc.type), el("span", { text: svc.name })]),
-      el("span", { class: `badge ${s.overall_status}` }, [
-        el("span", { class: `dot ${s.overall_status}` }),
-        statusLabel(s.overall_status),
-      ]),
+      headerRight,
     ])
   );
-  // Everything between the header and the action buttons lives in its own
-  // wrapper - it's what the mobile reorder overlay below covers/blurs, and
-  // keeping it separate from card-actions means Run now/History stay
-  // usable even while that overlay is up.
+  // Everything between the header and the check list lives in its own
+  // wrapper - it's what the mobile reorder overlay below covers/blurs;
+  // Run now/History/remove live in the header instead, so they stay usable
+  // even while that overlay is up.
   const body = el("div", { class: "card-body" });
   const addressLabel = [svc.local_url, svc.remote_url].filter(Boolean).join(" / ");
   body.appendChild(
@@ -405,14 +427,6 @@ function renderServiceCard(s, opts = {}, pos, positions) {
   body.appendChild(checksBox);
   card.appendChild(body);
 
-  if (opts.interactive) {
-    card.appendChild(
-      el("div", { class: "card-actions" }, [
-        el("button", { class: "small", onclick: () => opts.onRunNow && opts.onRunNow(svc.id) }, "Run now"),
-        el("button", { class: "small", onclick: () => opts.onHistory && opts.onHistory(svc.id) }, "History"),
-      ])
-    );
-  }
   if (opts.editable) {
     card.classList.add("card-editable");
     if (isMobileViewport()) {
@@ -736,19 +750,38 @@ async function loadUptimeStrip(serviceId) {
   }
 }
 
+// The is_default "All Services" layout always shows every service,
+// regardless of what's stored in card_service_ids (never trimmed - see
+// DashboardLayout's docstring); any other layout shows only the services
+// explicitly in its card_service_ids. Falls back to "show everything" when
+// there's no layout data at all yet (a transient fetch failure shouldn't
+// blank the dashboard).
+function layoutVisibleStatuses(statuses, layout) {
+  if (!layout || layout.is_default) return statuses;
+  const visible = new Set(layout.card_service_ids || []);
+  return statuses.filter((s) => visible.has(s.service.id));
+}
+
 async function loadDashboard(cardOpts = {}) {
   const statuses = await ensureStatuses(true);
-  await ensureActiveLayout();
+  const layout = await ensureActiveLayout();
   const grid = $("#dashboard-grid");
   if (!grid) return;
   grid.innerHTML = "";
 
-  if (statuses.length === 0) {
-    grid.appendChild(el("div", { class: "empty-state", text: "No services configured yet." }));
+  const visible = layoutVisibleStatuses(statuses, layout);
+
+  if (visible.length === 0) {
+    grid.appendChild(
+      el("div", {
+        class: "empty-state",
+        text: statuses.length === 0 ? "No services configured yet." : "No cards on this layout yet.",
+      })
+    );
   }
 
   const counts = { ok: 0, warn: 0, fail: 0, unknown: 0, disabled: 0 };
-  statuses.forEach((s) => { counts[s.overall_status] = (counts[s.overall_status] || 0) + 1; });
+  visible.forEach((s) => { counts[s.overall_status] = (counts[s.overall_status] || 0) + 1; });
   const pill = $("#summary-pill");
   if (pill) {
     pill.innerHTML = "";
@@ -759,11 +792,11 @@ async function loadDashboard(cardOpts = {}) {
   const refresh = $("#last-refresh");
   if (refresh) refresh.textContent = "Updated " + new Date().toLocaleTimeString();
 
-  const positions = computeCardLayout(statuses);
-  for (const s of statuses) {
+  const positions = computeCardLayout(visible);
+  for (const s of visible) {
     grid.appendChild(renderServiceCard(s, cardOpts, positions.get(s.service.id), positions));
   }
-  for (const s of statuses) {
+  for (const s of visible) {
     loadUptimeStrip(s.service.id);
   }
 

@@ -135,7 +135,17 @@ class DashboardLayout(Base):
     cards to fit" (a purely visual, unsaved re-flow) apart from "this is a
     brand new layout with no width on record yet" (columns is None).
     Exactly one row has is_active=True at a time - that's what the
-    dashboard (admin and public) renders."""
+    dashboard (admin and public) renders.
+
+    `card_service_ids` is which services' cards actually show on this
+    layout - explicit, not "everything that exists": a newly-created
+    service doesn't silently appear on every hand-curated custom layout,
+    only on the one is_default layout (see below), which is exempt from
+    this list entirely and always shows every service regardless of what's
+    stored here. Exactly one row has is_default=True - the protected
+    "All Services" layout seeded by get_or_create_active_layout, which
+    can't be deleted (see routers/dashboard_layouts.py) and whose card set
+    can't be trimmed, unlike ordinary custom layouts."""
 
     __tablename__ = "dashboard_layouts"
 
@@ -143,6 +153,8 @@ class DashboardLayout(Base):
     name: Mapped[str] = mapped_column(String(120), nullable=False)
     sizes: Mapped[dict] = mapped_column(JSON, default=dict)
     columns: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    card_service_ids: Mapped[list] = mapped_column(JSON, default=list)
+    is_default: Mapped[bool] = mapped_column(Boolean, default=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)

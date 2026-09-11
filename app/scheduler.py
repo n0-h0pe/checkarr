@@ -1,8 +1,7 @@
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 
 from .config import settings
@@ -59,16 +58,28 @@ def reschedule_all() -> None:
         db.close()
 
 
-def schedule_log_pruning(hour: int, minute: int) -> None:
-    """Adds/replaces the one daily job that deletes old CheckResult rows
-    across every service - called at startup with the stored time, and
-    again by the Log Pruning settings PUT route whenever the user changes
-    it, so a new time takes effect immediately without a restart. Always in
-    UTC regardless of the container's own timezone - the frontend already
-    converts the user's local time to UTC hour/minute before saving."""
+def schedule_log_pruning(days: int, hour: int, minute: int) -> None:
+    """Adds/replaces the job that deletes old CheckResult rows across every
+    service, once every `days` days at the given UTC time - not daily
+    regardless of the configured retention (a CronTrigger would fire every
+    day no matter what the user set the day count to). Called at startup
+    with the stored schedule, and again by the Log Pruning settings PUT
+    route whenever the user changes it, so a change takes effect
+    immediately without a restart.
+
+    The next firing is anchored to the next occurrence of the given time
+    from right now, then repeats every `days` days from there - so changing
+    the schedule always lands on the configured time of day, it just resets
+    which day that next falls on. Always in UTC regardless of the
+    container's own timezone - the frontend already converts the user's
+    local time to UTC hour/minute before saving."""
+    now = datetime.now(timezone.utc)
+    start = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+    if start <= now:
+        start += timedelta(days=1)
     scheduler.add_job(
         prune_all_services,
-        trigger=CronTrigger(hour=hour, minute=minute, timezone=timezone.utc),
+        trigger=IntervalTrigger(days=max(1, days), start_date=start, timezone=timezone.utc),
         id=PRUNE_JOB_ID,
         name="Prune old check history",
         replace_existing=True,
@@ -86,7 +97,7 @@ def start() -> None:
     db = SessionLocal()
     try:
         settings_row = get_or_create_log_pruning_settings(db)
-        schedule_log_pruning(settings_row.prune_hour, settings_row.prune_minute)
+        schedule_log_pruning(settings_row.retention_days, settings_row.prune_hour, settings_row.prune_minute)
     finally:
         db.close()
     # After the recurring job is in place, not before - catching up here

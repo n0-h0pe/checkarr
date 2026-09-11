@@ -52,6 +52,10 @@ function updateHeaderControlsVisibility(tab) {
 
 let layoutEditMode = false;
 
+function isDefaultLayoutActive() {
+  return !!(state.activeLayout && state.activeLayout.is_default);
+}
+
 async function loadDashboardAdmin() {
   await loadDashboard({
     interactive: true,
@@ -59,8 +63,10 @@ async function loadDashboardAdmin() {
     onRunNow: runNow,
     onHistory: (id) => { switchTab("history"); $("#history-service").value = id; loadHistoryTab(); },
     onLayoutChange: persistCardLayout,
+    onRemoveCard: layoutEditMode && !isDefaultLayoutActive() ? removeCardFromLayout : null,
   });
   loadLayoutList();
+  renderAddCardControl();
 }
 
 // Drag-to-move/resize only work while this is on - browsing the dashboard
@@ -124,8 +130,74 @@ async function loadLayoutList() {
   const select = $("#layout-select");
   select.innerHTML = "";
   for (const l of layouts) {
-    select.appendChild(el("option", { value: l.id, text: l.name, selected: l.is_active ? "selected" : null }));
+    select.appendChild(
+      el("option", { value: l.id, text: l.is_default ? `${l.name} 🔒` : l.name, selected: l.is_active ? "selected" : null })
+    );
   }
+  const deleteBtn = $("#layout-delete-btn");
+  if (deleteBtn) {
+    const isDefault = isDefaultLayoutActive();
+    deleteBtn.disabled = isDefault;
+    deleteBtn.title = isDefault ? "The All Services layout can't be deleted" : "";
+  }
+}
+
+// The "+ Add card" jump-menu: only meaningful in edit mode, for a custom
+// (non-default) layout that's actually missing at least one service's card
+// - the is_default "All Services" layout always shows everything, nothing
+// to add there.
+function renderAddCardControl() {
+  const wrap = $("#layout-add-card-wrap");
+  const select = $("#layout-add-card-select");
+  if (!wrap || !select) return;
+  const layout = state.activeLayout;
+  if (!layoutEditMode || !layout || layout.is_default) {
+    wrap.hidden = true;
+    return;
+  }
+  const shown = new Set(layout.card_service_ids || []);
+  const hidden = state.statuses.filter((s) => !shown.has(s.service.id));
+  if (hidden.length === 0) {
+    wrap.hidden = true;
+    return;
+  }
+  wrap.hidden = false;
+  select.innerHTML = "";
+  select.appendChild(el("option", { value: "", text: "+ Add card…" }));
+  for (const s of hidden) {
+    select.appendChild(el("option", { value: s.service.id, text: s.service.name }));
+  }
+  select.value = "";
+}
+
+async function removeCardFromLayout(serviceId) {
+  if (!state.activeLayout || state.activeLayout.is_default) return;
+  const cardServiceIds = state.activeLayout.card_service_ids.filter((id) => id !== serviceId);
+  try {
+    state.activeLayout = await api(`/api/dashboard-layouts/${state.activeLayout.id}`, {
+      method: "PUT",
+      body: JSON.stringify({ card_service_ids: cardServiceIds }),
+    });
+  } catch (e) {
+    toast("Could not remove card: " + e.message, true);
+    return;
+  }
+  loadDashboardAdmin();
+}
+
+async function addCardToLayout(serviceId) {
+  if (!state.activeLayout || state.activeLayout.is_default) return;
+  const cardServiceIds = [...state.activeLayout.card_service_ids, serviceId];
+  try {
+    state.activeLayout = await api(`/api/dashboard-layouts/${state.activeLayout.id}`, {
+      method: "PUT",
+      body: JSON.stringify({ card_service_ids: cardServiceIds }),
+    });
+  } catch (e) {
+    toast("Could not add card: " + e.message, true);
+    return;
+  }
+  loadDashboardAdmin();
 }
 
 async function onLayoutSelectChange() {
@@ -145,8 +217,18 @@ async function newLayoutFromCurrent() {
   if (!name) return;
   const sizes = state.activeLayout ? state.activeLayout.sizes : {};
   const columns = state.lastGridColumns;
+  // Starts as a copy of whatever's currently visible (every service, if
+  // duplicating the All Services layout) - a sensible starting point the
+  // user then trims with the remove-card button, rather than an empty
+  // layout with nothing on it.
+  const cardServiceIds = isDefaultLayoutActive() || !state.activeLayout
+    ? state.statuses.map((s) => s.service.id)
+    : state.activeLayout.card_service_ids;
   try {
-    state.activeLayout = await api("/api/dashboard-layouts", { method: "POST", body: JSON.stringify({ name, sizes, columns }) });
+    state.activeLayout = await api("/api/dashboard-layouts", {
+      method: "POST",
+      body: JSON.stringify({ name, sizes, columns, card_service_ids: cardServiceIds }),
+    });
   } catch (e) {
     toast("Could not create layout: " + e.message, true);
     return;
@@ -173,6 +255,10 @@ async function renameActiveLayout() {
 
 async function deleteActiveLayout() {
   if (!state.activeLayout) return;
+  if (state.activeLayout.is_default) {
+    toast("The All Services layout can't be deleted", true);
+    return;
+  }
   if (!confirm(`Delete layout "${state.activeLayout.name}"?`)) return;
   try {
     await api(`/api/dashboard-layouts/${state.activeLayout.id}`, { method: "DELETE" });
@@ -1535,6 +1621,22 @@ function renderPruneLastRun(lastPrunedAt) {
   $("#prune-last-run").textContent = "Last pruned: " + (lastPrunedAt ? relTime(lastPrunedAt) : "never");
 }
 
+// Reflects the actual schedule (schedule_log_pruning in scheduler.py) back
+// in plain language, since "every N days" - not daily - is easy to miss
+// from the two separate inputs alone.
+function renderPruneScheduleSummary() {
+  const el = $("#prune-schedule-summary");
+  if (!el) return;
+  const days = parseInt($("#prune-retention-days").value, 10);
+  const timeVal = $("#prune-time").value;
+  if (!days || days < 1 || !timeVal) {
+    el.textContent = "";
+    return;
+  }
+  const every = days === 1 ? "every day" : `every ${days} days`;
+  el.textContent = `Runs ${every}, at ${timeVal} - deleting check history older than ${days} day${days === 1 ? "" : "s"}.`;
+}
+
 async function loadLogPruningSettings() {
   let s;
   try {
@@ -1546,6 +1648,7 @@ async function loadLogPruningSettings() {
   $("#prune-retention-days").value = s.retention_days;
   $("#prune-time").value = utcHourMinuteToLocalTimeInput(s.prune_hour, s.prune_minute);
   renderPruneLastRun(s.last_pruned_at);
+  renderPruneScheduleSummary();
 }
 
 async function submitPruningForm(ev) {
@@ -1568,6 +1671,7 @@ async function submitPruningForm(ev) {
     });
     toast("Log pruning settings saved");
     renderPruneLastRun(s.last_pruned_at);
+    renderPruneScheduleSummary();
   } catch (e) {
     toast("Save failed: " + e.message, true);
   }
@@ -1622,6 +1726,10 @@ async function init() {
   $("#layout-new-btn").addEventListener("click", newLayoutFromCurrent);
   $("#layout-rename-btn").addEventListener("click", renameActiveLayout);
   $("#layout-delete-btn").addEventListener("click", deleteActiveLayout);
+  $("#layout-add-card-select").addEventListener("change", (e) => {
+    const id = Number(e.target.value);
+    if (id) addCardToLayout(id);
+  });
   $("#add-channel-btn").addEventListener("click", () => openChannelModal());
   $("#channel-cancel").addEventListener("click", closeChannelModal);
   $("#channel-form").addEventListener("submit", submitChannelForm);
@@ -1634,6 +1742,8 @@ async function init() {
   $("#schedule-form").addEventListener("submit", submitScheduleForm);
   $("#pruning-form").addEventListener("submit", submitPruningForm);
   $("#prune-now-btn").addEventListener("click", pruneNow);
+  $("#prune-retention-days").addEventListener("input", renderPruneScheduleSummary);
+  $("#prune-time").addEventListener("input", renderPruneScheduleSummary);
 
   let resizeTimer = null;
   let lastViewportWidth = window.innerWidth;
