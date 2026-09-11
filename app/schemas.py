@@ -18,6 +18,7 @@ SERVICE_TYPES = [
     "rutorrent",
     "overseerr",
     "jellyseerr",
+    "immich",
     "generic",
 ]
 CHECK_TYPES = [
@@ -43,6 +44,9 @@ CHECK_TYPES = [
     "overseerr_status",
     "overseerr_tmdb_status",
     "ssl_certificate",
+    "immich_server_status",
+    "immich_storage",
+    "immich_jobs",
 ]
 
 NOTIFICATION_CHANNEL_TYPES = ["email"]
@@ -374,6 +378,9 @@ class DowntimeScheduleBase(BaseModel):
 
 class DowntimeScheduleCreate(DowntimeScheduleBase):
     group_ids: list[int] = Field(default_factory=list)
+    # Set only at creation, by the "Instantly start SDT" flow - never in
+    # DowntimeScheduleUpdate, see DowntimeSchedule.is_instant's docstring.
+    is_instant: bool = False
 
 
 class DowntimeScheduleUpdate(BaseModel):
@@ -393,6 +400,7 @@ class DowntimeScheduleOut(DowntimeScheduleBase):
     model_config = ConfigDict(from_attributes=True)
     id: int
     group_ids: list[int]
+    is_instant: bool
     created_at: datetime
     updated_at: datetime
 

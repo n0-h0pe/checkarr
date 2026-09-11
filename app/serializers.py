@@ -70,6 +70,7 @@ def serialize_downtime_schedule(schedule: models.DowntimeSchedule) -> schemas.Do
         suppress_fail=schedule.suppress_fail,
         enabled=schedule.enabled,
         group_ids=[g.group_id for g in schedule.groups],
+        is_instant=schedule.is_instant,
         created_at=schedule.created_at,
         updated_at=schedule.updated_at,
     )

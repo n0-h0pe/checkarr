@@ -86,12 +86,32 @@ def get_history(
     represent at all, silently collapsing every one of them to the same
     "last hour" query.
 
+    `minutes == 0` is "Just the last poll" - not a one-minute time window
+    (which would come back empty for any service polled less often than
+    once a minute), but the single most recent row per (service, check)
+    pair among the selected services, i.e. each check's current result.
+
     `service_ids` empty means "nothing selected" (the History tab's
     checkbox filter defaults to none checked) - returns no rows without
     even querying, rather than every service's history.
     """
     if not service_ids:
         return []
+
+    if minutes == 0:
+        latest = db.query(
+            models.CheckResult.service_id,
+            models.CheckResult.check_id,
+            func.max(models.CheckResult.id).label("max_id"),
+        ).filter(models.CheckResult.service_id.in_(service_ids))
+        if check_id is not None:
+            latest = latest.filter(models.CheckResult.check_id == check_id)
+        latest = latest.group_by(models.CheckResult.service_id, models.CheckResult.check_id).subquery()
+
+        q = db.query(models.CheckResult).join(latest, models.CheckResult.id == latest.c.max_id)
+        if before_id is not None:
+            q = q.filter(models.CheckResult.id < before_id)
+        return q.order_by(models.CheckResult.id.desc()).limit(limit).all()
 
     cutoff = datetime.now(timezone.utc) - timedelta(minutes=minutes)
     q = db.query(models.CheckResult).filter(

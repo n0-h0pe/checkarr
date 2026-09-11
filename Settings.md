@@ -88,7 +88,10 @@ The History tab (admin) and page (public) loads incrementally as you
 scroll rather than a single capped fetch, and respects the time range
 picked in the top bar down to the minute, not just the hour, so "Last 5
 minutes" actually shows five minutes of data instead of quietly rounding up
-to an hour.
+to an hour. "Just the last poll" is its own special case rather than a
+1-minute window (which would come back empty for anything polled less
+often than once a minute) - it shows each selected service's most recent
+result per check, exactly what the dashboard cards are currently showing.
 
 Every configured service gets its own pill button in a row above the table.
 Click one to toggle it on or off - nothing is selected by default, so the
@@ -118,6 +121,9 @@ list on the next poll. If a whole service goes offline, every check
 against it shows up here too, even ones that would otherwise report
 through the *arr apps' own health feed, since this reads actual check
 results rather than waiting for a service to tell you about itself.
+
+When there's nothing to show, the empty state picks one of a handful of
+lines at random each time rather than always saying the same thing.
 
 ## Push Notifications
 
@@ -169,6 +175,15 @@ known-noisy windows (an update, a planned reboot) so they don't page you
 the same as a real incident, check results, the Notifications tab, and the
 dashboard are all completely unaffected, only the outbound alert is held
 back. Two sections:
+
+**Instantly start SDT** is a shortcut for right-now suppression, no form to
+fill in: pick a duration (a number plus minutes/hours/days) and it
+immediately suppresses both Warn and Fail alerts for every service. While
+one is running, a banner takes its place above Service Groups showing a
+live countdown, an Extend button (add more time, same duration dialog), and
+a Cancel button to end it early. It doesn't appear in the Schedules list
+below or count against your saved schedules, it's a separate one-off that
+quietly cleans itself up once it ends.
 
 - **Service Groups**: which services a schedule covers. All Services always
   exists and can't be edited or deleted, it covers every service

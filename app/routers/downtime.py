@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
@@ -74,17 +76,47 @@ def delete_service_group(group_id: int, db: Session = Depends(get_db)):
 # ---------- downtime schedules ----------
 
 
+def _as_aware(dt: datetime) -> datetime:
+    """SQLite round-trips DateTime columns as naive; treat naive as UTC -
+    same convention as downtime.py's _as_aware. Needed here because a PUT
+    that only touches one of start_at/end_at (e.g. the Instant SDT "Extend"
+    button, which only sends end_at) leaves the other as the naive value
+    loaded from the DB while the new one comes in aware from the request -
+    comparing the two directly raises TypeError."""
+    return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+
+
 def _apply_schedule_validation(name, recurrence, start_at, end_at, suppress_warn, suppress_fail):
     if recurrence not in schemas.RECURRENCE_TYPES:
         raise HTTPException(400, f"Unknown recurrence '{recurrence}'")
     if not suppress_warn and not suppress_fail:
         raise HTTPException(400, "A schedule must suppress at least Warn or Fail")
-    if end_at <= start_at:
+    if _as_aware(end_at) <= _as_aware(start_at):
         raise HTTPException(400, "End must be after start")
+
+
+def _reap_expired_instant_schedules(db: Session) -> None:
+    """Instant SDT schedules (is_instant=True) are meant to disappear on
+    their own once they end - unlike a user-authored schedule, which is
+    meant to stick around for next time. Rather than a separate background
+    job, just clean up anything past its end_at whenever the list is asked
+    for, which is the only place their absence needs to be visible anyway."""
+    now = datetime.now(timezone.utc)
+    expired = (
+        db.query(models.DowntimeSchedule)
+        .filter(models.DowntimeSchedule.is_instant.is_(True), models.DowntimeSchedule.end_at < now)
+        .all()
+    )
+    if not expired:
+        return
+    for schedule in expired:
+        db.delete(schedule)
+    db.commit()
 
 
 @router.get("/api/downtime-schedules", response_model=list[schemas.DowntimeScheduleOut])
 def list_downtime_schedules(db: Session = Depends(get_db)):
+    _reap_expired_instant_schedules(db)
     schedules = db.query(models.DowntimeSchedule).order_by(models.DowntimeSchedule.name).all()
     return [serialize_downtime_schedule(s) for s in schedules]
 
@@ -100,6 +132,7 @@ def create_downtime_schedule(payload: schemas.DowntimeScheduleCreate, db: Sessio
         suppress_warn=payload.suppress_warn,
         suppress_fail=payload.suppress_fail,
         enabled=payload.enabled,
+        is_instant=payload.is_instant,
     )
     db.add(schedule)
     db.flush()

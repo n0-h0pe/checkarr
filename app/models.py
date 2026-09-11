@@ -259,7 +259,18 @@ class DowntimeSchedule(Base):
     weekly, day-of-month for monthly, month+day for yearly - daily has no
     pattern beyond "every day") while `end_at - start_at` is the window's
     duration, reapplied to each occurrence - see downtime._schedule_active.
-    """
+
+    `is_instant` marks a schedule created via the "Instantly start SDT"
+    button rather than the Add schedule form - always `recurrence="once"`,
+    always covers the default "All Services" group, and is reaped (deleted)
+    once it expires (see routers/downtime.py's list endpoint) rather than
+    sticking around the way a user-authored schedule does. Set only at
+    creation and never changed afterward, same convention as
+    DashboardLayout.is_compact above. Kept separate from the regular
+    Schedules list in the UI - it renders as its own banner instead of a
+    schedule card - but suppression itself (downtime.is_suppressed) treats
+    it exactly like any other enabled schedule, no special-casing needed
+    there."""
 
     __tablename__ = "downtime_schedules"
 
@@ -272,6 +283,7 @@ class DowntimeSchedule(Base):
     suppress_warn: Mapped[bool] = mapped_column(Boolean, default=True)
     suppress_fail: Mapped[bool] = mapped_column(Boolean, default=True)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    is_instant: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
 
