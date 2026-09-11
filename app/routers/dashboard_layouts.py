@@ -68,8 +68,6 @@ def update_layout(layout_id: int, payload: schemas.DashboardLayoutUpdate, db: Se
         layout.columns = payload.columns
     if payload.card_service_ids is not None:
         layout.card_service_ids = payload.card_service_ids
-    if payload.is_compact is not None:
-        layout.is_compact = payload.is_compact
     db.commit()
     db.refresh(layout)
     return layout

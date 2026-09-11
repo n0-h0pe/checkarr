@@ -56,11 +56,11 @@
         <div class="panel-header">
           <h2>Check history</h2>
           <div style="display:flex; gap:8px;">
-            <button type="button" class="small" id="history-services-btn">Services</button>
             <button type="button" class="small" id="history-columns-btn">Columns</button>
             <button type="button" class="small" id="history-export-btn">Export CSV</button>
           </div>
         </div>
+        <div class="history-service-bar" id="history-services-bar"></div>
         <div style="overflow-x:auto;">
           <table class="history-table">
             <thead></thead>
@@ -158,7 +158,7 @@
                 <span class="text-dim">days</span>
               </div>
             </div>
-            <div class="field text-dim">Runs automatically every 30 minutes - no time of day to set, it just checks regularly.</div>
+            <div class="field text-dim">Pruning runs automatically every 30 minutes .</div>
             <div class="field text-dim" id="prune-last-run"></div>
             <div class="modal-actions" style="justify-content:flex-start;">
               <button type="submit" class="primary">Save</button>
@@ -426,17 +426,6 @@
           <button type="submit" class="primary">Save</button>
         </div>
       </form>
-    </div>
-  </div>
-
-  <div class="modal-backdrop hidden" id="history-services-modal">
-    <div class="modal">
-      <h3>Services</h3>
-      <div class="hint" style="margin-bottom:10px;">Nothing selected shows nothing - pick at least one.</div>
-      <div id="history-services-list"></div>
-      <div class="modal-actions">
-        <button type="button" class="primary" id="history-services-done">Done</button>
-      </div>
     </div>
   </div>
 

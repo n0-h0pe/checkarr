@@ -14,6 +14,14 @@ const MIN_CARD_W = 16;
 const MIN_CARD_H = 10;
 const DEFAULT_CARD_W = 16;
 const DEFAULT_CARD_H = 10;
+// Compact cards (icon, title, and status badge on one line, then just the
+// uptime strip on a second - no address/last-checked line, no check list)
+// need far less room than a full card, so they get their own, much smaller
+// floor and starting size.
+const MIN_CARD_W_COMPACT = 8;
+const MIN_CARD_H_COMPACT = 4;
+const DEFAULT_CARD_W_COMPACT = 10;
+const DEFAULT_CARD_H_COMPACT = 5;
 
 function $(sel, root = document) { return root.querySelector(sel); }
 function $all(sel, root = document) { return Array.from(root.querySelectorAll(sel)); }
@@ -308,10 +316,14 @@ function rectsOverlap(a, b) {
 // the exact saved arrangement again, untouched. Editing while reflowed is
 // still allowed - saving from there simply adopts the narrower width as the
 // layout's new reference width, same as editing at any other width would.
-function computeCardLayout(statuses) {
+function computeCardLayout(statuses, compact = false) {
+  const minW = compact ? MIN_CARD_W_COMPACT : MIN_CARD_W;
+  const minH = compact ? MIN_CARD_H_COMPACT : MIN_CARD_H;
+  const defaultW = compact ? DEFAULT_CARD_W_COMPACT : DEFAULT_CARD_W;
+  const defaultH = compact ? DEFAULT_CARD_H_COMPACT : DEFAULT_CARD_H;
   const grid = $("#dashboard-grid");
   const width = (grid && grid.clientWidth) || Math.max(0, window.innerWidth - 48);
-  const totalCols = Math.max(MIN_CARD_W, Math.floor(width / GRID_UNIT));
+  const totalCols = Math.max(minW, Math.floor(width / GRID_UNIT));
   state.lastGridColumns = totalCols;
 
   const layout = state.activeLayout;
@@ -322,19 +334,19 @@ function computeCardLayout(statuses) {
   const entries = statuses.map((s) => {
     const id = s.service.id;
     const saved = sizes[String(id)];
-    // Clamped to totalCols (never below MIN_CARD_W, since totalCols itself
-    // never is) so a card widened on a big desktop window can't render
-    // wider than the actual screen on a narrow one - display-only, like the
-    // reflow above, so the saved width still comes back on a wide-enough
-    // screen untouched.
-    const savedW = saved && Number.isFinite(saved.w) ? Math.max(MIN_CARD_W, saved.w) : DEFAULT_CARD_W;
+    // Clamped to totalCols (never below minW, since totalCols itself never
+    // is) so a card widened on a big desktop window can't render wider than
+    // the actual screen on a narrow one - display-only, like the reflow
+    // above, so the saved width still comes back on a wide-enough screen
+    // untouched.
+    const savedW = saved && Number.isFinite(saved.w) ? Math.max(minW, saved.w) : defaultW;
     // On mobile every card is a full-width single-column list, always -
     // clamping a saved/default width down to totalCols (as below) still
     // leaves a gap for anything narrower than totalCols (a brand new
     // service with no saved size, or a card saved narrower on desktop), so
     // mobile forces w to totalCols outright rather than just capping it.
     const w = isMobileViewport() ? totalCols : Math.min(savedW, totalCols);
-    const h = saved && Number.isFinite(saved.h) ? Math.max(MIN_CARD_H, saved.h) : DEFAULT_CARD_H;
+    const h = saved && Number.isFinite(saved.h) ? Math.max(minH, saved.h) : defaultH;
     const hasPos = saved && Number.isFinite(saved.x) && Number.isFinite(saved.y);
     return {
       id, w, h,
@@ -415,7 +427,10 @@ function renderServiceCard(s, opts = {}, pos, positions) {
   card.dataset.serviceId = svc.id;
 
   const headerRight = el("div", { class: "card-header-right" });
-  if (opts.interactive) {
+  // Compact cards drop Run now/History entirely (not just visually smaller)
+  // so the status badge sits right at the card's top-right corner with
+  // nothing else competing for that row's space.
+  if (opts.interactive && !opts.compact) {
     headerRight.appendChild(
       el("div", { class: "card-header-actions" }, [
         el("button", { class: "small", onclick: () => opts.onRunNow && opts.onRunNow(svc.id) }, "Run now"),
@@ -450,20 +465,22 @@ function renderServiceCard(s, opts = {}, pos, positions) {
   // Run now/History/remove live in the header instead, so they stay usable
   // even while that overlay is up.
   const body = el("div", { class: "card-body" });
-  const addressLabel = [svc.local_url, svc.remote_url].filter(Boolean).join(" / ");
-  body.appendChild(
-    el("div", { class: "card-sub" }, [
-      `${svc.type} · ${addressLabel} · last checked ${relTime(s.last_checked)}`,
-      s.active_notification_count > 0 ? el("span", { style: "color:var(--warn)" }, ` · ${s.active_notification_count} notification(s)`) : null,
-    ])
-  );
+  // Compact cards skip the type/address/last-checked line entirely - just
+  // icon, title, and status badge on the header row, then the uptime strip
+  // below it, nothing else (see also the check list, skipped further down).
+  if (!opts.compact) {
+    const addressLabel = [svc.local_url, svc.remote_url].filter(Boolean).join(" / ");
+    body.appendChild(
+      el("div", { class: "card-sub" }, [
+        `${svc.type} · ${addressLabel} · last checked ${relTime(s.last_checked)}`,
+        s.active_notification_count > 0 ? el("span", { style: "color:var(--warn)" }, ` · ${s.active_notification_count} notification(s)`) : null,
+      ])
+    );
+  }
 
   const strip = el("div", { class: "uptime-strip", id: `strip-${svc.id}` });
   body.appendChild(strip);
 
-  // Compact mode (public dashboard only, Settings > Dashboard Settings) -
-  // status badge, address/last-checked line, and uptime history all stay;
-  // just the per-check breakdown is skipped.
   if (!opts.compact) {
     const checksBox = el("div", { class: "card-checks" });
     for (const r of s.latest_results) {
@@ -491,9 +508,9 @@ function renderServiceCard(s, opts = {}, pos, positions) {
     card.classList.add("card-editable");
     if (isMobileViewport()) {
       attachMobileReorderControls(body, svc.id, positions, opts.onLayoutChange);
-      attachResizeHandle(card, svc.id, pos, opts.onLayoutChange, positions);
+      attachResizeHandle(card, svc.id, pos, opts.onLayoutChange, positions, opts.compact);
     } else {
-      attachResizeHandle(card, svc.id, pos, opts.onLayoutChange);
+      attachResizeHandle(card, svc.id, pos, opts.onLayoutChange, null, opts.compact);
       attachMoveHandle(card, svc.id, pos, positions, opts.onLayoutChange);
     }
   }
@@ -647,8 +664,10 @@ function reorderCardMobile(serviceId, action, positions, onLayoutChange) {
 // desktop grid just leaves a taller card overlapping whatever's below until
 // that's separately dragged out of the way, but mobile's single-column
 // "list" has no such freeform slack for that to be sorted out later.
-function attachResizeHandle(card, serviceId, pos, onLayoutChange, mobilePositions = null) {
+function attachResizeHandle(card, serviceId, pos, onLayoutChange, mobilePositions = null, compact = false) {
   const heightOnly = !!mobilePositions;
+  const minW = compact ? MIN_CARD_W_COMPACT : MIN_CARD_W;
+  const minH = compact ? MIN_CARD_H_COMPACT : MIN_CARD_H;
   const handle = el("div", { class: "resize-handle", title: heightOnly ? "Drag to change height" : "Drag to resize" });
   card.appendChild(handle);
 
@@ -658,9 +677,9 @@ function attachResizeHandle(card, serviceId, pos, onLayoutChange, mobilePosition
     const dy = e.clientY - start.py;
     if (!heightOnly) {
       const dx = e.clientX - start.px;
-      pos.w = Math.max(MIN_CARD_W, start.w + Math.round(dx / GRID_UNIT));
+      pos.w = Math.max(minW, start.w + Math.round(dx / GRID_UNIT));
     }
-    pos.h = Math.max(MIN_CARD_H, start.h + Math.round(dy / GRID_UNIT));
+    pos.h = Math.max(minH, start.h + Math.round(dy / GRID_UNIT));
     card.style.gridColumn = `${pos.x} / span ${pos.w}`;
     card.style.gridRow = `${pos.y} / span ${pos.h}`;
   }
@@ -858,7 +877,7 @@ async function loadDashboard(cardOpts = {}) {
   const refresh = $("#last-refresh");
   if (refresh) refresh.textContent = "Updated " + new Date().toLocaleTimeString();
 
-  const positions = computeCardLayout(visible);
+  const positions = computeCardLayout(visible, opts.compact);
   for (const s of visible) {
     grid.appendChild(renderServiceCard(s, opts, positions.get(s.service.id), positions));
   }
@@ -869,9 +888,15 @@ async function loadDashboard(cardOpts = {}) {
   // Only a name that's actually being clipped gets the fade treatment (see
   // .label-fade in style.css) - has to happen after the cards are in the
   // document, since an element's scrollWidth/clientWidth aren't meaningful
-  // until it has a real layout box.
+  // until it has a real layout box. Same treatment for a card's own title
+  // (.title-fade) - a compact card in particular has the status badge
+  // sitting right up against it with no buttons in between to give a long
+  // name room, so it needs to fade out rather than run into/under the badge.
   for (const label of grid.querySelectorAll(".check-row .name .label")) {
     label.classList.toggle("label-fade", label.scrollWidth > label.clientWidth);
+  }
+  for (const title of grid.querySelectorAll(".card-header .title span:last-child")) {
+    title.classList.toggle("title-fade", title.scrollWidth > title.clientWidth);
   }
 }
 
@@ -1082,7 +1107,8 @@ function historyServiceIdsQuery() {
 // sync with a new column list, and cheap enough at this page size to just
 // do).
 async function loadHistoryTab() {
-  updateHistoryServicesButton();
+  await ensureStatuses();
+  renderHistoryServicePills();
   renderHistoryHeader();
   state.historyBeforeId = null;
   state.historyExhausted = false;
@@ -1153,45 +1179,45 @@ async function loadMoreHistoryRows() {
 
 // ---------- history: service filter ----------
 
-function historyServicesButtonLabel() {
-  const n = state.historySelectedServiceIds.length;
-  return n === 0 ? "Services" : `Services (${n})`;
-}
-
-function updateHistoryServicesButton() {
-  const btn = $("#history-services-btn");
-  if (btn) btn.textContent = historyServicesButtonLabel();
+// A row of toggle "pill" buttons, one per service, directly in the panel -
+// not a checkbox list tucked behind a button/modal, so the current
+// selection is always visible at a glance and a single click adds/removes
+// a service. Rebuilt on every loadHistoryTab (cheap at this list size, and
+// keeps it in sync if a service is added/removed elsewhere).
+function renderHistoryServicePills() {
+  const bar = $("#history-services-bar");
+  if (!bar) return;
+  bar.innerHTML = "";
+  if (state.statuses.length === 0) {
+    bar.appendChild(el("span", { class: "text-dim", text: "No services configured yet" }));
+    return;
+  }
+  const selected = new Set(state.historySelectedServiceIds);
+  for (const s of state.statuses) {
+    const active = selected.has(s.service.id);
+    bar.appendChild(
+      el(
+        "button",
+        {
+          type: "button",
+          class: `service-pill${active ? " active" : ""}`,
+          "aria-pressed": active ? "true" : "false",
+          onclick: () => {
+            const next = new Set(state.historySelectedServiceIds);
+            if (next.has(s.service.id)) next.delete(s.service.id);
+            else next.add(s.service.id);
+            state.historySelectedServiceIds = [...next];
+            loadHistoryTab();
+          },
+        },
+        s.service.name
+      )
+    );
+  }
 }
 
 function setHistorySelectedServices(ids) {
   state.historySelectedServiceIds = ids.slice();
-  updateHistoryServicesButton();
-}
-
-async function openHistoryServicesModal() {
-  const statuses = await ensureStatuses();
-  const list = $("#history-services-list");
-  if (!list) return;
-  list.innerHTML = "";
-  const selected = new Set(state.historySelectedServiceIds);
-  for (const s of statuses) {
-    const checkbox = el("input", { type: "checkbox" });
-    checkbox.checked = selected.has(s.service.id);
-    checkbox.addEventListener("change", () => {
-      if (checkbox.checked) selected.add(s.service.id);
-      else selected.delete(s.service.id);
-      setHistorySelectedServices([...selected]);
-      loadHistoryTab();
-    });
-    list.appendChild(el("label", { class: "column-row" }, [checkbox, el("span", { text: s.service.name })]));
-  }
-  const modal = $("#history-services-modal");
-  if (modal) modal.classList.remove("hidden");
-}
-
-function closeHistoryServicesModal() {
-  const modal = $("#history-services-modal");
-  if (modal) modal.classList.add("hidden");
 }
 
 // ---------- history: column customization ----------

@@ -71,26 +71,62 @@ async function loadDashboardAdmin() {
   updateCompactBtn();
 }
 
-// Compact is saved on the layout itself (DashboardLayout.is_compact), not a
-// separate display toggle - so switching layouts also switches whether this
-// button reads as active, and a layout toggled compact here renders compact
-// on the public dashboard too if it's the one pinned there (see Dashboard
-// Settings).
+// Compact is fixed on a layout at creation, not a flag flippable on an
+// existing one - a layout is either one of your compact layouts or one of
+// your full ones, never both at different times (see newLayoutFromCurrent,
+// which creates within whichever mode is currently active). "Compact view"
+// is a mode switch, not a per-layout toggle: it activates one of your
+// compact layouts (or one of your full ones), and the layout dropdown
+// (loadLayoutList) only ever lists the ones matching the mode you're
+// currently in.
 function updateCompactBtn() {
   const btn = $("#layout-compact-btn");
   if (!btn || !state.activeLayout) return;
-  btn.classList.toggle("primary", !!state.activeLayout.is_compact);
+  const isCompact = !!state.activeLayout.is_compact;
+  btn.classList.toggle("primary", isCompact);
+  btn.title = isCompact ? "Switch to your full (non-compact) layouts" : "Switch to your compact layouts";
 }
 
 async function toggleLayoutCompact() {
-  if (!state.activeLayout) return;
+  const targetCompact = !(state.activeLayout && state.activeLayout.is_compact);
+  let layouts;
   try {
-    state.activeLayout = await api(`/api/dashboard-layouts/${state.activeLayout.id}`, {
-      method: "PUT",
-      body: JSON.stringify({ is_compact: !state.activeLayout.is_compact }),
-    });
+    layouts = await api("/api/dashboard-layouts");
   } catch (e) {
-    toast("Could not change compact view: " + e.message, true);
+    toast("Could not load layouts: " + e.message, true);
+    return;
+  }
+  const candidates = layouts.filter((l) => !!l.is_compact === targetCompact);
+
+  if (candidates.length === 0) {
+    // Bootstrap case: +New always creates within whatever mode is
+    // currently active, so switching to a mode with nothing in it yet
+    // needs its own explicit "create the first one" prompt instead.
+    const name = prompt(`No ${targetCompact ? "compact" : "full"} layouts yet - name your first one:`);
+    if (!name) return;
+    try {
+      state.activeLayout = await api("/api/dashboard-layouts", {
+        method: "POST",
+        body: JSON.stringify({
+          name,
+          card_service_ids: state.statuses.map((s) => s.service.id),
+          is_compact: targetCompact,
+        }),
+      });
+    } catch (e) {
+      toast("Could not create layout: " + e.message, true);
+      return;
+    }
+    toast(`Layout "${name}" created`);
+    loadDashboardAdmin();
+    return;
+  }
+
+  const target = candidates.find((l) => l.is_active) || candidates[0];
+  try {
+    state.activeLayout = await api(`/api/dashboard-layouts/${target.id}/activate`, { method: "POST" });
+  } catch (e) {
+    toast("Could not switch layout: " + e.message, true);
     return;
   }
   loadDashboardAdmin();
@@ -154,11 +190,16 @@ async function loadLayoutList() {
   } catch (e) {
     return;
   }
+  // Only ever lists layouts matching the current mode (see
+  // toggleLayoutCompact) - a compact and a full layout are never options in
+  // the same dropdown, since switching between them is what the Compact
+  // view button next to this is for.
+  const compactMode = !!(state.activeLayout && state.activeLayout.is_compact);
   const select = $("#layout-select");
   select.innerHTML = "";
   for (const l of layouts) {
+    if (!!l.is_compact !== compactMode) continue;
     let text = l.name;
-    if (l.is_compact) text += " (compact)";
     if (l.is_default) text += " 🔒";
     select.appendChild(el("option", { value: l.id, text, selected: l.is_active ? "selected" : null }));
   }
@@ -671,6 +712,7 @@ const CREDENTIAL_MODES = {
   plex: { keyLabel: "X-Plex-Token", showUsername: false, showPlexSignin: true },
   qbittorrent: { keyLabel: "Password", showUsername: true, showPlexSignin: false, usernameHint: DEFAULT_USERNAME_HINT },
   rtorrent: { keyLabel: "Password", showUsername: true, showPlexSignin: false, usernameHint: DEFAULT_USERNAME_HINT },
+  rutorrent: { keyLabel: "Password", showUsername: true, showPlexSignin: false, usernameHint: DEFAULT_USERNAME_HINT },
   deluge: { keyLabel: "Password", showUsername: true, showPlexSignin: false, usernameHint: DEFAULT_USERNAME_HINT },
   jellyfin: {
     keyLabel: "API key",
@@ -681,6 +723,22 @@ const CREDENTIAL_MODES = {
     showJellyfinAdmin: true,
   },
 };
+
+// Grouping (and alphabetical order within each group) for the Add/Edit
+// service type dropdown - purely a display concern, doesn't affect
+// SERVICE_TYPES itself. Kept in sync by hand; every type in
+// state.meta.service_types is expected to appear in exactly one of these.
+const SERVICE_TYPE_CATEGORIES = [
+  { label: "Arr Stack", types: ["chaptarr", "lidarr", "prowlarr", "radarr", "sonarr", "whisparr"] },
+  { label: "Downloaders", types: ["deluge", "qbittorrent", "rtorrent", "rutorrent"] },
+  { label: "Media Servers", types: ["jellyfin", "plex"] },
+  { label: "Other", types: ["generic", "jellyseerr", "overseerr"] },
+];
+
+function serviceTypeLabel(type) {
+  const defaults = state.meta.service_type_defaults && state.meta.service_type_defaults[type];
+  return (defaults && defaults.name) || type.charAt(0).toUpperCase() + type.slice(1);
+}
 
 function credentialModeFor(type) {
   return CREDENTIAL_MODES[type] || { keyLabel: "API key", showUsername: false, showPlexSignin: false };
@@ -740,8 +798,15 @@ function openServiceModal(svc = null) {
 
   const typeSelect = $("#svc-type");
   typeSelect.innerHTML = "";
-  for (const t of state.meta.service_types) {
-    typeSelect.appendChild(el("option", { value: t, text: t }));
+  const knownTypes = new Set(state.meta.service_types);
+  for (const cat of SERVICE_TYPE_CATEGORIES) {
+    const types = cat.types.filter((t) => knownTypes.has(t));
+    if (types.length === 0) continue;
+    const group = el("optgroup", { label: cat.label });
+    for (const t of types) {
+      group.appendChild(el("option", { value: t, text: serviceTypeLabel(t) }));
+    }
+    typeSelect.appendChild(group);
   }
   typeSelect.disabled = !!svc;
   const initialType = svc ? svc.type : typeSelect.options[0]?.value;
@@ -1035,7 +1100,7 @@ function renderDynamicFields(svc, checkType, existingConfig = {}) {
   }
   if (checkType === "rtorrent_rpc_status") {
     container.appendChild(
-      el("div", { class: "field hint", text: "rTorrent has no web UI or API of its own - this speaks its XML-RPC interface directly, so the path varies by setup: plain /RPC2 for a bare XML-RPC-over-HTTP bridge, or something under ruTorrent's plugins directory when fronted by it - commonly /rutorrent/plugins/httprpc/action.php for the httprpc plugin, or [path to ruTorrent]/plugins/rpc/rpc.php for older setups. If this fails with a 404, that's almost always the fix. Uses the Username/Password above as HTTP Basic Auth, same as the Web UI check." })
+      el("div", { class: "field hint", text: "rTorrent has no web UI or API of its own - this speaks its XML-RPC interface directly, so the path varies by setup: plain /RPC2 for a bare rtorrent XML-RPC-over-HTTP bridge (this is the default for the \"rtorrent\" service type), or, when fronted by ruTorrent, something under its plugins directory - commonly /rutorrent/plugins/httprpc/action.php for the httprpc plugin (the default for the \"rutorrent\" service type), or [path to ruTorrent]/plugins/rpc/rpc.php for older setups. If this fails with a 404, that's almost always the fix. Uses the Username/Password above as HTTP Basic Auth, same as the Web UI check." })
     );
   }
   if (checkType === "ftp_path") {
@@ -1800,8 +1865,6 @@ async function init() {
   initSecretField($("#svc-jellyfin-admin-password"), $("#svc-jellyfin-admin-password-use-env"));
   $("#check-cancel").addEventListener("click", closeCheckModal);
   $("#check-form").addEventListener("submit", submitCheckForm);
-  $("#history-services-btn").addEventListener("click", openHistoryServicesModal);
-  $("#history-services-done").addEventListener("click", closeHistoryServicesModal);
   $("#history-columns-btn").addEventListener("click", openColumnsModal);
   $("#columns-done").addEventListener("click", closeColumnsModal);
   $("#history-export-btn").addEventListener("click", exportHistoryCsv);

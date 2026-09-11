@@ -221,18 +221,23 @@ def _disk_space_outcome(free_bytes: float, config: dict, elapsed: float, label: 
 async def check_rtorrent_rpc_status(
     client: httpx.AsyncClient, base_url: str, config: dict, auth: tuple[str, str] | None = None
 ) -> CheckOutcome:
-    """rTorrent has no web UI or REST API of its own - this speaks its
-    XML-RPC interface directly (the same protocol ruTorrent uses under the
-    hood), POSTing a `system.client_version` call to the configured path and
-    treating any valid, non-fault XML-RPC response as reachable.
+    """Shared by both the "rtorrent" (bare) and "rutorrent" (ruTorrent
+    web frontend) service types - rTorrent itself has no web UI or REST API
+    of its own either way, so this speaks its XML-RPC interface directly
+    (the same protocol ruTorrent uses under the hood), POSTing a
+    `system.client_version` call to the configured path and treating any
+    valid, non-fault XML-RPC response as reachable.
 
-    The path varies by setup: plain `/RPC2` for a bare XML-RPC-over-HTTP
-    bridge (e.g. via xmlrpc.scgi_port + a webserver proxy), or, when fronted
-    by ruTorrent, something under its plugins directory - commonly
-    `/rutorrent/plugins/httprpc/action.php` for the httprpc plugin, or
-    `/plugins/rpc/rpc.php` for older setups. There's no way to auto-detect
-    which, so it isn't guessed here - if this check fails with a 404, that's
-    almost always the fix.
+    The path varies by setup, which is why the two service types default
+    their auto-created check to a different one (see
+    checks.runner.default_checks_for_service_type): plain `/RPC2` for
+    "rtorrent" - a bare XML-RPC-over-HTTP bridge (e.g. via
+    xmlrpc.scgi_port + a webserver proxy) with no ruTorrent in front of it
+    at all - or `/rutorrent/plugins/httprpc/action.php` for "rutorrent",
+    its httprpc plugin's usual path. Older ruTorrent setups instead use
+    `/plugins/rpc/rpc.php`. There's no way to auto-detect which of these a
+    given install actually uses, so it isn't guessed beyond that per-type
+    default - if this check fails with a 404, that's almost always the fix.
 
     rTorrent's XML-RPC interface has no disk-space method (unlike qBittorrent/
     Deluge's own APIs), so there's no equivalent free-space check for it.
