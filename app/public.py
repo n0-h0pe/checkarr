@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 
 from . import schemas
 from .database import get_db
-from .queries import get_active_issues, get_history, get_or_create_dashboard_settings, get_public_layout, get_service_statuses
+from .queries import get_active_issues, get_history, get_public_layout, get_service_statuses
 from .routers.meta import get_meta
 from .version import VERSION
 
@@ -51,14 +51,10 @@ def meta():
 
 @public_app.get("/api/dashboard-layouts/active", response_model=schemas.DashboardLayoutOut)
 def active_layout(db: Session = Depends(get_db)):
+    """Whichever layout is pinned in Dashboard Settings (or the default, if
+    none is) - its own `is_compact` flag is what tells the frontend whether
+    to render compact, no separate settings fetch needed for that."""
     return get_public_layout(db)
-
-
-@public_app.get("/api/dashboard-settings", response_model=schemas.DashboardSettingsOut)
-def dashboard_settings_route(db: Session = Depends(get_db)):
-    """Read-only mirror of the admin app's Dashboard Settings, just enough
-    (public_compact) for the public dashboard to know how to render itself."""
-    return get_or_create_dashboard_settings(db)
 
 
 @public_app.get("/", response_class=HTMLResponse)

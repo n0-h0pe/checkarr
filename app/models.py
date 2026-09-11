@@ -152,7 +152,15 @@ class DashboardLayout(Base):
     stored here. Exactly one row has is_default=True - the protected
     "All Services" layout seeded by get_or_create_active_layout, which
     can't be deleted (see routers/dashboard_layouts.py) and whose card set
-    can't be trimmed, unlike ordinary custom layouts."""
+    can't be trimmed, unlike ordinary custom layouts.
+
+    `is_compact` marks this layout as rendering without each card's
+    individual check rows (just the status badge, address/last-checked
+    line, and uptime strip) - toggled from the Dashboard tab itself (the
+    "Compact view" button, next to Edit layout), not just a display option,
+    so admin and public both render a compact layout the same way. See
+    Dashboard Settings (DashboardSettings.public_require_compact below) for
+    restricting which layouts the public dashboard can be pinned to."""
 
     __tablename__ = "dashboard_layouts"
 
@@ -163,6 +171,7 @@ class DashboardLayout(Base):
     card_service_ids: Mapped[list] = mapped_column(JSON, default=list)
     is_default: Mapped[bool] = mapped_column(Boolean, default=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_compact: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
 
@@ -321,14 +330,16 @@ class DashboardSettings(Base):
     `public_layout_id` is a loose reference (no FK constraint, same style as
     DashboardLayout.card_service_ids' loose id lists) to a DashboardLayout -
     falls back to the default "All Services" layout if unset or if that
-    layout was since deleted. `public_compact` hides each card's individual
-    check rows on the public dashboard only, leaving just the status badge
-    and uptime history - the admin app always shows full detail regardless
-    of this flag."""
+    layout was since deleted. Whether the public dashboard actually renders
+    compact is entirely a property of *which layout* is pinned
+    (DashboardLayout.is_compact above), not a separate flag here -
+    `public_require_compact`, when set, only restricts which layouts are
+    valid to pin (compact ones only, enforced in routers/dashboard_settings.py),
+    it doesn't itself force compact rendering."""
 
     __tablename__ = "dashboard_settings"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     public_layout_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    public_compact: Mapped[bool] = mapped_column(Boolean, default=False)
+    public_require_compact: Mapped[bool] = mapped_column(Boolean, default=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
