@@ -1,7 +1,7 @@
 import asyncio
 import hashlib
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
 import httpx
 
@@ -199,7 +199,6 @@ async def poll_service(service_id: int) -> None:
                     notif.resolved_at = now
 
         db.commit()
-        _prune_old_results(db, service.id)
 
         for tier, subject, body in alerts_to_send:
             # Scheduled Down Time only ever gates this dispatch - the check
@@ -213,11 +212,3 @@ async def poll_service(service_id: int) -> None:
             asyncio.create_task(asyncio.to_thread(dispatch_alert, tier, subject, body))
     finally:
         db.close()
-
-
-def _prune_old_results(db, service_id: int) -> None:
-    cutoff = datetime.now(timezone.utc) - timedelta(days=settings.history_retention_days)
-    db.query(CheckResult).filter(
-        CheckResult.service_id == service_id, CheckResult.timestamp < cutoff
-    ).delete(synchronize_session=False)
-    db.commit()

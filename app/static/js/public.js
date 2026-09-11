@@ -27,8 +27,14 @@ async function init() {
   } else if (window.PUBLIC_PAGE === "history") {
     initUptimeRangeSelect();
     $("#history-service").addEventListener("change", loadHistoryTab);
+    $("#history-columns-btn").addEventListener("click", openColumnsModal);
+    $("#columns-done").addEventListener("click", closeColumnsModal);
+    $("#history-export-btn").addEventListener("click", exportHistoryCsv);
     loadHistoryTab();
-    setInterval(loadHistoryTab, 30000);
+    // No periodic auto-refresh here (unlike the dashboard/notifications
+    // above) - it would silently reset the user back to page 1 every 30s
+    // while they're scrolled several pages deep into infinite-scroll
+    // history. Changing the service or range still reloads, same as admin.
   }
 }
 

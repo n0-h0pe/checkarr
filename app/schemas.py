@@ -348,3 +348,22 @@ class DowntimeScheduleOut(DowntimeScheduleBase):
     group_ids: list[int]
     created_at: datetime
     updated_at: datetime
+
+
+class LogPruningSettingsOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    retention_days: int
+    prune_hour: int
+    prune_minute: int
+    last_pruned_at: datetime | None
+    updated_at: datetime
+
+
+class LogPruningSettingsUpdate(BaseModel):
+    retention_days: int | None = Field(default=None, ge=1, le=3650)
+    prune_hour: int | None = Field(default=None, ge=0, le=23)
+    prune_minute: int | None = Field(default=None, ge=0, le=59)
+
+
+class PruneNowResult(BaseModel):
+    deleted: int

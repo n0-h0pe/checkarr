@@ -22,17 +22,32 @@
     <div class="panel">
       <div class="panel-header">
         <h2>Check history</h2>
-        <div style="display:flex; gap:8px;">
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
           <select id="history-service"></select>
           <div class="uptime-range-control"><select id="uptime-range-select" title="History range"></select></div>
+          <button type="button" class="small" id="history-columns-btn">Columns</button>
+          <button type="button" class="small" id="history-export-btn">Export CSV</button>
         </div>
       </div>
-      <table>
-        <thead><tr><th>Time</th><th>Check</th><th>Status</th><th>Response</th><th>Message</th></tr></thead>
-        <tbody id="history-body"></tbody>
-      </table>
+      <div style="overflow-x:auto;">
+        <table>
+          <thead></thead>
+          <tbody id="history-body"></tbody>
+        </table>
+      </div>
     </div>
   </main>
+
+  <div class="modal-backdrop hidden" id="columns-modal">
+    <div class="modal">
+      <h3>Customize columns</h3>
+      <div class="hint" style="margin-bottom:10px;">Drag to reorder, check to show. At least one must stay visible.</div>
+      <div id="columns-list"></div>
+      <div class="modal-actions">
+        <button type="button" class="primary" id="columns-done">Done</button>
+      </div>
+    </div>
+  </div>
   {% elif page == "notifications" %}
   <main>
     <div class="panel">

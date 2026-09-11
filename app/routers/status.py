@@ -19,7 +19,8 @@ def get_history_route(
     service_id: int = Query(...),
     check_id: int | None = Query(None),
     hours: int = Query(24, ge=1, le=24 * 30),
-    limit: int = Query(500, ge=1, le=5000),
+    limit: int = Query(100, ge=1, le=5000),
+    before_id: int | None = Query(None),
     db: Session = Depends(get_db),
 ):
-    return get_history(db, service_id, check_id, hours, limit)
+    return get_history(db, service_id, check_id, hours, limit, before_id)

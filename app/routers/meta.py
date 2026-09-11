@@ -43,7 +43,7 @@ SERVICE_TYPE_DEFAULTS = {
     "qbittorrent": {"name": "qBittorrent", "port": 8080},
     "deluge": {"name": "Deluge", "port": 8112},
     "rtorrent": {"name": "rTorrent", "port": None},
-    "overseerr": {"name": "Overseerr", "port": 5055},
+    "overseerr": {"name": "Seerr", "port": 5055},
     "jellyseerr": {"name": "Jellyseerr", "port": 5055},
     "generic": {"name": "", "port": None},
 }

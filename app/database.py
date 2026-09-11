@@ -24,11 +24,12 @@ def init_db() -> None:
     Base.metadata.create_all(bind=engine)
     _run_migrations()
 
-    from .queries import get_or_create_all_services_group
+    from .queries import get_or_create_all_services_group, get_or_create_log_pruning_settings
 
     db = SessionLocal()
     try:
         get_or_create_all_services_group(db)
+        get_or_create_log_pruning_settings(db)
     finally:
         db.close()
 

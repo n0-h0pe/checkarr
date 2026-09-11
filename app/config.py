@@ -7,7 +7,6 @@ class Settings(BaseSettings):
     data_dir: str = "/config"
     default_poll_interval_seconds: int = 300
     http_timeout_seconds: float = 10.0
-    history_retention_days: int = 30
     app_secret_key: str | None = None
     auth_username: str | None = None
     auth_password: str | None = None

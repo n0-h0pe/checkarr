@@ -67,8 +67,16 @@ def get_service_statuses(db: Session) -> list[schemas.ServiceStatusOut]:
 
 
 def get_history(
-    db: Session, service_id: int, check_id: int | None, hours: int, limit: int
+    db: Session, service_id: int, check_id: int | None, hours: int, limit: int, before_id: int | None = None
 ) -> list[models.CheckResult]:
+    """Ordered by id, not timestamp - id is assigned in insertion order,
+    which for a given service's rows already matches timestamp order (ties
+    only happen between rows from the same poll, which are contiguous in
+    id), so it's a perfectly good sort key and - unlike timestamp, which
+    isn't unique - a stable cursor for `before_id` to page against. Offset
+    pagination would shift under new rows the poller keeps inserting while
+    the user scrolls; a page always "older than id X" can't.
+    """
     service = db.get(models.Service, service_id)
     if not service:
         raise HTTPException(404, "Service not found")
@@ -79,7 +87,9 @@ def get_history(
     )
     if check_id is not None:
         q = q.filter(models.CheckResult.check_id == check_id)
-    return q.order_by(models.CheckResult.timestamp.desc()).limit(limit).all()
+    if before_id is not None:
+        q = q.filter(models.CheckResult.id < before_id)
+    return q.order_by(models.CheckResult.id.desc()).limit(limit).all()
 
 
 def get_notifications(
@@ -136,3 +146,18 @@ def get_or_create_all_services_group(db: Session) -> models.ServiceGroup:
     db.commit()
     db.refresh(group)
     return group
+
+
+def get_or_create_log_pruning_settings(db: Session) -> models.LogPruningSettings:
+    """Seeds the singleton Log Pruning settings row (defaults: 7 days
+    retention, 2am UTC) - idempotent, called once at startup (see
+    database.init_db) and by log_pruning.py/routers/log_pruning.py
+    whenever the current settings are needed."""
+    settings_row = db.query(models.LogPruningSettings).first()
+    if settings_row:
+        return settings_row
+    settings_row = models.LogPruningSettings()
+    db.add(settings_row)
+    db.commit()
+    db.refresh(settings_row)
+    return settings_row
