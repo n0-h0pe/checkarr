@@ -41,7 +41,10 @@ CHECK_TYPES = [
     "ftp_path",
     "overseerr_status",
     "overseerr_tmdb_status",
+    "ssl_certificate",
 ]
+
+NOTIFICATION_CHANNEL_TYPES = ["email"]
 
 
 class CheckDefinitionBase(BaseModel):
@@ -70,6 +73,11 @@ class CheckDefinitionOut(CheckDefinitionBase):
     id: int
     service_id: int
     is_builtin: bool
+    sort_order: int
+
+
+class ChecksReorderRequest(BaseModel):
+    ordered_ids: list[int]
 
 
 class ServiceBase(BaseModel):
@@ -79,7 +87,6 @@ class ServiceBase(BaseModel):
     remote_url: str | None = None
     check_both_targets: bool = False
     username: str | None = None
-    verify_ssl: bool = True
     enabled: bool = True
     poll_interval_seconds: int | None = None
     notes: str | None = None
@@ -108,7 +115,6 @@ class ServiceUpdate(BaseModel):
     clear_api_key: bool = False
     jellyfin_admin_password: str | None = None
     clear_jellyfin_admin_password: bool = False
-    verify_ssl: bool | None = None
     enabled: bool | None = None
     poll_interval_seconds: int | None = None
     notes: str | None = None
@@ -235,3 +241,39 @@ class DashboardLayoutUpdate(BaseModel):
     name: str | None = None
     sizes: dict[str, Any] | None = None
     columns: int | None = None
+
+
+class NotificationChannelBase(BaseModel):
+    name: str
+    type: str
+    enabled: bool = True
+    config: dict[str, Any] = Field(default_factory=dict)
+    notify_on_warn: bool = True
+    notify_on_fail: bool = True
+
+
+class NotificationChannelCreate(NotificationChannelBase):
+    secret: str | None = None
+
+
+class NotificationChannelUpdate(BaseModel):
+    name: str | None = None
+    enabled: bool | None = None
+    config: dict[str, Any] | None = None
+    notify_on_warn: bool | None = None
+    notify_on_fail: bool | None = None
+    secret: str | None = None
+    clear_secret: bool = False
+
+
+class NotificationChannelOut(NotificationChannelBase):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    has_secret: bool
+    created_at: datetime
+    updated_at: datetime
+
+
+class NotificationChannelTestResult(BaseModel):
+    ok: bool
+    message: str

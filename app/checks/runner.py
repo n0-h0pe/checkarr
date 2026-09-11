@@ -21,6 +21,7 @@ from .media_server_check import (
     check_plex_remote_access,
 )
 from .overseerr_check import check_overseerr_status, check_overseerr_tmdb_status
+from .ssl_check import check_ssl_certificate
 from .torrent_client_check import (
     check_deluge_disk_space,
     check_deluge_login,
@@ -54,6 +55,7 @@ TARGET_SCOPED_TYPES = {
     "rtorrent_rpc_status",
     "overseerr_status",
     "overseerr_tmdb_status",
+    "ssl_certificate",
 }
 
 # Checks that don't care which URL is configured - the poller runs these
@@ -65,7 +67,7 @@ SERVICE_SCOPED_TYPES = {"filesystem_path", "plex_remote_access", "ftp_path"}
 # both addresses by default - everything else in TARGET_SCOPED_TYPES runs
 # against local only. Reachability of the public/remote entry point is
 # useful to know even when you don't want to double up on API-heavy checks.
-ALWAYS_BOTH_TARGETS_TYPES = {"http_200"}
+ALWAYS_BOTH_TARGETS_TYPES = {"http_200", "ssl_certificate"}
 
 
 async def run_check(
@@ -127,6 +129,8 @@ async def run_check(
             return await check_overseerr_status(client, base_url, api_key, config)
         if ctype == "overseerr_tmdb_status":
             return await check_overseerr_tmdb_status(client, base_url, api_key, config)
+        if ctype == "ssl_certificate":
+            return await check_ssl_certificate(base_url, config)
         return CheckOutcome(STATUS_FAIL, f"Unknown check type '{ctype}'", None)
     except Exception as exc:  # noqa: BLE001 - a broken check must not kill the poll loop
         return CheckOutcome(STATUS_FAIL, f"Check raised an unexpected error: {exc}", None)

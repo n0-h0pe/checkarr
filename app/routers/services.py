@@ -39,7 +39,6 @@ def create_service(payload: schemas.ServiceCreate, db: Session = Depends(get_db)
         username=payload.username or None,
         api_key_encrypted=encrypt_secret(payload.api_key),
         jellyfin_admin_password_encrypted=encrypt_secret(payload.jellyfin_admin_password),
-        verify_ssl=payload.verify_ssl,
         enabled=payload.enabled,
         poll_interval_seconds=payload.poll_interval_seconds,
         notes=payload.notes,
@@ -49,11 +48,42 @@ def create_service(payload: schemas.ServiceCreate, db: Session = Depends(get_db)
 
     for c in default_checks_for_service_type(payload.type):
         db.add(models.CheckDefinition(service_id=service.id, **c))
+    _maybe_add_ssl_check(service, db)
 
     db.commit()
     db.refresh(service)
     schedule_service(service)
     return _out(service)
+
+
+_SSL_CHECK_TYPE = "ssl_certificate"
+
+
+def _maybe_add_ssl_check(service: models.Service, db: Session) -> None:
+    """Auto-generates the dedicated SSL validity check the first time a
+    service gets an https:// address, rather than requiring the user to add
+    it by hand - mirrors how default_checks_for_service_type seeds other
+    builtins. Only adds one (it runs against whichever target(s) are https,
+    see ALWAYS_BOTH_TARGETS_TYPES in checks/runner.py) and never removes it,
+    so switching an address away from https just leaves it reporting "not
+    applicable" instead of silently deleting a check the user may have
+    customized (interval, alert level)."""
+    has_https = any(u and u.startswith("https://") for u in (service.local_url, service.remote_url))
+    if not has_https:
+        return
+    already_has = any(c.type == _SSL_CHECK_TYPE for c in service.checks)
+    if already_has:
+        return
+    db.add(
+        models.CheckDefinition(
+            service_id=service.id,
+            name="SSL certificate valid",
+            type=_SSL_CHECK_TYPE,
+            config={"expiry_warn_days": 14},
+            enabled=True,
+            is_builtin=True,
+        )
+    )
 
 
 @router.get("/{service_id}", response_model=schemas.ServiceOut)
@@ -94,14 +124,14 @@ def update_service(service_id: int, payload: schemas.ServiceUpdate, db: Session 
         service.jellyfin_admin_password_encrypted = None
     elif payload.jellyfin_admin_password:
         service.jellyfin_admin_password_encrypted = encrypt_secret(payload.jellyfin_admin_password)
-    if payload.verify_ssl is not None:
-        service.verify_ssl = payload.verify_ssl
     if payload.enabled is not None:
         service.enabled = payload.enabled
     if payload.poll_interval_seconds is not None:
         service.poll_interval_seconds = payload.poll_interval_seconds
     if payload.notes is not None:
         service.notes = payload.notes
+
+    _maybe_add_ssl_check(service, db)
 
     db.commit()
     db.refresh(service)
@@ -163,7 +193,7 @@ async def scan_libraries(service_id: int, db: Session = Depends(get_db)):
     jellyfin_admin_password = decrypt_secret(service.jellyfin_admin_password_encrypted)
     check_type = "plex_filesystem_path" if service.type == "plex" else "jellyfin_filesystem_path"
 
-    async with httpx.AsyncClient(timeout=settings.http_timeout_seconds, verify=service.verify_ssl) as client:
+    async with httpx.AsyncClient(timeout=settings.http_timeout_seconds, verify=False) as client:
         try:
             if service.type == "plex":
                 found = await scan_plex_libraries(client, base_url, api_key)
@@ -269,3 +299,22 @@ def delete_check(service_id: int, check_id: int, db: Session = Depends(get_db)):
     db.delete(check)
     db.commit()
     return None
+
+
+@router.post("/{service_id}/checks/reorder", response_model=list[schemas.CheckDefinitionOut])
+def reorder_checks(service_id: int, payload: schemas.ChecksReorderRequest, db: Session = Depends(get_db)):
+    service = db.get(models.Service, service_id)
+    if not service:
+        raise HTTPException(404, "Service not found")
+
+    existing_ids = {c.id for c in service.checks}
+    if set(payload.ordered_ids) != existing_ids:
+        raise HTTPException(400, "ordered_ids must contain exactly this service's current check ids")
+
+    by_id = {c.id: c for c in service.checks}
+    for index, check_id in enumerate(payload.ordered_ids):
+        by_id[check_id].sort_order = index
+
+    db.commit()
+    db.refresh(service)
+    return service.checks

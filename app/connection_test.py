@@ -35,7 +35,7 @@ async def _probe(client: httpx.AsyncClient, service_type: str, url: str, api_key
 
 
 async def test_connection(payload: schemas.ConnectionTestRequest) -> schemas.ConnectionTestResponse:
-    async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+    async with httpx.AsyncClient(timeout=_TIMEOUT, verify=False) as client:
         local = (
             await _probe(client, payload.type, payload.local_url, payload.api_key)
             if payload.local_url

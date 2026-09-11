@@ -33,15 +33,21 @@ class Service(Base):
     # the admin account's username) makes those specific calls log in as
     # that user instead of using the API key - see jellyfin_client.py.
     jellyfin_admin_password_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
-    verify_ssl: Mapped[bool] = mapped_column(Boolean, default=True)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     poll_interval_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
 
+    # Ordered by sort_order (id as a tiebreak, so every pre-existing row -
+    # which all default to 0 - keeps today's creation-order ordering
+    # unchanged until a service's checks are actually dragged into a new
+    # order). This is what makes Settings' drag-reorder show up on the
+    # Dashboard too: get_service_statuses() (queries.py) builds each card's
+    # check list straight from this relationship.
     checks: Mapped[list["CheckDefinition"]] = relationship(
-        back_populates="service", cascade="all, delete-orphan"
+        back_populates="service", cascade="all, delete-orphan",
+        order_by="CheckDefinition.sort_order, CheckDefinition.id",
     )
     results: Mapped[list["CheckResult"]] = relationship(
         back_populates="service", cascade="all, delete-orphan"
@@ -77,6 +83,7 @@ class CheckDefinition(Base):
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     is_builtin: Mapped[bool] = mapped_column(Boolean, default=False)
     interval_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
     service: Mapped["Service"] = relationship(back_populates="checks")
@@ -139,3 +146,31 @@ class DashboardLayout(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
+
+
+class NotificationChannel(Base):
+    """An outbound alerting destination (email today; Discord/Pushbullet/etc.
+    later) - `type` selects which fields in `config` matter and which sender
+    in app/notifiers/ handles it (see alerting.py). `config` holds every
+    non-secret setting for that type (e.g. email's smtp_host/port/username/
+    from_address/to_addresses); `secret_encrypted` is the one secret slot a
+    channel type needs (email's SMTP password), encrypted the same way
+    Service.api_key_encrypted is - never stored or returned in plaintext.
+    notify_on_warn/notify_on_fail gate which severity tier of alert this
+    channel receives (see alerting.dispatch_alert)."""
+
+    __tablename__ = "notification_channels"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    type: Mapped[str] = mapped_column(String(30), nullable=False)
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    config: Mapped[dict] = mapped_column(JSON, default=dict)
+    secret_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
+    notify_on_warn: Mapped[bool] = mapped_column(Boolean, default=True)
+    notify_on_fail: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
+
+    def has_secret(self) -> bool:
+        return bool(self.secret_encrypted)

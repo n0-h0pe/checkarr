@@ -72,30 +72,52 @@
     </section>
 
     <section class="tab-panel" id="tab-settings">
-      <div class="unsaved-banner" id="unsaved-banner" hidden>
-        <span>⚠ You have unsaved changes</span>
-        <div class="unsaved-banner-actions">
-          <button type="button" id="discard-changes-btn">Discard Changes</button>
-          <button type="button" class="primary" id="save-changes-btn">Save Changes</button>
+      <div class="sub-tabs">
+        <button class="sub-tab-btn active" data-subtab="services">Services</button>
+        <button class="sub-tab-btn" data-subtab="channels">Push Notifications</button>
+      </div>
+
+      <div class="subtab-panel active" id="subtab-services">
+        <div class="unsaved-banner" id="unsaved-banner" hidden>
+          <span>⚠ You have unsaved changes</span>
+          <div class="unsaved-banner-actions">
+            <button type="button" id="discard-changes-btn">Discard Changes</button>
+            <button type="button" class="primary" id="save-changes-btn">Save Changes</button>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-header">
+            <h2>Services</h2>
+            <button class="primary" id="add-service-btn">+ Add service</button>
+          </div>
+          <table>
+            <thead>
+              <tr><th>Name</th><th>Type</th><th>Local</th><th>Remote</th><th>Interval</th><th>Status</th><th></th></tr>
+            </thead>
+            <tbody id="services-body"></tbody>
+          </table>
+        </div>
+        <div class="unsaved-banner" id="unsaved-banner-bottom" hidden>
+          <span>⚠ You have unsaved changes</span>
+          <div class="unsaved-banner-actions">
+            <button type="button" id="discard-changes-btn-bottom">Discard Changes</button>
+            <button type="button" class="primary" id="save-changes-btn-bottom">Save Changes</button>
+          </div>
         </div>
       </div>
-      <div class="panel">
-        <div class="panel-header">
-          <h2>Services</h2>
-          <button class="primary" id="add-service-btn">+ Add service</button>
-        </div>
-        <table>
-          <thead>
-            <tr><th></th><th>Name</th><th>Type</th><th>Local</th><th>Remote</th><th>Interval</th><th>Status</th><th></th></tr>
-          </thead>
-          <tbody id="services-body"></tbody>
-        </table>
-      </div>
-      <div class="unsaved-banner" id="unsaved-banner-bottom" hidden>
-        <span>⚠ You have unsaved changes</span>
-        <div class="unsaved-banner-actions">
-          <button type="button" id="discard-changes-btn-bottom">Discard Changes</button>
-          <button type="button" class="primary" id="save-changes-btn-bottom">Save Changes</button>
+
+      <div class="subtab-panel" id="subtab-channels">
+        <div class="panel">
+          <div class="panel-header">
+            <h2>Push Notifications</h2>
+            <button class="primary" id="add-channel-btn">+ Add channel</button>
+          </div>
+          <table>
+            <thead>
+              <tr><th>Name</th><th>Type</th><th>Enabled</th><th>Warn</th><th>Fail</th><th></th></tr>
+            </thead>
+            <tbody id="channels-body"></tbody>
+          </table>
         </div>
       </div>
     </section>
@@ -130,9 +152,6 @@
           </div>
           <div class="hint">Public/reverse-proxied address, if any. At least one of local/remote is required.</div>
         </div>
-        <div class="field">
-          <button type="button" class="small" id="svc-test-connection">Test connection</button>
-        </div>
         <div class="field checkbox">
           <input type="checkbox" id="svc-check-both">
           <label for="svc-check-both">Run all checks against both Internal and remote addresses</label>
@@ -157,10 +176,6 @@
           <input type="number" id="svc-interval" min="30" placeholder="default: global setting">
         </div>
         <div class="field checkbox">
-          <input type="checkbox" id="svc-verify-ssl" checked>
-          <label for="svc-verify-ssl">Verify SSL certificates</label>
-        </div>
-        <div class="field checkbox">
           <input type="checkbox" id="svc-enabled" checked>
           <label for="svc-enabled">Enabled</label>
         </div>
@@ -169,6 +184,8 @@
           <textarea id="svc-notes"></textarea>
         </div>
         <div class="modal-actions">
+          <button type="button" class="small" id="svc-test-connection">Test connection</button>
+          <span style="flex:1"></span>
           <button type="button" id="service-cancel">Cancel</button>
           <button type="submit" class="primary">Save</button>
         </div>
@@ -210,6 +227,45 @@
         <div class="modal-actions">
           <button type="button" id="check-cancel">Cancel</button>
           <button type="submit" class="primary">Save check</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="modal-backdrop hidden" id="channel-modal">
+    <div class="modal">
+      <h3 id="channel-modal-title">Add channel</h3>
+      <form id="channel-form">
+        <input type="hidden" id="chn-id">
+        <div class="field">
+          <label>Name</label>
+          <input type="text" id="chn-name" required placeholder="e.g. Email alerts">
+        </div>
+        <div class="field">
+          <label>Type</label>
+          <select id="chn-type"></select>
+        </div>
+        <div id="chn-dynamic-fields"></div>
+        <div class="field checkbox">
+          <input type="checkbox" id="chn-notify-warn" checked>
+          <label for="chn-notify-warn">Send for Warn alerts</label>
+        </div>
+        <div class="field checkbox">
+          <input type="checkbox" id="chn-notify-fail" checked>
+          <label for="chn-notify-fail">Send for Fail alerts</label>
+        </div>
+        <div class="field checkbox">
+          <input type="checkbox" id="chn-enabled" checked>
+          <label for="chn-enabled">Enabled</label>
+        </div>
+        <div class="field">
+          <span class="conn-status" id="chn-test-status"></span>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="small" id="chn-test">Send test</button>
+          <span style="flex:1"></span>
+          <button type="button" id="channel-cancel">Cancel</button>
+          <button type="submit" class="primary">Save</button>
         </div>
       </form>
     </div>
