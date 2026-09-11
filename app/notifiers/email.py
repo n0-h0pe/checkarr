@@ -7,7 +7,7 @@ import smtplib
 from email.message import EmailMessage
 
 from .. import models
-from ..security import decrypt_secret
+from ..security import resolve_secret
 
 # Port 465 is "implicit TLS" (SMTPS) - the server expects a TLS handshake as
 # the very first bytes on the connection, not a plaintext SMTP greeting
@@ -25,7 +25,7 @@ def send_email(channel: "models.NotificationChannel", subject: str, body: str) -
         raise ValueError("Email channel has no SMTP host configured")
     port = int(config.get("smtp_port") or 587)
     username = (config.get("smtp_username") or "").strip() or None
-    password = decrypt_secret(channel.secret_encrypted)
+    password = resolve_secret(channel.secret_env_var, channel.secret_encrypted)
     use_tls = bool(config.get("use_tls", True))
     from_addr = (config.get("from_address") or "").strip() or username or "checkarr@localhost"
     to_addrs = [a.strip() for a in (config.get("to_addresses") or "").split(",") if a.strip()]

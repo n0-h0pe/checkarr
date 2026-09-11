@@ -81,6 +81,10 @@ def _run_migrations() -> None:
             conn.exec_driver_sql("ALTER TABLE services ADD COLUMN username VARCHAR(255)")
         if "jellyfin_admin_password_encrypted" not in service_cols:
             conn.exec_driver_sql("ALTER TABLE services ADD COLUMN jellyfin_admin_password_encrypted TEXT")
+        if "api_key_env_var" not in service_cols:
+            conn.exec_driver_sql("ALTER TABLE services ADD COLUMN api_key_env_var VARCHAR(255)")
+        if "jellyfin_admin_password_env_var" not in service_cols:
+            conn.exec_driver_sql("ALTER TABLE services ADD COLUMN jellyfin_admin_password_env_var VARCHAR(255)")
         if "verify_ssl" in service_cols:
             # The per-service "Verify SSL certificates" toggle is gone - the
             # new dedicated ssl_certificate check now owns cert validation,
@@ -106,6 +110,10 @@ def _run_migrations() -> None:
             conn.exec_driver_sql("ALTER TABLE dashboard_layouts ADD COLUMN card_service_ids TEXT")
         if "is_default" not in layout_cols:
             conn.exec_driver_sql("ALTER TABLE dashboard_layouts ADD COLUMN is_default BOOLEAN DEFAULT 0")
+
+        channel_cols = _table_columns(conn, "notification_channels")
+        if "secret_env_var" not in channel_cols:
+            conn.exec_driver_sql("ALTER TABLE notification_channels ADD COLUMN secret_env_var VARCHAR(255)")
 
 
 def _migrate_dashboard_layout_cards() -> None:

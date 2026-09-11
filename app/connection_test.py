@@ -2,6 +2,8 @@
 quick, type-aware reachability probe run before a service is even saved.
 """
 
+import os
+
 import httpx
 
 from . import schemas
@@ -35,14 +37,17 @@ async def _probe(client: httpx.AsyncClient, service_type: str, url: str, api_key
 
 
 async def test_connection(payload: schemas.ConnectionTestRequest) -> schemas.ConnectionTestResponse:
+    # Not-yet-saved test: no encrypted secret to fall back on, so an
+    # env-var-mode key is read directly rather than via security.resolve_secret.
+    api_key = payload.api_key or (os.environ.get(payload.api_key_env_var) if payload.api_key_env_var else None)
     async with httpx.AsyncClient(timeout=_TIMEOUT, verify=False) as client:
         local = (
-            await _probe(client, payload.type, payload.local_url, payload.api_key)
+            await _probe(client, payload.type, payload.local_url, api_key)
             if payload.local_url
             else None
         )
         remote = (
-            await _probe(client, payload.type, payload.remote_url, payload.api_key)
+            await _probe(client, payload.type, payload.remote_url, api_key)
             if payload.remote_url
             else None
         )
