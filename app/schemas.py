@@ -19,6 +19,9 @@ SERVICE_TYPES = [
     "overseerr",
     "jellyseerr",
     "immich",
+    "dispatcharr",
+    "sportarr",
+    "cleanuparr",
     "generic",
 ]
 CHECK_TYPES = [
