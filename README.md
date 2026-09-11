@@ -2,7 +2,7 @@
 
 A self-hosted dashboard that periodically polls your media stack (Radarr,
 Sonarr, Lidarr, Whisparr, Chaptarr, Prowlarr, Plex, Jellyfin, qBittorrent,
-Deluge, rTorrent, Overseerr, Jellyseerr, or any other HTTP service) and
+Deluge, rTorrent, Seerr, Jellyseerr, or any other HTTP service) and
 shows one consolidated view of what's healthy, what's degraded, and why.
 
 ## Features
@@ -20,7 +20,8 @@ shows one consolidated view of what's healthy, what's degraded, and why.
 - An "Edit layout" mode for the dashboard: drag cards anywhere and resize them from the corner, snapped to an invisible grid, saved as named/switchable layouts that adapt to how wide your window is. See "Dashboard layouts" below.
 - A responsive layout on every page - the dashboard, Settings, History, and Notifications all adapt down to a phone-width screen, admin and public alike. On a card too narrow to show a check's full result message, that message shortens to something like "200 OK" or "Files OK" instead of just clipping mid-sentence.
 - API keys are encrypted at rest (Fernet/AES) and never echoed back to the browser.
-- Historic results stored in SQLite, with a History tab and per-service uptime strip on the dashboard. Both share one time-range dropdown in the top bar (admin and public both) - anywhere from just the last poll up to a full week - the uptime strip greys out any slice of that range nothing was actually polled in.
+- Historic results stored in SQLite, with a History tab and per-service uptime strip on the dashboard. Both share one time-range dropdown in the top bar (admin and public both) - anywhere from just the last poll up to a full week - the uptime strip greys out any slice of that range nothing was actually polled in. History itself loads incrementally as you scroll rather than capping out after a few hundred rows, its columns are configurable and reorderable, and the current view exports to CSV - see "History" below.
+- How long check history sticks around before being deleted is configurable (default 7 days), pruned on one daily schedule at a time you set - see "Log Pruning" below.
 - A dedicated **SSL certificate validity check**, generated automatically for every `https://` address a service has - real, strict certificate validation (trust chain, hostname, expiry), independent of and unaffected by any other check. See "SSL certificate checks" below.
 - Drag checks into whatever order makes sense to you, right in Settings - the same order is reflected on the dashboard. See "Reordering checks" below.
 - **Push Notifications**: send an email for warn/fail-level checks and consolidated notifications, with per-channel toggles for which severity triggers it. Built on a pluggable channel architecture so more alerting services (Discord, Pushbullet, etc.) can be added later without a redesign. See "Push Notifications" below.
@@ -118,9 +119,9 @@ below applies. With **both** set:
 
 The credential field(s) shown change based on the service type:
 
-- **Radarr/Sonarr/Lidarr/Whisparr/Prowlarr/Chaptarr/Overseerr/Jellyseerr/
+- **Radarr/Sonarr/Lidarr/Whisparr/Prowlarr/Chaptarr/Seerr/Jellyseerr/
   Generic** - a single **API key** field (Settings > General > API Key for
-  the *arr apps; Settings > General > API Key for Overseerr/Jellyseerr).
+  the *arr apps; Settings > General > API Key for Seerr/Jellyseerr).
   Only needed for authenticated checks.
 - **Jellyfin** - an **API key** field (Dashboard > API Keys), plus optional
   **Admin username** + **Admin password** fields. The API key alone covers
@@ -159,7 +160,7 @@ poll interval override (see below).
 | qBittorrent | Web UI + real login verification (Username/Password against the WebUI API) + free disk space via API |
 | Deluge | Web UI + real login verification (Password only) + free disk space via API |
 | rTorrent | Web UI, pointed at whatever fronts it - rTorrent itself has no HTTP UI, so this is really monitoring its usual **ruTorrent** frontend (hence the ruTorrent icon). Username/Password apply as HTTP Basic Auth. Also speaks its XML-RPC interface directly for a reachability check - see "rTorrent's XML-RPC endpoint" below. |
-| Overseerr, Jellyseerr | Web UI, API status, and a check that TMDB (the metadata API both depend on for movie/TV data) is reachable through the app - see "Overseerr/Jellyseerr" below. Jellyseerr is an API-compatible fork of Overseerr, so both get identical checks. |
+| Seerr, Jellyseerr | Web UI, API status, and a check that TMDB (the metadata API both depend on for movie/TV data) is reachable through the app - see "Seerr/Jellyseerr" below. Jellyseerr is an API-compatible fork of Seerr, so both get identical checks. |
 | Generic | Web UI checks only - for anything else |
 
 Any service (regardless of type) can also have `filesystem_path`,
@@ -198,8 +199,8 @@ a library): it skips any path that already has a check.
 | `deluge_disk_space` | Deluge | Free space at a path (default: Deluge's own download location) via its JSON-RPC API - see "Disk space" below |
 | `rtorrent_rpc_status` | rTorrent | Confirms rTorrent's XML-RPC interface is reachable at a configured URL Path - see "rTorrent's XML-RPC endpoint" below |
 | `ftp_path` | any | Checks a path exists and has a minimum number of entries, like `filesystem_path`, but over FTP/FTPS against its own host/port/credentials instead of a bind mount |
-| `overseerr_status` | Overseerr, Jellyseerr | Confirms the API is reachable and the API key is valid |
-| `overseerr_tmdb_status` | Overseerr, Jellyseerr | Confirms TMDB (the movie/TV metadata API the app depends on) is reachable through it - see "Overseerr/Jellyseerr" below |
+| `overseerr_status` | Seerr, Jellyseerr | Confirms the API is reachable and the API key is valid |
+| `overseerr_tmdb_status` | Seerr, Jellyseerr | Confirms TMDB (the movie/TV metadata API the app depends on) is reachable through it - see "Seerr/Jellyseerr" below |
 | `ssl_certificate` | any | Validates the actual TLS certificate (trust chain, hostname, expiry) for an `https://` address - see "SSL certificate checks" below |
 
 ### Disk space
@@ -253,7 +254,7 @@ be auto-detected, so it's worth checking if this fails with a 404:
 Uses the service's Username/Password as HTTP Basic Auth, same as its Web UI
 check.
 
-### Overseerr/Jellyseerr
+### Seerr/Jellyseerr
 
 Two default checks, both using the standard **Alert level** Fail/Warn
 toggle like most checks (unlike the disk-space checks above, there's no
@@ -262,14 +263,14 @@ built-in severity logic to conflict with):
 - **`overseerr_status`** - the app itself is up and the API key works
   (GET `/api/v1/status`).
 - **`overseerr_tmdb_status`** - TMDB, the external movie/TV metadata API
-  both Overseerr and Jellyseerr depend on for basically everything they
+  both Seerr and Jellyseerr depend on for basically everything they
   show, is reachable. There's no dedicated "test TMDB" endpoint, so this
   calls the same trending-movies endpoint the app's own homepage does on
   every load (GET `/api/v1/discover/trending`) - a failure here usually
   points at TMDB or connectivity, not the app itself, which is why it's a
   separate check from Status above.
 
-Jellyseerr is Overseerr's Jellyfin-focused fork and shares an identical API,
+Jellyseerr is Seerr's Jellyfin-focused fork and shares an identical API,
 so both get the exact same checks.
 
 ### SSL certificate checks
@@ -401,6 +402,26 @@ The public dashboard mirrors whichever layout is active - same card sizes,
 same positions, same grid - but is read-only there: no drag handles, no
 dropdown.
 
+## History
+
+The History tab (admin) and page (public) loads incrementally as you scroll
+- an initial batch, then more automatically as you near the bottom - rather
+than a single capped fetch that used to run out after a few hundred rows
+regardless of how wide a time range was selected. Pagination is cursor-based
+(keyed on each row's id, not an offset), so it stays correct even while the
+poller keeps inserting new rows in the background.
+
+**Columns** opens a small dialog listing every available column (Time,
+Check, Type, Status, Response, Message) with a checkbox and a drag handle -
+check to show, drag to reorder, at least one has to stay visible. The
+arrangement is remembered (a cookie) and applies immediately, no separate
+save step.
+
+**Export CSV** downloads every row matching the current service and time
+range - not just whatever happened to be scrolled into view - using
+whichever columns are currently shown, in that order, as the file's header
+and column order.
+
 ## Push Notifications
 
 Settings > **Push Notifications** manages outbound alerting channels,
@@ -452,6 +473,18 @@ alert is held back. Two sections:
   to; each toggle saves immediately, no separate save step. A schedule
   applying to no group suppresses nothing (nothing is checked by default).
 
+## Log Pruning
+
+Settings > **Log Pruning** controls how long check history sticks around:
+**Delete check history after `[ ]` days** (default 7) and a daily **Prune
+time** (entered in your browser's local time). Pruning runs on that one
+schedule across every service, rather than continuously after each
+individual poll like it used to - if the container happens to be offline at
+the scheduled time, it catches up and prunes once as soon as it's back,
+rather than waiting up to 24h for the next occurrence. **Prune now** runs it
+immediately, useful for checking a new retention value takes effect without
+waiting for the schedule. A "Last pruned" readout shows when it last ran.
+
 ## Public dashboard
 
 A second, minimal web app runs on its own port (`8090` inside the
@@ -489,7 +522,7 @@ entirely (then you don't need to publish port 8090 either).
 - Filesystem checks only ever read paths you've explicitly bind-mounted
   read-only; the container does not need write access to your media.
 - "Sign in to Plex" never sees your Plex password - it uses Plex's standard
-  PIN-based sign-in flow (the same mechanism apps like Overseerr use): this
+  PIN-based sign-in flow (the same mechanism apps like Seerr use): this
   app only ever receives the resulting token, via a popup hosted on plex.tv
   itself.
 
@@ -504,11 +537,13 @@ old single address becomes their local address automatically.
 
 All settings are environment variables (see `.env.example`), prefixed `HC_`:
 `HC_DEFAULT_POLL_INTERVAL_SECONDS`, `HC_HTTP_TIMEOUT_SECONDS`,
-`HC_HISTORY_RETENTION_DAYS`, `HC_APP_SECRET_KEY`, `HC_AUTH_USERNAME`,
+`HC_APP_SECRET_KEY`, `HC_AUTH_USERNAME`,
 `HC_AUTH_PASSWORD`, `HC_LOG_LEVEL`, `HC_PORT` (default `8080`),
 `HC_PUBLIC_DASHBOARD_ENABLED` (default `true`), `HC_PUBLIC_PORT` (default
 `8090`), `HC_DATA_DIR` (defaults to `/config`, matching the compose volume -
-named to match the convention used by Radarr/Sonarr/etc. images).
+named to match the convention used by Radarr/Sonarr/etc. images). How long
+check history is kept is no longer an environment variable - it's in
+Settings > Log Pruning instead, see "Log Pruning" above.
 
 ## Development (without Docker)
 

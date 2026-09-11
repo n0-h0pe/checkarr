@@ -9,7 +9,7 @@ API_PREFIX = "/api/v1"
 
 async def check_overseerr_status(client: httpx.AsyncClient, base_url: str, api_key: str | None, config: dict) -> CheckOutcome:
     """Confirms the app itself (not just its reverse proxy/web UI) is up and
-    the API key works - GET /api/v1/status, the same endpoint Overseerr's
+    the API key works - GET /api/v1/status, the same endpoint Seerr's
     own update-checker widget polls. Works identically for Jellyseerr,
     which is an API-compatible fork.
     """
@@ -37,13 +37,13 @@ async def check_overseerr_status(client: httpx.AsyncClient, base_url: str, api_k
 async def check_overseerr_tmdb_status(
     client: httpx.AsyncClient, base_url: str, api_key: str | None, config: dict
 ) -> CheckOutcome:
-    """Overseerr/Jellyseerr pull all movie/TV metadata from TMDB (The Movie
+    """Seerr/Jellyseerr pull all movie/TV metadata from TMDB (The Movie
     Database) - there's no dedicated "test TMDB" endpoint, so this hits
-    /api/v1/discover/trending instead, the same call Overseerr's own
+    /api/v1/discover/trending instead, the same call Seerr's own
     homepage "Trending" carousel makes on every page load. A working
-    response means the whole path - Overseerr to TMDB and back - is intact;
+    response means the whole path - Seerr to TMDB and back - is intact;
     a failure here is a TMDB-side or connectivity problem, not necessarily
-    Overseerr itself (which is why "Status" above is a separate check).
+    Seerr itself (which is why "Status" above is a separate check).
     """
     url = base_url.rstrip("/") + API_PREFIX + "/discover/trending"
     start = time.perf_counter()
@@ -67,4 +67,4 @@ async def check_overseerr_tmdb_status(
     results = data.get("results")
     if not isinstance(results, list):
         return CheckOutcome(STATUS_FAIL, "TMDB-backed discover API response had no results list", elapsed)
-    return CheckOutcome(STATUS_OK, f"TMDB reachable via Overseerr - {len(results)} trending result(s)", elapsed)
+    return CheckOutcome(STATUS_OK, f"TMDB reachable via Seerr - {len(results)} trending result(s)", elapsed)

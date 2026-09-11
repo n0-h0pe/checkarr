@@ -1,12 +1,11 @@
 // Admin app: full CRUD over services/checks, on top of the read-only
 // rendering shared with the public dashboard via common.js.
 
-// Inline SVGs (not a Unicode/Braille character - font-dependent glyphs like
+// Inline SVG (not a Unicode/Braille character - font-dependent glyphs like
 // "⠿" render inconsistently and can look lopsided rather than a clean grip)
-// for the checks-grid's drag handle and its "Checks" section's collapse
-// chevron, same approach as REORDER_ICONS in common.js.
-const DRAG_HANDLE_ICON =
-  '<svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><circle cx="9" cy="6" r="1.7"/><circle cx="15" cy="6" r="1.7"/><circle cx="9" cy="12" r="1.7"/><circle cx="15" cy="12" r="1.7"/><circle cx="9" cy="18" r="1.7"/><circle cx="15" cy="18" r="1.7"/></svg>';
+// for the checks-grid's "Checks" section collapse chevron. DRAG_HANDLE_ICON
+// is the equivalent for drag handles - defined in common.js since the
+// History columns list (also shared with the public page) needs it too.
 const CHEVRON_DOWN_ICON =
   '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6,9 12,15 18,9"/></svg>';
 
@@ -26,6 +25,7 @@ function switchSettingsSubTab(subtab) {
   $all(".subtab-panel").forEach((p) => p.classList.toggle("active", p.id === `subtab-${subtab}`));
   if (subtab === "channels") loadChannels();
   if (subtab === "downtime") loadServiceGroups().then(loadSchedules);
+  if (subtab === "pruning") loadLogPruningSettings();
 }
 
 function switchTab(tab) {
@@ -1514,6 +1514,80 @@ async function deleteSchedule(s) {
   }
 }
 
+// ---------- settings: log pruning ----------
+
+// prune_hour/prune_minute are stored in UTC (no specific date attached -
+// just a daily time-of-day) - today's date is just a scratch reference to
+// convert through, same local<->UTC approach Scheduled Down Time uses.
+function utcHourMinuteToLocalTimeInput(hour, minute) {
+  const d = new Date();
+  d.setUTCHours(hour, minute, 0, 0);
+  return toLocalTimeInput(d);
+}
+function localTimeInputToUtcHourMinute(timeStr) {
+  const [h, m] = timeStr.split(":").map(Number);
+  const d = new Date();
+  d.setHours(h, m, 0, 0);
+  return { hour: d.getUTCHours(), minute: d.getUTCMinutes() };
+}
+
+function renderPruneLastRun(lastPrunedAt) {
+  $("#prune-last-run").textContent = "Last pruned: " + (lastPrunedAt ? relTime(lastPrunedAt) : "never");
+}
+
+async function loadLogPruningSettings() {
+  let s;
+  try {
+    s = await api("/api/log-pruning-settings");
+  } catch (e) {
+    toast("Failed to load log pruning settings: " + e.message, true);
+    return;
+  }
+  $("#prune-retention-days").value = s.retention_days;
+  $("#prune-time").value = utcHourMinuteToLocalTimeInput(s.prune_hour, s.prune_minute);
+  renderPruneLastRun(s.last_pruned_at);
+}
+
+async function submitPruningForm(ev) {
+  ev.preventDefault();
+  const retentionDays = parseInt($("#prune-retention-days").value, 10);
+  const timeVal = $("#prune-time").value;
+  if (!retentionDays || retentionDays < 1) {
+    toast("Enter a valid number of days", true);
+    return;
+  }
+  if (!timeVal) {
+    toast("Set a prune time", true);
+    return;
+  }
+  const { hour, minute } = localTimeInputToUtcHourMinute(timeVal);
+  try {
+    const s = await api("/api/log-pruning-settings", {
+      method: "PUT",
+      body: JSON.stringify({ retention_days: retentionDays, prune_hour: hour, prune_minute: minute }),
+    });
+    toast("Log pruning settings saved");
+    renderPruneLastRun(s.last_pruned_at);
+  } catch (e) {
+    toast("Save failed: " + e.message, true);
+  }
+}
+
+async function pruneNow() {
+  if (!confirm("Delete check history older than the configured retention right now?")) return;
+  const btn = $("#prune-now-btn");
+  btn.disabled = true;
+  try {
+    const result = await api("/api/log-pruning-settings/prune-now", { method: "POST" });
+    toast(`Pruned ${result.deleted} row(s)`);
+    loadLogPruningSettings();
+  } catch (e) {
+    toast("Prune failed: " + e.message, true);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
 // ---------- init ----------
 
 async function init() {
@@ -1536,6 +1610,9 @@ async function init() {
   $("#check-form").addEventListener("submit", submitCheckForm);
   $("#show-resolved").addEventListener("change", loadNotifications);
   $("#history-service").addEventListener("change", loadHistoryTab);
+  $("#history-columns-btn").addEventListener("click", openColumnsModal);
+  $("#columns-done").addEventListener("click", closeColumnsModal);
+  $("#history-export-btn").addEventListener("click", exportHistoryCsv);
   $("#save-changes-btn").addEventListener("click", saveChanges);
   $("#discard-changes-btn").addEventListener("click", discardChanges);
   $("#save-changes-btn-bottom").addEventListener("click", saveChanges);
@@ -1555,6 +1632,8 @@ async function init() {
   $("#add-schedule-btn").addEventListener("click", () => openScheduleModal());
   $("#schedule-cancel").addEventListener("click", closeScheduleModal);
   $("#schedule-form").addEventListener("submit", submitScheduleForm);
+  $("#pruning-form").addEventListener("submit", submitPruningForm);
+  $("#prune-now-btn").addEventListener("click", pruneNow);
 
   let resizeTimer = null;
   let lastViewportWidth = window.innerWidth;

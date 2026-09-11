@@ -457,6 +457,21 @@ table th { color: var(--text-dim); font-weight: 600; font-size: 12px; text-trans
 .checks-toggle-chevron { display: inline-flex; color: var(--text-dim); transition: transform .15s ease; }
 .checks-toggle-chevron.collapsed { transform: rotate(-90deg); }
 
+/* History "Customize columns" modal - a plain draggable list, one row per
+   column (see attachSimpleDragHandle in common.js - a single-element drag,
+   unlike the checks-grid's 6-cell-group one above). */
+#columns-list { max-height: 320px; overflow-y: auto; border: 1px solid var(--border); border-radius: 6px; padding: 2px 10px; }
+.column-row { display: flex; align-items: center; gap: 10px; padding: 8px 2px; border-bottom: 1px solid var(--border); }
+.column-row:last-child { border-bottom: none; }
+.column-row.dragging { opacity: .5; }
+.column-row .drag-handle {
+  display: flex; align-items: center; justify-content: center;
+  cursor: grab; color: var(--text-dim); touch-action: none;
+  -webkit-user-select: none; user-select: none;
+}
+.column-row .drag-handle:active { cursor: grabbing; color: var(--text); }
+.column-row .drag-handle svg { display: block; }
+
 .severity-toggle {
   display: inline-flex; align-items: center; gap: 5px;
   padding: 3px 8px; border-radius: 999px; font-size: 11px; font-weight: 600;

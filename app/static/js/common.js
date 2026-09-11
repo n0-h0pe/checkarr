@@ -437,6 +437,47 @@ function isMobileViewport() {
   return window.matchMedia("(max-width: 700px)").matches;
 }
 
+// Drag handle for the checks-grid (app.js) and the History columns list
+// below - an inline SVG rather than a Unicode/Braille character (glyphs
+// like "⠿" render inconsistently across fonts and can look lopsided rather
+// than a clean grip).
+const DRAG_HANDLE_ICON =
+  '<svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><circle cx="9" cy="6" r="1.7"/><circle cx="15" cy="6" r="1.7"/><circle cx="9" cy="12" r="1.7"/><circle cx="15" cy="12" r="1.7"/><circle cx="9" cy="18" r="1.7"/><circle cx="15" cy="18" r="1.7"/></svg>';
+
+// Generic single-element drag-to-reorder, for a plain vertical list of
+// sibling elements (unlike attachCheckDragHandle in app.js, which moves a
+// *group* of 6 cells per row - here each row already is one element, so
+// there's nothing to group). `getSiblings()` is called fresh on every move
+// so it always reflects the list's current DOM order.
+function attachSimpleDragHandle(handle, row, getSiblings, onDrop) {
+  function onPointerMove(e) {
+    const siblings = getSiblings().filter((s) => s !== row);
+    let target = null;
+    let insertAfter = false;
+    for (const s of siblings) {
+      const rect = s.getBoundingClientRect();
+      const mid = rect.top + rect.height / 2;
+      target = s;
+      insertAfter = e.clientY >= mid;
+      if (!insertAfter) break;
+    }
+    if (!target) return;
+    target.parentNode.insertBefore(row, insertAfter ? target.nextSibling : target);
+  }
+  function onPointerUp() {
+    document.removeEventListener("pointermove", onPointerMove);
+    document.removeEventListener("pointerup", onPointerUp);
+    row.classList.remove("dragging");
+    onDrop && onDrop();
+  }
+  handle.addEventListener("pointerdown", (e) => {
+    e.preventDefault();
+    row.classList.add("dragging");
+    document.addEventListener("pointermove", onPointerMove);
+    document.addEventListener("pointerup", onPointerUp);
+  });
+}
+
 const REORDER_ICONS = {
   top: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="5" x2="20" y2="5"/><polyline points="6,13 12,8 18,13"/><polyline points="6,19 12,14 18,19"/></svg>',
   up: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6,15 12,9 18,15"/></svg>',
@@ -776,6 +817,75 @@ async function loadNotifications() {
 
 // ---------- history (shared) ----------
 
+// Every column the History table can show - "type" isn't in the default
+// set (kept lean out of the box) but is one toggle away. `value` is the
+// plain-text form used both for the table cell fallback and CSV export;
+// `renderCell`, where present, overrides just the table's DOM rendering
+// (a colored badge for Status) without affecting the CSV value.
+const HISTORY_COLUMNS = {
+  time: { label: "Time", value: (r) => fmtTime(r.timestamp) },
+  check: { label: "Check", value: (r) => r.check_name },
+  type: { label: "Type", value: (r) => r.check_type },
+  status: {
+    label: "Status",
+    value: (r) => r.status,
+    renderCell: (r) => el("span", { class: `badge ${r.status}`, text: r.status }),
+  },
+  response: { label: "Response", value: (r) => (r.response_time_ms ? `${Math.round(r.response_time_ms)} ms` : "-") },
+  message: { label: "Message", value: (r) => r.message },
+};
+const DEFAULT_HISTORY_COLUMNS = ["time", "check", "status", "response", "message"];
+const HISTORY_PAGE_SIZE = 100;
+
+function loadHistoryColumns() {
+  const raw = getCookie("hc_history_columns");
+  const keys = raw ? raw.split(",").filter((k) => HISTORY_COLUMNS[k]) : [];
+  return keys.length ? keys : DEFAULT_HISTORY_COLUMNS.slice();
+}
+function saveHistoryColumns() {
+  setCookie("hc_history_columns", state.historyColumns.join(","), 365);
+}
+state.historyColumns = loadHistoryColumns();
+
+function historyTable() {
+  const body = $("#history-body");
+  return body ? body.closest("table") : null;
+}
+
+function renderHistoryHeader() {
+  const table = historyTable();
+  const thead = table && table.querySelector("thead");
+  if (!thead) return;
+  thead.innerHTML = "";
+  thead.appendChild(el("tr", {}, state.historyColumns.map((key) => el("th", { text: HISTORY_COLUMNS[key].label }))));
+}
+
+function historyRowElement(r) {
+  return el(
+    "tr",
+    {},
+    state.historyColumns.map((key) => {
+      const col = HISTORY_COLUMNS[key];
+      return el("td", { "data-label": col.label }, col.renderCell ? col.renderCell(r) : col.value(r));
+    })
+  );
+}
+
+let historyObserver = null;
+
+function ensureHistoryObserver() {
+  if (historyObserver) return;
+  historyObserver = new IntersectionObserver(
+    (entries) => {
+      if (entries[0].isIntersecting) loadMoreHistoryRows();
+    },
+    { rootMargin: "300px" }
+  );
+}
+
+// Resets to page 1 - called on service/range change and whenever the
+// column set changes (simplest way to keep already-rendered rows in sync
+// with a new column list, and cheap enough at this page size to just do).
 async function loadHistoryTab() {
   const select = $("#history-service");
   if (!select) return;
@@ -786,30 +896,175 @@ async function loadHistoryTab() {
     }
     if (!select.value && statuses.length) select.value = statuses[0].service.id;
   }
-  const serviceId = select.value;
+  renderHistoryHeader();
+  state.historyBeforeId = null;
+  state.historyExhausted = false;
+  state.historyLoading = false;
   const body = $("#history-body");
   body.innerHTML = "";
-  if (!serviceId) return;
+  if (!select.value) return;
+  await loadMoreHistoryRows();
+}
+
+// Fetches and appends the next page, cursor-paginated on id (see
+// queries.get_history's docstring for why id rather than an offset - a
+// service's rows keep growing while the user scrolls, and an offset would
+// shift under those new inserts, an id cursor can't). Wired to an
+// IntersectionObserver on a sentinel row kept at the table's end, so
+// scrolling near the bottom - of the page or of an inner scroll container,
+// doesn't matter which - loads more automatically.
+async function loadMoreHistoryRows() {
+  if (state.historyLoading || state.historyExhausted) return;
+  const select = $("#history-service");
+  if (!select || !select.value) return;
+  state.historyLoading = true;
 
   let rows;
   try {
-    rows = await api(`/api/history?service_id=${serviceId}&hours=${uptimeRangeHours()}&limit=500`);
+    const cursor = state.historyBeforeId != null ? `&before_id=${state.historyBeforeId}` : "";
+    rows = await api(
+      `/api/history?service_id=${select.value}&hours=${uptimeRangeHours()}&limit=${HISTORY_PAGE_SIZE}${cursor}`
+    );
   } catch (e) {
     toast("Failed to load history: " + e.message, true);
+    state.historyLoading = false;
     return;
   }
-  for (const r of rows) {
+
+  const body = $("#history-body");
+  const oldSentinel = $("#history-sentinel");
+  if (oldSentinel) {
+    if (historyObserver) historyObserver.unobserve(oldSentinel);
+    oldSentinel.remove();
+  }
+
+  for (const r of rows) body.appendChild(historyRowElement(r));
+  if (rows.length > 0) state.historyBeforeId = rows[rows.length - 1].id;
+  if (rows.length < HISTORY_PAGE_SIZE) state.historyExhausted = true;
+
+  if (body.children.length === 0) {
     body.appendChild(
-      el("tr", {}, [
-        el("td", { "data-label": "Time", text: fmtTime(r.timestamp) }),
-        el("td", { "data-label": "Check", text: r.check_name }),
-        el("td", { "data-label": "Status" }, el("span", { class: `badge ${r.status}`, text: r.status })),
-        el("td", { "data-label": "Response", text: r.response_time_ms ? `${Math.round(r.response_time_ms)} ms` : "-" }),
-        el("td", { "data-label": "Message", text: r.message }),
-      ])
+      el("tr", {}, el("td", { colspan: String(Math.max(1, state.historyColumns.length)), class: "empty-state", text: "No data in this window" }))
     );
+  } else if (!state.historyExhausted) {
+    ensureHistoryObserver();
+    const sentinel = el(
+      "tr",
+      { id: "history-sentinel" },
+      el("td", { colspan: String(Math.max(1, state.historyColumns.length)), style: "padding:0; border:none; height:1px;" })
+    );
+    body.appendChild(sentinel);
+    historyObserver.observe(sentinel);
   }
-  if (rows.length === 0) {
-    body.appendChild(el("tr", {}, el("td", { colspan: "5", class: "empty-state", text: "No data in this window" })));
+  state.historyLoading = false;
+}
+
+// ---------- history: column customization ----------
+
+function openColumnsModal() {
+  const list = $("#columns-list");
+  if (!list) return;
+  list.innerHTML = "";
+  const visible = state.historyColumns;
+  const hidden = Object.keys(HISTORY_COLUMNS).filter((k) => !visible.includes(k));
+  for (const key of [...visible, ...hidden]) {
+    list.appendChild(renderColumnRow(key, visible.includes(key)));
   }
+  $("#columns-modal").classList.remove("hidden");
+}
+
+function closeColumnsModal() {
+  const modal = $("#columns-modal");
+  if (modal) modal.classList.add("hidden");
+}
+
+function renderColumnRow(key, checked) {
+  const row = el("div", { class: "column-row", "data-key": key });
+  const handle = el("div", { class: "drag-handle" });
+  handle.innerHTML = DRAG_HANDLE_ICON;
+  const checkbox = el("input", { type: "checkbox" });
+  checkbox.checked = checked;
+  checkbox.addEventListener("change", () => {
+    const anyChecked = $all("#columns-list input[type=checkbox]").some((i) => i.checked);
+    if (!checkbox.checked && !anyChecked) {
+      toast("At least one column must stay visible", true);
+      checkbox.checked = true;
+      return;
+    }
+    onColumnsListChanged();
+  });
+  row.append(handle, checkbox, el("span", { text: HISTORY_COLUMNS[key].label }));
+  attachSimpleDragHandle(handle, row, () => $all(".column-row", $("#columns-list")), onColumnsListChanged);
+  return row;
+}
+
+function onColumnsListChanged() {
+  const rows = $all(".column-row", $("#columns-list"));
+  state.historyColumns = rows.filter((r) => r.querySelector("input[type=checkbox]").checked).map((r) => r.dataset.key);
+  saveHistoryColumns();
+  loadHistoryTab();
+}
+
+// ---------- history: CSV export ----------
+
+function csvEscape(value) {
+  const s = String(value ?? "");
+  return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+async function exportHistoryCsv() {
+  const select = $("#history-service");
+  if (!select || !select.value) return;
+  const btn = $("#history-export-btn");
+  const originalLabel = btn ? btn.textContent : "";
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "Exporting…";
+  }
+
+  // Not just whatever's scrolled into view so far - the whole filtered set,
+  // paginated the same way the table itself is, up to a generous safety cap
+  // rather than an unbounded loop.
+  const EXPORT_PAGE_SIZE = 1000;
+  const MAX_PAGES = 50;
+  const allRows = [];
+  let beforeId = null;
+  try {
+    for (let page = 0; page < MAX_PAGES; page++) {
+      const cursor = beforeId != null ? `&before_id=${beforeId}` : "";
+      const rows = await api(
+        `/api/history?service_id=${select.value}&hours=${uptimeRangeHours()}&limit=${EXPORT_PAGE_SIZE}${cursor}`
+      );
+      allRows.push(...rows);
+      if (rows.length < EXPORT_PAGE_SIZE) break;
+      beforeId = rows[rows.length - 1].id;
+    }
+  } catch (e) {
+    toast("Export failed: " + e.message, true);
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = originalLabel;
+    }
+    return;
+  }
+
+  const cols = state.historyColumns.map((k) => HISTORY_COLUMNS[k]);
+  const lines = [cols.map((c) => csvEscape(c.label)).join(",")];
+  for (const r of allRows) lines.push(cols.map((c) => csvEscape(c.value(r))).join(","));
+
+  const blob = new Blob([lines.join("\r\n")], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const serviceName = (select.options[select.selectedIndex]?.text || "history").replace(/[^\w-]+/g, "_");
+  const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
+  const link = el("a", { href: url, download: `checkarr-history-${serviceName}-${stamp}.csv` });
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+
+  if (btn) {
+    btn.disabled = false;
+    btn.textContent = originalLabel;
+  }
+  toast(`Exported ${allRows.length} row(s)`);
 }

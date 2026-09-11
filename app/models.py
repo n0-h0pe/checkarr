@@ -250,3 +250,25 @@ class DowntimeScheduleGroup(Base):
     group_id: Mapped[int] = mapped_column(ForeignKey("service_groups.id"), nullable=False)
 
     schedule: Mapped["DowntimeSchedule"] = relationship(back_populates="groups")
+
+
+class LogPruningSettings(Base):
+    """Singleton row (exactly one, seeded at startup - see
+    queries.get_or_create_log_pruning_settings) configuring the one daily
+    scheduled job (see log_pruning.py, scheduler.schedule_log_pruning) that
+    deletes CheckResult rows older than `retention_days` across every
+    service. `prune_hour`/`prune_minute` are UTC (the frontend converts
+    from/to the browser's local time at the API boundary, same convention as
+    Scheduled Down Time's schedule times). `last_pruned_at` drives
+    log_pruning.catch_up_if_needed - if the configured time already passed
+    since the last prune (e.g. the container was offline at 2am), it prunes
+    immediately at startup instead of waiting up to 24h for the next run."""
+
+    __tablename__ = "log_pruning_settings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    retention_days: Mapped[int] = mapped_column(Integer, default=7)
+    prune_hour: Mapped[int] = mapped_column(Integer, default=2)
+    prune_minute: Mapped[int] = mapped_column(Integer, default=0)
+    last_pruned_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)

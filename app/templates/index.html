@@ -54,12 +54,18 @@
       <div class="panel">
         <div class="panel-header">
           <h2>Check history</h2>
-          <select id="history-service"></select>
+          <div style="display:flex; gap:8px;">
+            <select id="history-service"></select>
+            <button type="button" class="small" id="history-columns-btn">Columns</button>
+            <button type="button" class="small" id="history-export-btn">Export CSV</button>
+          </div>
         </div>
-        <table>
-          <thead><tr><th>Time</th><th>Check</th><th>Status</th><th>Response</th><th>Message</th></tr></thead>
-          <tbody id="history-body"></tbody>
-        </table>
+        <div style="overflow-x:auto;">
+          <table>
+            <thead></thead>
+            <tbody id="history-body"></tbody>
+          </table>
+        </div>
       </div>
     </section>
 
@@ -68,6 +74,7 @@
         <button class="sub-tab-btn active" data-subtab="services">Services</button>
         <button class="sub-tab-btn" data-subtab="channels">Push Notifications</button>
         <button class="sub-tab-btn" data-subtab="downtime">Scheduled Down Time</button>
+        <button class="sub-tab-btn" data-subtab="pruning">Log Pruning</button>
       </div>
 
       <div class="subtab-panel active" id="subtab-services">
@@ -133,6 +140,32 @@
             <button class="primary" id="add-schedule-btn">+ Add schedule</button>
           </div>
           <div id="schedules-list"></div>
+        </div>
+      </div>
+
+      <div class="subtab-panel" id="subtab-pruning">
+        <div class="panel">
+          <div class="panel-header">
+            <h2>Log Pruning</h2>
+          </div>
+          <form id="pruning-form">
+            <div class="field">
+              <label>Delete check history after</label>
+              <div style="display:flex; align-items:center; gap:8px; max-width:200px;">
+                <input type="number" id="prune-retention-days" min="1" max="3650" required>
+                <span class="text-dim">days</span>
+              </div>
+            </div>
+            <div class="field">
+              <label>Prune time <span class="hint">(daily, your local time)</span></label>
+              <input type="time" id="prune-time" style="max-width:200px;">
+            </div>
+            <div class="field text-dim" id="prune-last-run"></div>
+            <div class="modal-actions" style="justify-content:flex-start;">
+              <button type="submit" class="primary">Save</button>
+              <button type="button" id="prune-now-btn">Prune now</button>
+            </div>
+          </form>
         </div>
       </div>
     </section>
@@ -366,6 +399,17 @@
           <button type="submit" class="primary">Save</button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <div class="modal-backdrop hidden" id="columns-modal">
+    <div class="modal">
+      <h3>Customize columns</h3>
+      <div class="hint" style="margin-bottom:10px;">Drag to reorder, check to show. At least one must stay visible.</div>
+      <div id="columns-list"></div>
+      <div class="modal-actions">
+        <button type="button" class="primary" id="columns-done">Done</button>
+      </div>
     </div>
   </div>
 
