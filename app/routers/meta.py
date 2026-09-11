@@ -279,6 +279,38 @@ CHECK_TYPE_META = [
         "applies_to": ["overseerr", "jellyseerr"],
         "fields": [],
     },
+    {
+        "type": "ssl_certificate",
+        "label": "SSL certificate validity",
+        "applies_to": SERVICE_TYPES,
+        "fields": [
+            {"key": "expiry_warn_days", "label": "Warn when expiring within (days)", "kind": "number", "default": 14},
+        ],
+    },
+]
+
+# Meta for Settings > Push Notifications channel types - same shape as
+# CHECK_TYPE_META, and deliberately so: adding a new alerting service later
+# (Discord, Pushbullet, ...) means one more entry here plus one new sender
+# in app/notifiers/ and one dispatch branch in alerting.py, no schema or UI
+# redesign. A field flagged "secret": True is stored encrypted and never
+# echoed back in plaintext - see NotificationChannel.secret_encrypted and
+# the has_secret/"leave blank to keep existing" pattern already used for
+# service API keys.
+NOTIFICATION_CHANNEL_TYPE_META = [
+    {
+        "type": "email",
+        "label": "Email (SMTP)",
+        "fields": [
+            {"key": "smtp_host", "label": "SMTP host", "kind": "text", "default": ""},
+            {"key": "smtp_port", "label": "SMTP port", "kind": "number", "default": 587},
+            {"key": "smtp_username", "label": "SMTP username (optional)", "kind": "text", "default": ""},
+            {"key": "smtp_password", "label": "SMTP password (optional)", "kind": "password", "default": "", "secret": True},
+            {"key": "use_tls", "label": "Use STARTTLS", "kind": "checkbox", "default": True},
+            {"key": "from_address", "label": "From address", "kind": "text", "default": ""},
+            {"key": "to_addresses", "label": "To address(es) (comma separated)", "kind": "text", "default": ""},
+        ],
+    },
 ]
 
 
@@ -289,5 +321,6 @@ def get_meta():
         "check_types": CHECK_TYPE_META,
         "service_type_icons": SERVICE_TYPE_ICONS,
         "service_type_defaults": SERVICE_TYPE_DEFAULTS,
+        "notification_channel_types": NOTIFICATION_CHANNEL_TYPE_META,
         "build": {"version": VERSION, "build_date": BUILD_DATE},
     }

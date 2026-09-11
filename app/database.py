@@ -71,10 +71,23 @@ def _run_migrations() -> None:
             conn.exec_driver_sql("ALTER TABLE services ADD COLUMN username VARCHAR(255)")
         if "jellyfin_admin_password_encrypted" not in service_cols:
             conn.exec_driver_sql("ALTER TABLE services ADD COLUMN jellyfin_admin_password_encrypted TEXT")
+        if "verify_ssl" in service_cols:
+            # The per-service "Verify SSL certificates" toggle is gone - the
+            # new dedicated ssl_certificate check now owns cert validation,
+            # and ordinary checks no longer enforce cert trust at all (see
+            # poller.py). Same drop-if-possible pattern as legacy base_url
+            # above; harmless to leave in place on an old SQLite that can't
+            # drop columns; the ORM just no longer reads or writes it.
+            try:
+                conn.exec_driver_sql("ALTER TABLE services DROP COLUMN verify_ssl")
+            except Exception:
+                logger.exception("Could not drop legacy services.verify_ssl column (old SQLite?) - harmless, it's just unused now.")
 
         check_cols = _table_columns(conn, "check_definitions")
         if "interval_seconds" not in check_cols:
             conn.exec_driver_sql("ALTER TABLE check_definitions ADD COLUMN interval_seconds INTEGER")
+        if "sort_order" not in check_cols:
+            conn.exec_driver_sql("ALTER TABLE check_definitions ADD COLUMN sort_order INTEGER DEFAULT 0")
 
         layout_cols = _table_columns(conn, "dashboard_layouts")
         if "columns" not in layout_cols:

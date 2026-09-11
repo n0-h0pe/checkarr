@@ -5,11 +5,17 @@ from datetime import datetime, timedelta, timezone
 
 import httpx
 
+from .alerting import dispatch_alert
 from .checks.base import STATUS_FAIL, STATUS_WARN, NotificationItem
 from .checks.runner import ALWAYS_BOTH_TARGETS_TYPES, SERVICE_SCOPED_TYPES, run_check
 from .config import settings
 from .database import SessionLocal
 from .models import CheckDefinition, CheckResult, Notification, Service
+
+# Notification.severity -> alert tier (see NotificationChannel.notify_on_warn/
+# notify_on_fail). "notice"/"ok" are informational, not actionable - never
+# alerted on.
+_NOTIFICATION_SEVERITY_TIER = {"warning": "warn", "error": "fail"}
 
 logger = logging.getLogger("healthchecker.poller")
 
@@ -88,8 +94,13 @@ async def poll_service(service_id: int) -> None:
                 jobs.append((check, label, url))
 
         try:
+            # verify=False: ordinary checks no longer enforce cert trust at
+            # all (self-signed local HTTPS just works) - the dedicated
+            # ssl_certificate check (checks/ssl_check.py) does its own real,
+            # strict validation independently and is the one place cert
+            # problems get reported.
             async with httpx.AsyncClient(
-                timeout=settings.http_timeout_seconds, verify=service.verify_ssl
+                timeout=settings.http_timeout_seconds, verify=False
             ) as client:
                 outcomes = await asyncio.gather(*(run_check(client, service, c, url) for c, _, url in jobs))
         except Exception:
@@ -98,6 +109,11 @@ async def poll_service(service_id: int) -> None:
 
         notification_sources_checked: set[str] = set()
         fingerprints_seen: set[str] = set()
+        # (tier, subject, body) queued while the loop still has a DB session
+        # open for "what was the previous status" lookups - actually sent
+        # after commit, below, so a rolled-back poll can never fire a false
+        # alert.
+        alerts_to_send: list[tuple[str, str, str]] = []
 
         for (check, label, _url), outcome in zip(jobs, outcomes):
             check_name = f"{check.name} ({label})" if label and suffix_targets else check.name
@@ -106,6 +122,23 @@ async def poll_service(service_id: int) -> None:
             # as - doesn't touch OK/WARN outcomes, only downgrades a FAIL.
             if status == STATUS_FAIL and (check.config or {}).get("alert_level") == "warn":
                 status = STATUS_WARN
+
+            if status in (STATUS_WARN, STATUS_FAIL):
+                previous = (
+                    db.query(CheckResult)
+                    .filter(CheckResult.check_id == check.id)
+                    .order_by(CheckResult.timestamp.desc())
+                    .first()
+                )
+                # Only alert on the transition into warn/fail, not on every
+                # poll while it stays that way - matches how Notification
+                # dedup below only fires once per ongoing issue too.
+                if not previous or previous.status != status:
+                    tier = "warn" if status == STATUS_WARN else "fail"
+                    alerts_to_send.append(
+                        (tier, f"[Checkarr] {service.name} - {check_name}: {status.upper()}", outcome.message)
+                    )
+
             db.add(
                 CheckResult(
                     service_id=service.id,
@@ -145,6 +178,9 @@ async def poll_service(service_id: int) -> None:
                             last_seen=now,
                         )
                     )
+                    tier = _NOTIFICATION_SEVERITY_TIER.get(item.severity)
+                    if tier:
+                        alerts_to_send.append((tier, f"[Checkarr] {service.name} - {item.source}", item.message))
 
         if notification_sources_checked:
             stale = (
@@ -163,6 +199,12 @@ async def poll_service(service_id: int) -> None:
 
         db.commit()
         _prune_old_results(db, service.id)
+
+        for tier, subject, body in alerts_to_send:
+            # Fire-and-forget: dispatch_alert opens its own DB session and
+            # does blocking network I/O per channel, off the event loop -
+            # never blocks or fails the poll loop itself.
+            asyncio.create_task(asyncio.to_thread(dispatch_alert, tier, subject, body))
     finally:
         db.close()
 

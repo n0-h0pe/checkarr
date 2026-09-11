@@ -2,7 +2,7 @@
 // dashboard (public.js). Keeps their read-only rendering identical without
 // the public surface ever importing anything that can mutate state.
 
-const state = { meta: null, services: [], statuses: [], tab: "dashboard", activeLayout: null, lastGridColumns: null };
+const state = { meta: null, services: [], statuses: [], channels: [], tab: "dashboard", activeLayout: null, lastGridColumns: null };
 
 // Dashboard tile grid: each track is one unit (px). A card's position/size
 // is stored as {x, y, w, h} in 1-based grid-line units and applied as
@@ -259,7 +259,12 @@ function computeCardLayout(statuses) {
     // reflow above, so the saved width still comes back on a wide-enough
     // screen untouched.
     const savedW = saved && Number.isFinite(saved.w) ? Math.max(MIN_CARD_W, saved.w) : DEFAULT_CARD_W;
-    const w = Math.min(savedW, totalCols);
+    // On mobile every card is a full-width single-column list, always -
+    // clamping a saved/default width down to totalCols (as below) still
+    // leaves a gap for anything narrower than totalCols (a brand new
+    // service with no saved size, or a card saved narrower on desktop), so
+    // mobile forces w to totalCols outright rather than just capping it.
+    const w = isMobileViewport() ? totalCols : Math.min(savedW, totalCols);
     const h = saved && Number.isFinite(saved.h) ? Math.max(MIN_CARD_H, saved.h) : DEFAULT_CARD_H;
     const hasPos = saved && Number.isFinite(saved.x) && Number.isFinite(saved.y);
     return {

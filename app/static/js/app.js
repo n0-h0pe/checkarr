@@ -7,6 +7,15 @@ function initTabs() {
   $all(".tab-btn").forEach((btn) => {
     btn.addEventListener("click", () => switchTab(btn.dataset.tab));
   });
+  $all(".sub-tab-btn").forEach((btn) => {
+    btn.addEventListener("click", () => switchSettingsSubTab(btn.dataset.subtab));
+  });
+}
+
+function switchSettingsSubTab(subtab) {
+  $all(".sub-tab-btn").forEach((b) => b.classList.toggle("active", b.dataset.subtab === subtab));
+  $all(".subtab-panel").forEach((p) => p.classList.toggle("active", p.id === `subtab-${subtab}`));
+  if (subtab === "channels") loadChannels();
 }
 
 function switchTab(tab) {
@@ -14,10 +23,21 @@ function switchTab(tab) {
   $all(".tab-btn").forEach((b) => b.classList.toggle("active", b.dataset.tab === tab));
   $all(".tab-panel").forEach((p) => p.classList.toggle("active", p.id === `tab-${tab}`));
   document.body.classList.toggle("wide-main", tab === "dashboard");
+  updateHeaderControlsVisibility(tab);
   if (tab === "dashboard") loadDashboardAdmin();
   if (tab === "notifications") loadNotifications();
   if (tab === "history") loadHistoryTab();
   if (tab === "settings") loadSettings();
+}
+
+// Layout editing only makes sense on the Dashboard; the uptime-range picker
+// is meaningless on Settings (nothing on that tab uses it) but still applies
+// to Notifications/History same as Dashboard, so it only excludes Settings.
+function updateHeaderControlsVisibility(tab) {
+  const layoutControls = $(".layout-controls");
+  if (layoutControls) layoutControls.hidden = tab !== "dashboard";
+  const uptimeControl = $(".uptime-range-control");
+  if (uptimeControl) uptimeControl.hidden = tab === "settings";
 }
 
 let layoutEditMode = false;
@@ -286,10 +306,7 @@ function discardChanges() {
 
 function renderServiceRow(svc) {
   const tr = el("tr", { class: "service-row" });
-  const isCollapsed = collapsedServiceIds.has(svc.id);
 
-  const arrowBtn = el("button", { class: "small expand-arrow" }, isCollapsed ? ">" : "v");
-  tr.appendChild(el("td", {}, arrowBtn));
   tr.appendChild(el("td", { "data-label": "Name", text: svc.name }));
   tr.appendChild(el("td", { "data-label": "Type" }, el("span", {}, [typeIcon(svc.type), " " + svc.type])));
   tr.appendChild(el("td", { "data-label": "Local", text: svc.local_url || "-" }));
@@ -303,16 +320,7 @@ function renderServiceRow(svc) {
   ]);
   tr.appendChild(el("td", {}, actions));
 
-  const detailRow = el("tr", {}, el("td", { colspan: "8" }, renderChecksPanel(svc)));
-  detailRow.style.display = isCollapsed ? "none" : "";
-
-  arrowBtn.addEventListener("click", () => {
-    const collapse = detailRow.style.display !== "none";
-    detailRow.style.display = collapse ? "none" : "";
-    arrowBtn.textContent = collapse ? ">" : "v";
-    if (collapse) collapsedServiceIds.add(svc.id); else collapsedServiceIds.delete(svc.id);
-    saveCollapsedServiceIds();
-  });
+  const detailRow = el("tr", { class: "service-detail-row" }, el("td", { colspan: "7" }, renderChecksPanel(svc)));
 
   const wrapper = document.createDocumentFragment();
   wrapper.appendChild(tr);
@@ -321,6 +329,7 @@ function renderServiceRow(svc) {
 }
 
 function renderChecksPanel(svc) {
+  const isCollapsed = collapsedServiceIds.has(svc.id);
   const panel = el("div", { class: "checks-subpanel" });
   const actions = [el("button", { class: "small primary", onclick: () => openCheckModal(svc) }, "+ Add check")];
   if (svc.type === "plex" || svc.type === "jellyfin") {
@@ -336,9 +345,14 @@ function renderChecksPanel(svc) {
       )
     );
   }
+  // The expand/collapse toggle lives right above the list it controls
+  // (rather than off at the top of the whole service row, far from what it
+  // actually does) and only hides the checks-grid itself - Add check/Scan
+  // libraries above it stay usable either way.
+  const toggleBtn = el("button", { class: "small expand-arrow" }, `${isCollapsed ? "▸" : "▾"} Checks (${svc.checks.length})`);
   panel.appendChild(
     el("div", { style: "display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;" }, [
-      el("strong", { text: "Checks" }),
+      toggleBtn,
       el("div", { style: "display:flex; gap:6px;" }, actions),
     ])
   );
@@ -347,15 +361,24 @@ function renderChecksPanel(svc) {
     return panel;
   }
   const grid = el("div", { class: "checks-grid" }, [
+    el("div", { class: "checks-grid-header" }),
     el("div", { class: "checks-grid-header", text: "Enable" }),
     el("div", { class: "checks-grid-header", text: "Check Type" }),
     el("div", { class: "checks-grid-header", text: "Name" }),
     el("div", { class: "checks-grid-header", text: "Alert level" }),
     el("div", { class: "checks-grid-header", text: "Actions" }),
   ]);
+  grid.style.display = isCollapsed ? "none" : "";
   for (const c of svc.checks) {
     appendCheckGridRow(grid, svc, c);
   }
+  toggleBtn.addEventListener("click", () => {
+    const collapse = grid.style.display !== "none";
+    grid.style.display = collapse ? "none" : "";
+    toggleBtn.textContent = `${collapse ? "▸" : "▾"} Checks (${svc.checks.length})`;
+    if (collapse) collapsedServiceIds.add(svc.id); else collapsedServiceIds.delete(svc.id);
+    saveCollapsedServiceIds();
+  });
   panel.appendChild(grid);
   return panel;
 }
@@ -363,6 +386,10 @@ function renderChecksPanel(svc) {
 function appendCheckGridRow(grid, svc, c) {
   const pendingDelete = pendingCheckDeletions.has(c.id);
   const rowClass = pendingDelete ? "row-pending-delete" : "";
+
+  const handle = el("div", { class: "drag-handle", "data-check-id": c.id, title: pendingDelete ? null : "Drag to reorder" }, pendingDelete ? "" : "⠷");
+  grid.appendChild(handle);
+  if (!pendingDelete) attachCheckDragHandle(handle, grid, svc);
 
   grid.appendChild(
     el("div", { class: rowClass, "data-label": "Enable" }, el("input", {
@@ -410,6 +437,70 @@ function appendCheckGridRow(grid, svc, c) {
         ]
     )
   );
+}
+
+// Each check's row is 6 sibling divs directly under .checks-grid, in DOM
+// order (no wrapper element - that would break the flat grid's nth-child
+// CSS and its column layout, since only direct children of a CSS Grid
+// container participate in it). Reordering therefore means moving real DOM
+// nodes as a group of 6, not re-rendering - getRowNodes below walks forward
+// from a row's drag handle (always the 1st of the 6) to collect the rest.
+function getRowNodes(handleEl) {
+  const nodes = [handleEl];
+  let n = handleEl;
+  for (let i = 0; i < 5; i++) {
+    n = n.nextElementSibling;
+    nodes.push(n);
+  }
+  return nodes;
+}
+
+function attachCheckDragHandle(handle, grid, svc) {
+  let rowNodes = null;
+
+  function onPointerMove(e) {
+    if (!rowNodes) return;
+    const otherHandles = $all(".drag-handle", grid).filter((h) => h !== handle);
+    let targetHandle = null;
+    let insertAfter = false;
+    for (const h of otherHandles) {
+      const rect = h.getBoundingClientRect();
+      const mid = rect.top + rect.height / 2;
+      targetHandle = h;
+      insertAfter = e.clientY >= mid;
+      if (!insertAfter) break;
+    }
+    if (!targetHandle) return;
+    const targetNodes = getRowNodes(targetHandle);
+    const anchor = insertAfter ? targetNodes[targetNodes.length - 1].nextSibling : targetNodes[0];
+    for (const node of rowNodes) grid.insertBefore(node, anchor);
+  }
+
+  function onPointerUp() {
+    document.removeEventListener("pointermove", onPointerMove);
+    document.removeEventListener("pointerup", onPointerUp);
+    for (const node of rowNodes) node.classList.remove("checks-grid-row-dragging");
+    rowNodes = null;
+
+    const orderedIds = $all(".drag-handle", grid).map((h) => Number(h.dataset.checkId));
+    const byId = new Map(svc.checks.map((c) => [c.id, c]));
+    const reordered = orderedIds.map((id) => byId.get(id)).filter(Boolean);
+    svc.checks.length = 0;
+    svc.checks.push(...reordered);
+
+    api(`/api/services/${svc.id}/checks/reorder`, {
+      method: "POST",
+      body: JSON.stringify({ ordered_ids: orderedIds }),
+    }).catch((e) => toast("Could not save check order: " + e.message, true));
+  }
+
+  handle.addEventListener("pointerdown", (e) => {
+    e.preventDefault();
+    rowNodes = getRowNodes(handle);
+    for (const node of rowNodes) node.classList.add("checks-grid-row-dragging");
+    document.addEventListener("pointermove", onPointerMove);
+    document.addEventListener("pointerup", onPointerUp);
+  });
 }
 
 async function deleteService(svc) {
@@ -512,7 +603,6 @@ function openServiceModal(svc = null) {
   $("#svc-jellyfin-admin-password-hint").textContent =
     svc && svc.has_jellyfin_admin_password ? "(already set - leave blank to keep)" : "(optional, paired with the Admin username above)";
   $("#svc-interval").value = svc && svc.poll_interval_seconds ? svc.poll_interval_seconds : "";
-  $("#svc-verify-ssl").checked = svc ? svc.verify_ssl : true;
   $("#svc-enabled").checked = svc ? svc.enabled : true;
   $("#svc-notes").value = svc && svc.notes ? svc.notes : "";
   resetConnStatus();
@@ -643,7 +733,6 @@ async function submitServiceForm(ev) {
     name: $("#svc-name").value.trim(),
     check_both_targets: $("#svc-check-both").checked,
     username: $("#svc-username").value.trim(),
-    verify_ssl: $("#svc-verify-ssl").checked,
     enabled: $("#svc-enabled").checked,
     poll_interval_seconds: $("#svc-interval").value ? parseInt($("#svc-interval").value, 10) : null,
     notes: $("#svc-notes").value.trim() || null,
@@ -808,6 +897,11 @@ function renderDynamicFields(svc, checkType, existingConfig = {}) {
       el("div", { class: "field hint", text: "There's no dedicated \"test TMDB\" endpoint, so this hits the same trending-movies call the app's own homepage makes on every load - a failure here usually means a TMDB-side or connectivity problem, not the app itself (that's what the Status check above is for)." })
     );
   }
+  if (checkType === "ssl_certificate") {
+    container.appendChild(
+      el("div", { class: "field hint", text: "Added automatically the first time this service gets an https:// local or remote address - does a real, strict certificate check independent of any other check, which never verify certs themselves. Runs against whichever of local/remote is https; harmless against a plain http:// address (reports \"not applicable\")." })
+    );
+  }
 }
 
 async function submitCheckForm(ev) {
@@ -858,6 +952,192 @@ async function submitCheckForm(ev) {
   }
 }
 
+// ---------- settings: push notifications ----------
+
+async function loadChannels() {
+  try {
+    state.channels = await api("/api/notification-channels");
+  } catch (e) {
+    toast("Failed to load notification channels: " + e.message, true);
+    return;
+  }
+  renderChannelsFromState();
+}
+
+function renderChannelsFromState() {
+  const body = $("#channels-body");
+  body.innerHTML = "";
+  if (state.channels.length === 0) {
+    body.appendChild(el("tr", {}, el("td", { colspan: "6", class: "empty-state", text: "No notification channels configured" })));
+    return;
+  }
+  for (const ch of state.channels) {
+    body.appendChild(renderChannelRow(ch));
+  }
+}
+
+function renderChannelRow(ch) {
+  const tr = el("tr", {});
+  tr.appendChild(el("td", { "data-label": "Name", text: ch.name }));
+  tr.appendChild(el("td", { "data-label": "Type", text: ch.type }));
+  tr.appendChild(el("td", { "data-label": "Enabled" }, el("span", { class: `badge ${ch.enabled ? "ok" : "disabled"}`, text: ch.enabled ? "enabled" : "disabled" })));
+  tr.appendChild(el("td", { "data-label": "Warn" }, el("span", { class: `dot ${ch.notify_on_warn ? "warn" : "disabled"}` })));
+  tr.appendChild(el("td", { "data-label": "Fail" }, el("span", { class: `dot ${ch.notify_on_fail ? "fail" : "disabled"}` })));
+  tr.appendChild(
+    el("td", {}, el("div", { style: "display:flex; gap:6px;" }, [
+      el("button", { class: "small", onclick: () => openChannelModal(ch) }, "Edit"),
+      el("button", { class: "small danger", onclick: () => deleteChannel(ch) }, "Delete"),
+    ]))
+  );
+  return tr;
+}
+
+function channelTypesFor() {
+  return (state.meta.notification_channel_types || []);
+}
+
+function openChannelModal(ch = null) {
+  $("#channel-modal-title").textContent = ch ? "Edit channel" : "Add channel";
+  $("#chn-id").value = ch ? ch.id : "";
+  $("#chn-name").value = ch ? ch.name : "";
+  $("#chn-notify-warn").checked = ch ? ch.notify_on_warn : true;
+  $("#chn-notify-fail").checked = ch ? ch.notify_on_fail : true;
+  $("#chn-enabled").checked = ch ? ch.enabled : true;
+  $("#chn-test-status").textContent = "";
+  $("#chn-test-status").className = "conn-status";
+
+  const typeSelect = $("#chn-type");
+  typeSelect.innerHTML = "";
+  for (const t of channelTypesFor()) {
+    typeSelect.appendChild(el("option", { value: t.type, text: t.label }));
+  }
+  typeSelect.disabled = !!ch;
+  typeSelect.value = ch ? ch.type : typeSelect.options[0]?.value;
+  typeSelect.onchange = () => renderChannelDynamicFields(typeSelect.value, {}, false);
+  renderChannelDynamicFields(typeSelect.value, ch ? ch.config : {}, ch ? ch.has_secret : false);
+
+  $("#channel-modal").classList.remove("hidden");
+}
+
+function closeChannelModal() {
+  $("#channel-modal").classList.add("hidden");
+}
+
+function renderChannelDynamicFields(channelType, existingConfig = {}, hasSecret = false) {
+  const container = $("#chn-dynamic-fields");
+  container.innerHTML = "";
+  const meta = channelTypesFor().find((t) => t.type === channelType);
+  if (!meta) return;
+
+  for (const f of meta.fields) {
+    let value = existingConfig[f.key];
+    if (value === undefined || value === null) value = f.default ?? "";
+    const label = f.label;
+
+    if (f.kind === "checkbox") {
+      const input = el("input", { type: "checkbox", id: `chn-field-${f.key}` });
+      input.checked = !!value;
+      container.appendChild(
+        el("div", { class: "field checkbox" }, [input, el("label", { for: `chn-field-${f.key}`, text: label })])
+      );
+      continue;
+    }
+
+    const fieldWrap = el("div", { class: "field" }, [el("label", { text: label })]);
+    let input;
+    if (f.kind === "number") {
+      input = el("input", { type: "number", id: `chn-field-${f.key}`, value: f.secret ? "" : value });
+    } else if (f.kind === "password" || f.secret) {
+      input = el("input", {
+        type: "password",
+        id: `chn-field-${f.key}`,
+        placeholder: hasSecret ? "(already set - leave blank to keep)" : "",
+        autocomplete: "new-password",
+      });
+    } else {
+      input = el("input", { type: "text", id: `chn-field-${f.key}`, value: value });
+    }
+    fieldWrap.appendChild(input);
+    container.appendChild(fieldWrap);
+  }
+}
+
+async function submitChannelForm(ev) {
+  ev.preventDefault();
+  const channelId = $("#chn-id").value;
+  const channelType = $("#chn-type").value;
+  const meta = channelTypesFor().find((t) => t.type === channelType);
+
+  const config = {};
+  let secret = null;
+  for (const f of meta.fields) {
+    const input = $(`#chn-field-${f.key}`);
+    if (!input) continue;
+    if (f.secret) {
+      if (input.value) secret = input.value;
+      continue; // secret fields never go into config - see NotificationChannel.secret_encrypted
+    }
+    if (f.kind === "number") config[f.key] = input.value === "" ? null : Number(input.value);
+    else if (f.kind === "checkbox") config[f.key] = input.checked;
+    else config[f.key] = input.value;
+  }
+
+  const payload = {
+    name: $("#chn-name").value.trim(),
+    config,
+    notify_on_warn: $("#chn-notify-warn").checked,
+    notify_on_fail: $("#chn-notify-fail").checked,
+    enabled: $("#chn-enabled").checked,
+  };
+  if (secret) payload.secret = secret;
+
+  try {
+    if (channelId) {
+      await api(`/api/notification-channels/${channelId}`, { method: "PUT", body: JSON.stringify(payload) });
+    } else {
+      payload.type = channelType;
+      await api("/api/notification-channels", { method: "POST", body: JSON.stringify(payload) });
+    }
+    toast("Channel saved");
+    closeChannelModal();
+    loadChannels();
+  } catch (e) {
+    toast("Save failed: " + e.message, true);
+  }
+}
+
+async function deleteChannel(ch) {
+  if (!confirm(`Delete notification channel "${ch.name}"?`)) return;
+  try {
+    await api(`/api/notification-channels/${ch.id}`, { method: "DELETE" });
+    toast("Channel deleted");
+    loadChannels();
+  } catch (e) {
+    toast("Delete failed: " + e.message, true);
+  }
+}
+
+async function testChannelFromModal() {
+  const channelId = $("#chn-id").value;
+  if (!channelId) {
+    toast("Save the channel before sending a test", true);
+    return;
+  }
+  const statusEl = $("#chn-test-status");
+  statusEl.className = "conn-status pending";
+  statusEl.textContent = "…";
+  let result;
+  try {
+    result = await api(`/api/notification-channels/${channelId}/test`, { method: "POST" });
+  } catch (e) {
+    statusEl.className = "conn-status fail";
+    statusEl.textContent = "✕ " + e.message;
+    return;
+  }
+  statusEl.className = "conn-status " + (result.ok ? "ok" : "fail");
+  statusEl.textContent = (result.ok ? "✓ " : "✕ ") + result.message;
+}
+
 // ---------- init ----------
 
 async function init() {
@@ -890,6 +1170,10 @@ async function init() {
   $("#layout-new-btn").addEventListener("click", newLayoutFromCurrent);
   $("#layout-rename-btn").addEventListener("click", renameActiveLayout);
   $("#layout-delete-btn").addEventListener("click", deleteActiveLayout);
+  $("#add-channel-btn").addEventListener("click", () => openChannelModal());
+  $("#channel-cancel").addEventListener("click", closeChannelModal);
+  $("#channel-form").addEventListener("submit", submitChannelForm);
+  $("#chn-test").addEventListener("click", testChannelFromModal);
 
   let resizeTimer = null;
   let lastViewportWidth = window.innerWidth;
@@ -914,6 +1198,7 @@ async function init() {
   });
 
   document.body.classList.add("wide-main"); // dashboard is the default active tab
+  updateHeaderControlsVisibility("dashboard");
   loadDashboardAdmin();
   setInterval(() => { if (state.tab === "dashboard" && !layoutEditMode) loadDashboardAdmin(); }, 30000);
   setInterval(() => { if (state.tab === "notifications") loadNotifications(); }, 30000);

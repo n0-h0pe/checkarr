@@ -21,6 +21,9 @@ shows one consolidated view of what's healthy, what's degraded, and why.
 - A responsive layout on every page - the dashboard, Settings, History, and Notifications all adapt down to a phone-width screen, admin and public alike. On a card too narrow to show a check's full result message, that message shortens to something like "200 OK" or "Files OK" instead of just clipping mid-sentence.
 - API keys are encrypted at rest (Fernet/AES) and never echoed back to the browser.
 - Historic results stored in SQLite, with a History tab and per-service uptime strip on the dashboard. The strip's time range is adjustable from a dropdown in the top bar (admin and public both) - anywhere from just the last poll up to a full week - and greys out any slice of that range nothing was actually polled in.
+- A dedicated **SSL certificate validity check**, generated automatically for every `https://` address a service has - real, strict certificate validation (trust chain, hostname, expiry), independent of and unaffected by any other check. See "SSL certificate checks" below.
+- Drag checks into whatever order makes sense to you, right in Settings - the same order is reflected on the dashboard. See "Reordering checks" below.
+- **Push Notifications**: send an email for warn/fail-level checks and consolidated notifications, with per-channel toggles for which severity triggers it. Built on a pluggable channel architecture so more alerting services (Discord, Pushbullet, etc.) can be added later without a redesign. See "Push Notifications" below.
 - Single Docker container: web GUI + API + scheduler + database, no external dependencies.
 
 ## Quick start
@@ -197,6 +200,7 @@ a library): it skips any path that already has a check.
 | `ftp_path` | any | Checks a path exists and has a minimum number of entries, like `filesystem_path`, but over FTP/FTPS against its own host/port/credentials instead of a bind mount |
 | `overseerr_status` | Overseerr, Jellyseerr | Confirms the API is reachable and the API key is valid |
 | `overseerr_tmdb_status` | Overseerr, Jellyseerr | Confirms TMDB (the movie/TV metadata API the app depends on) is reachable through it - see "Overseerr/Jellyseerr" below |
+| `ssl_certificate` | any | Validates the actual TLS certificate (trust chain, hostname, expiry) for an `https://` address - see "SSL certificate checks" below |
 
 ### Disk space
 
@@ -262,6 +266,20 @@ built-in severity logic to conflict with):
 Jellyseerr is Overseerr's Jellyfin-focused fork and shares an identical API,
 so both get the exact same checks.
 
+### SSL certificate checks
+
+The first time a service gets a local or remote address starting with
+`https://`, an **SSL certificate valid** check is added automatically (one
+per service, evaluated against whichever of local/remote is actually
+https). It does a real, strict certificate check - trust chain, hostname,
+and expiry (warns within 14 days of expiring by default, configurable) -
+independent of every other check.
+
+This is deliberately decoupled from ordinary checks: `http_200`, the *arr
+API checks, and everything else no longer verify certificates at all, so a
+self-signed certificate on a local reverse proxy never breaks them. Cert
+health is the SSL check's job alone, not a blanket connection setting.
+
 ### Per-check poll interval
 
 Every check has an optional interval override (seconds). Leave it blank to
@@ -286,9 +304,18 @@ are also editable the normal way via Edit, kept in sync
 either way; the minimum-entries count for filesystem checks lives in Edit
 only, not the table, to keep the row compact.
 
-Click the **›**/**v** arrow next to a service's name to collapse or expand
-its checks table - collapsed/expanded state is remembered per service in a
-browser cookie (not tied to Save/Discard), defaulting to expanded.
+Click the **▾**/**▸ Checks (N)** button directly above a service's checks
+table to collapse or expand just that table - collapsed/expanded state is
+remembered per service in a browser cookie (not tied to Save/Discard),
+defaulting to expanded. Collapsing only hides the table itself; **+ Add
+check** (and **Scan libraries**, where it applies) stay available either way.
+
+### Reordering checks
+
+Drag a check by the handle (⠿) on the left of its row to reorder it within
+its service - the new order saves immediately (no separate Save step, and
+independent of the Enable/Alert level staging below) and is reflected in
+that service's check order on the dashboard too.
 
 None of Enable, Alert level, or **Delete** save immediately: deleting a
 check just marks its row for deletion (shown struck through, with an
@@ -367,6 +394,31 @@ layouts:
 The public dashboard mirrors whichever layout is active - same card sizes,
 same positions, same grid - but is read-only there: no drag handles, no
 dropdown.
+
+## Push Notifications
+
+Settings > **Push Notifications** manages outbound alerting channels,
+structured the same way as Services: a table of configured channels, **+ Add
+channel** to add one, Edit/Delete per row.
+
+Today's only channel type is **Email (SMTP)**: host, port, optional
+username/password, STARTTLS toggle, From address, and one or more To
+addresses. Each channel has its own **Send for Warn alerts** / **Send for
+Fail alerts** toggles, and a **Send test** button in its edit form for
+immediate feedback before relying on it. Passwords are encrypted at rest the
+same way API keys are, and never echoed back to the browser.
+
+An alert fires on:
+
+- A check transitioning *into* warn or fail (not on every poll while it
+  stays that way, and not on recovery).
+- A new consolidated notification (the *arr apps' health feed, etc.) -
+  `warning`-severity items count as Warn, `error`-severity as Fail; the
+  first time only, same as the Notifications tab's own dedup.
+
+The channel type is deliberately pluggable - adding another alerting service
+(Discord, Pushbullet, etc.) later is a matter of one more channel type, not
+a redesign of this system.
 
 ## Public dashboard
 
