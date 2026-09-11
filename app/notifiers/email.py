@@ -9,6 +9,14 @@ from email.message import EmailMessage
 from .. import models
 from ..security import decrypt_secret
 
+# Port 465 is "implicit TLS" (SMTPS) - the server expects a TLS handshake as
+# the very first bytes on the connection, not a plaintext SMTP greeting
+# followed by STARTTLS. Connecting with plain SMTP() and then calling
+# starttls() against a port-465 server gets the connection dropped
+# immediately (smtplib surfaces this as "Connection unexpectedly closed"),
+# which is what this always did regardless of port before this check existed.
+_IMPLICIT_TLS_PORTS = {465}
+
 
 def send_email(channel: "models.NotificationChannel", subject: str, body: str) -> None:
     config = channel.config or {}
@@ -29,6 +37,13 @@ def send_email(channel: "models.NotificationChannel", subject: str, body: str) -
     msg["From"] = from_addr
     msg["To"] = ", ".join(to_addrs)
     msg.set_content(body)
+
+    if port in _IMPLICIT_TLS_PORTS:
+        with smtplib.SMTP_SSL(host, port, timeout=15) as smtp:
+            if username and password:
+                smtp.login(username, password)
+            smtp.send_message(msg)
+        return
 
     with smtplib.SMTP(host, port, timeout=15) as smtp:
         if use_tls:

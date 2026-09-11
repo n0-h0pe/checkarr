@@ -16,6 +16,9 @@
         <button type="button" class="small" id="layout-new-btn" title="Save current card sizes as a new layout">+ New</button>
         <button type="button" class="small" id="layout-rename-btn" title="Rename this layout">Rename</button>
         <button type="button" class="small danger" id="layout-delete-btn" title="Delete this layout">Delete</button>
+        <span id="layout-add-card-wrap" hidden>
+          <select id="layout-add-card-select" title="Add a card to this layout"></select>
+        </span>
       </div>
       <div class="uptime-range-control">
         <select id="uptime-range-select" title="Uptime strip range"></select>
@@ -150,16 +153,17 @@
           </div>
           <form id="pruning-form">
             <div class="field">
-              <label>Delete check history after</label>
-              <div style="display:flex; align-items:center; gap:8px; max-width:200px;">
+              <label>Prune logs after</label>
+              <div style="display:flex; align-items:center; gap:8px; max-width:220px;">
                 <input type="number" id="prune-retention-days" min="1" max="3650" required>
                 <span class="text-dim">days</span>
               </div>
             </div>
             <div class="field">
-              <label>Prune time <span class="hint">(daily, your local time)</span></label>
+              <label>At time <span class="hint">(your local time)</span></label>
               <input type="time" id="prune-time" style="max-width:200px;">
             </div>
+            <div class="field text-dim" id="prune-schedule-summary"></div>
             <div class="field text-dim" id="prune-last-run"></div>
             <div class="modal-actions" style="justify-content:flex-start;">
               <button type="submit" class="primary">Save</button>

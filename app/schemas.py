@@ -219,6 +219,8 @@ class DashboardLayoutOut(BaseModel):
     name: str
     sizes: dict[str, Any]
     columns: int | None = None
+    card_service_ids: list[int]
+    is_default: bool
     is_active: bool
     created_at: datetime
     updated_at: datetime
@@ -229,18 +231,23 @@ class DashboardLayoutSummary(BaseModel):
     id: int
     name: str
     is_active: bool
+    is_default: bool
 
 
 class DashboardLayoutCreate(BaseModel):
     name: str
     sizes: dict[str, Any] = Field(default_factory=dict)
     columns: int | None = None
+    # None -> server defaults to every currently-configured service, a
+    # sensible starting point for a brand new layout the user then trims.
+    card_service_ids: list[int] | None = None
 
 
 class DashboardLayoutUpdate(BaseModel):
     name: str | None = None
     sizes: dict[str, Any] | None = None
     columns: int | None = None
+    card_service_ids: list[int] | None = None
 
 
 class NotificationChannelBase(BaseModel):

@@ -23,6 +23,7 @@ def init_db() -> None:
 
     Base.metadata.create_all(bind=engine)
     _run_migrations()
+    _migrate_dashboard_layout_cards()
 
     from .queries import get_or_create_all_services_group, get_or_create_log_pruning_settings
 
@@ -101,6 +102,44 @@ def _run_migrations() -> None:
         layout_cols = _table_columns(conn, "dashboard_layouts")
         if "columns" not in layout_cols:
             conn.exec_driver_sql("ALTER TABLE dashboard_layouts ADD COLUMN columns INTEGER")
+        if "card_service_ids" not in layout_cols:
+            conn.exec_driver_sql("ALTER TABLE dashboard_layouts ADD COLUMN card_service_ids TEXT")
+        if "is_default" not in layout_cols:
+            conn.exec_driver_sql("ALTER TABLE dashboard_layouts ADD COLUMN is_default BOOLEAN DEFAULT 0")
+
+
+def _migrate_dashboard_layout_cards() -> None:
+    """One-time backfill for dashboard_layouts.card_service_ids/is_default,
+    added when per-layout card add/remove was introduced. Before this,
+    every layout implicitly showed every service - preserve that as each
+    existing layout's explicit starting set, and designate whichever layout
+    was created first (the oldest id - reliably the one auto-seeded by
+    get_or_create_active_layout, since no custom layout can exist before
+    that) as the protected "All Services" layout, renaming it from its old
+    default name if the user hasn't already renamed it themselves."""
+    from . import models
+
+    db = SessionLocal()
+    try:
+        layouts = db.query(models.DashboardLayout).order_by(models.DashboardLayout.id).all()
+        if not layouts:
+            return
+        changed = False
+        if not any(layout.is_default for layout in layouts):
+            first = layouts[0]
+            first.is_default = True
+            if first.name == "Default":
+                first.name = "All Services"
+            changed = True
+        all_service_ids = [sid for (sid,) in db.query(models.Service.id).all()]
+        for layout in layouts:
+            if layout.card_service_ids is None:
+                layout.card_service_ids = [] if layout.is_default else list(all_service_ids)
+                changed = True
+        if changed:
+            db.commit()
+    finally:
+        db.close()
 
 
 def get_db():

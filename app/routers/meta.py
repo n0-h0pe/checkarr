@@ -306,7 +306,7 @@ NOTIFICATION_CHANNEL_TYPE_META = [
             {"key": "smtp_port", "label": "SMTP port", "kind": "number", "default": 587},
             {"key": "smtp_username", "label": "SMTP username (optional)", "kind": "text", "default": ""},
             {"key": "smtp_password", "label": "SMTP password (optional)", "kind": "password", "default": "", "secret": True},
-            {"key": "use_tls", "label": "Use STARTTLS", "kind": "checkbox", "default": True},
+            {"key": "use_tls", "label": "Use STARTTLS (port 465 always uses implicit TLS instead)", "kind": "checkbox", "default": True},
             {"key": "from_address", "label": "From address", "kind": "text", "default": ""},
             {"key": "to_addresses", "label": "To address(es) (comma separated)", "kind": "text", "default": ""},
         ],

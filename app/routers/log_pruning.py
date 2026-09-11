@@ -32,7 +32,7 @@ def update_log_pruning_settings(payload: schemas.LogPruningSettingsUpdate, db: S
 
     # Takes effect immediately, no restart needed - re-registering the same
     # job id just replaces its trigger (see scheduler.schedule_log_pruning).
-    schedule_log_pruning(settings_row.prune_hour, settings_row.prune_minute)
+    schedule_log_pruning(settings_row.retention_days, settings_row.prune_hour, settings_row.prune_minute)
     return settings_row
 
 

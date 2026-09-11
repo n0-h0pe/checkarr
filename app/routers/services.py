@@ -154,6 +154,12 @@ def delete_service(service_id: int, db: Session = Depends(get_db)):
     # Not cascaded via an ORM relationship on Service - clean up explicitly
     # so a Service Group never keeps a dangling membership row.
     db.query(models.ServiceGroupMember).filter_by(service_id=service_id).delete()
+    # Same for a custom dashboard layout's explicit card list - the
+    # is_default "All Services" layout ignores this field entirely, nothing
+    # to clean up there.
+    for layout in db.query(models.DashboardLayout).filter_by(is_default=False).all():
+        if service_id in (layout.card_service_ids or []):
+            layout.card_service_ids = [sid for sid in layout.card_service_ids if sid != service_id]
     db.delete(service)
     db.commit()
     return None

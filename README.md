@@ -17,11 +17,11 @@ shows one consolidated view of what's healthy, what's degraded, and why.
 - "Test connection" button in the Add/Edit service form - a quick green ✓/red ✕ per address before you even save, plus autofilled Name and a type-appropriate default port in the address placeholder when you pick a service type.
 - For Plex, a "Sign in to Plex" button fills in the X-Plex-Token for you via Plex's own sign-in flow - no copying tokens out of your browser's dev tools.
 - Quick-edit controls on every check's row in Settings (Enabled, and for Plex/Jellyfin path checks, the empty-path severity and minimum-entries count) - no need to open Edit for a one-field change. These stage locally with an obvious "unsaved changes" banner and explicit Save/Discard, so a stray click can't silently change what's being monitored.
-- An "Edit layout" mode for the dashboard: drag cards anywhere and resize them from the corner, snapped to an invisible grid, saved as named/switchable layouts that adapt to how wide your window is. See "Dashboard layouts" below.
+- An "Edit layout" mode for the dashboard: drag cards anywhere and resize them from the corner, snapped to an invisible grid, saved as named/switchable layouts that adapt to how wide your window is. Custom layouts can also show a curated subset of cards (add/remove per layout) alongside the always-complete, undeletable "All Services" layout. See "Dashboard layouts" below.
 - A responsive layout on every page - the dashboard, Settings, History, and Notifications all adapt down to a phone-width screen, admin and public alike. On a card too narrow to show a check's full result message, that message shortens to something like "200 OK" or "Files OK" instead of just clipping mid-sentence.
 - API keys are encrypted at rest (Fernet/AES) and never echoed back to the browser.
 - Historic results stored in SQLite, with a History tab and per-service uptime strip on the dashboard. Both share one time-range dropdown in the top bar (admin and public both) - anywhere from just the last poll up to a full week - the uptime strip greys out any slice of that range nothing was actually polled in. History itself loads incrementally as you scroll rather than capping out after a few hundred rows, its columns are configurable and reorderable, and the current view exports to CSV - see "History" below.
-- How long check history sticks around before being deleted is configurable (default 7 days), pruned on one daily schedule at a time you set - see "Log Pruning" below.
+- How long check history sticks around before being deleted is configurable (default 7 days) - pruned once every that-many days, at a time you set, see "Log Pruning" below.
 - A dedicated **SSL certificate validity check**, generated automatically for every `https://` address a service has - real, strict certificate validation (trust chain, hostname, expiry), independent of and unaffected by any other check. See "SSL certificate checks" below.
 - Drag checks into whatever order makes sense to you, right in Settings - the same order is reflected on the dashboard. See "Reordering checks" below.
 - **Push Notifications**: send an email for warn/fail-level checks and consolidated notifications, with per-channel toggles for which severity triggers it. Built on a pluggable channel architecture so more alerting services (Discord, Pushbullet, etc.) can be added later without a redesign. See "Push Notifications" below.
@@ -387,15 +387,28 @@ separate Save step. A service you haven't dragged yet is placed
 automatically below whatever you have positioned, so newly added services
 never land on top of something you've already arranged.
 
+Every install has one **All Services** layout (🔒 in the dropdown) that
+always shows every service, including ones added after the layout was
+created, and can't be deleted - it's the guaranteed fallback you can always
+get back to. Any other ("custom") layout only shows the cards you've
+explicitly put on it: while editing a custom layout, each card gets a small
+**✕** button next to its status badge to remove it, and a **+ Add card**
+dropdown appears in the top bar (once there's at least one service not
+already on the layout) to bring one back. A newly added service only ever
+appears on **All Services** automatically - it's never inserted into a
+custom layout behind your back, since that could disrupt a set you
+deliberately curated.
+
 The dropdown in the top bar next to **Edit layout** holds your saved
 layouts:
 
-- **+ New** - saves the dashboard's current card sizes as a new layout (you
-  pick a name) and switches to it.
+- **+ New** - saves the dashboard's current card sizes (and, for a custom
+  layout, its current card set) as a new layout (you pick a name) and
+  switches to it.
 - **Rename** - renames the layout currently selected.
-- **Delete** - deletes the layout currently selected; if it was the active
-  one, another saved layout takes its place automatically (there's always at
-  least one).
+- **Delete** - deletes the layout currently selected (disabled for **All
+  Services**, which can't be deleted); if it was the active one, another
+  saved layout takes its place automatically (there's always at least one).
 - Pick any layout from the dropdown to switch the dashboard to it instantly.
 
 The public dashboard mirrors whichever layout is active - same card sizes,
@@ -476,14 +489,17 @@ alert is held back. Two sections:
 ## Log Pruning
 
 Settings > **Log Pruning** controls how long check history sticks around:
-**Delete check history after `[ ]` days** (default 7) and a daily **Prune
-time** (entered in your browser's local time). Pruning runs on that one
-schedule across every service, rather than continuously after each
+**Prune logs after `[ ]` days** (default 7) **at** a time you set (entered
+in your browser's local time). The day count doubles as the schedule's
+interval, not just the retention cutoff - a service pruned every 7 days
+runs once a week, not daily, at the configured time. Pruning runs on that
+one schedule across every service, rather than continuously after each
 individual poll like it used to - if the container happens to be offline at
 the scheduled time, it catches up and prunes once as soon as it's back,
-rather than waiting up to 24h for the next occurrence. **Prune now** runs it
-immediately, useful for checking a new retention value takes effect without
-waiting for the schedule. A "Last pruned" readout shows when it last ran.
+rather than waiting up to another full interval for the next occurrence.
+**Prune now** runs it immediately, useful for checking a new retention
+value takes effect without waiting for the schedule. A "Last pruned"
+readout shows when it last ran.
 
 ## Public dashboard
 
