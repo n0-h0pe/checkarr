@@ -25,8 +25,8 @@ async function init() {
     loadNotifications();
     setInterval(loadNotifications, 30000);
   } else if (window.PUBLIC_PAGE === "history") {
+    initUptimeRangeSelect();
     $("#history-service").addEventListener("change", loadHistoryTab);
-    $("#history-hours").addEventListener("change", loadHistoryTab);
     loadHistoryTab();
     setInterval(loadHistoryTab, 30000);
   }

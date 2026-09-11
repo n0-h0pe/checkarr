@@ -65,8 +65,21 @@ function saveUptimeRange(value) {
 
 state.uptimeRange = loadUptimeRange();
 
+// The /api/history `hours` query param the current uptime range maps to -
+// shared by the dashboard's uptime strip and the History tab, which both
+// read off the one top-bar dropdown now (see initUptimeRangeSelect below).
+// Backend requires >=1 (`ge=1`), so "just the last poll" (0 minutes) still
+// has to ask for *something* - 1 hour is the smallest meaningful window.
+function uptimeRangeHours() {
+  const range = UPTIME_RANGES.find((r) => r.value === state.uptimeRange) || UPTIME_RANGES.find((r) => r.value === DEFAULT_UPTIME_RANGE);
+  return Math.min(720, Math.max(1, Math.ceil(range.minutes / 60)));
+}
+
 // Shared by both the admin header and the public dashboard's equivalent bar
-// - same markup (#uptime-range-select), same behavior either side.
+// - same markup (#uptime-range-select), same behavior either side. Also
+// drives the History tab/page's range now (no separate dropdown there
+// anymore) - loadHistoryTab no-ops itself when its own elements aren't on
+// the page, so calling it unconditionally here is harmless.
 function initUptimeRangeSelect() {
   const select = $("#uptime-range-select");
   if (!select) return;
@@ -78,6 +91,7 @@ function initUptimeRangeSelect() {
     state.uptimeRange = select.value;
     saveUptimeRange(select.value);
     for (const s of state.statuses) loadUptimeStrip(s.service.id);
+    loadHistoryTab();
   });
 }
 
@@ -638,10 +652,9 @@ async function loadUptimeStrip(serviceId) {
     return;
   }
 
-  const hoursParam = Math.min(720, Math.max(1, Math.ceil(range.minutes / 60)));
   let rows;
   try {
-    rows = await api(`/api/history?service_id=${serviceId}&hours=${hoursParam}&limit=2000`);
+    rows = await api(`/api/history?service_id=${serviceId}&hours=${uptimeRangeHours()}&limit=2000`);
   } catch (_) {
     return;
   }
@@ -774,14 +787,13 @@ async function loadHistoryTab() {
     if (!select.value && statuses.length) select.value = statuses[0].service.id;
   }
   const serviceId = select.value;
-  const hours = $("#history-hours").value;
   const body = $("#history-body");
   body.innerHTML = "";
   if (!serviceId) return;
 
   let rows;
   try {
-    rows = await api(`/api/history?service_id=${serviceId}&hours=${hours}&limit=500`);
+    rows = await api(`/api/history?service_id=${serviceId}&hours=${uptimeRangeHours()}&limit=500`);
   } catch (e) {
     toast("Failed to load history: " + e.message, true);
     return;

@@ -427,19 +427,35 @@ table th { color: var(--text-dim); font-weight: 600; font-size: 12px; text-trans
    Reordering moves the row's 6 sibling divs as a group via pointer events
    (see attachCheckDragHandle in app.js) rather than a virtual-list re-render
    - touch-action: none keeps a touch drag from also scrolling the page,
-   same reasoning as .resize-handle above. */
+   same reasoning as .resize-handle above. flex (not text-align) centers the
+   icon in both directions regardless of the row's actual height, rather
+   than relying on a single line box lining up with it. */
 .checks-grid .drag-handle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   cursor: grab;
-  text-align: center;
   color: var(--text-dim);
   touch-action: none;
   -webkit-user-select: none;
   user-select: none;
 }
+.checks-grid .drag-handle svg { display: block; }
 .checks-grid .drag-handle:active { cursor: grabbing; color: var(--text); }
 .checks-grid-row-dragging { opacity: .5; }
 
-.expand-arrow { width: 24px; padding: 4px 0; text-align: center; font-family: monospace; }
+/* The "Checks (N)" collapse toggle sitting above a service's checks-grid -
+   sized to its actual content (unlike the old fixed 24px-wide .expand-arrow
+   this replaced, built for a single ">"/"v" character and left over-narrow
+   once repurposed for this longer label, wrapping it across three lines). */
+.checks-toggle {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: none; border: none; padding: 4px 2px;
+  color: var(--text); font-size: 13px; font-weight: 600; cursor: pointer;
+}
+.checks-toggle:hover { color: var(--accent); }
+.checks-toggle-chevron { display: inline-flex; color: var(--text-dim); transition: transform .15s ease; }
+.checks-toggle-chevron.collapsed { transform: rotate(-90deg); }
 
 .severity-toggle {
   display: inline-flex; align-items: center; gap: 5px;

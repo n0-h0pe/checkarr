@@ -24,12 +24,7 @@
         <h2>Check history</h2>
         <div style="display:flex; gap:8px;">
           <select id="history-service"></select>
-          <select id="history-hours">
-            <option value="6">Last 6h</option>
-            <option value="24" selected>Last 24h</option>
-            <option value="72">Last 3 days</option>
-            <option value="168">Last 7 days</option>
-          </select>
+          <div class="uptime-range-control"><select id="uptime-range-select" title="History range"></select></div>
         </div>
       </div>
       <table>
