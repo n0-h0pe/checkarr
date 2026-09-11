@@ -22,15 +22,18 @@ SERVICE_TYPE_ICONS = {
     "jellyfin": f"{_ICON_BASE}/jellyfin.svg",
     "qbittorrent": f"{_ICON_BASE}/qbittorrent.svg",
     "deluge": f"{_ICON_BASE}/deluge.svg",
-    "rtorrent": f"{_ICON_BASE}/rutorrent.svg",  # rTorrent has no web UI of its own - this is its usual ruTorrent frontend
+    # dashboard-icons has no separate plain-rtorrent icon (only rutorrent.svg
+    # exists in that set) - bare rTorrent and ruTorrent both use it.
+    "rtorrent": f"{_ICON_BASE}/rutorrent.svg",
+    "rutorrent": f"{_ICON_BASE}/rutorrent.svg",
     "overseerr": f"{_ICON_BASE}/overseerr.svg",
     "jellyseerr": f"{_ICON_BASE}/jellyseerr.svg",
 }
 
 # Used to autofill the Name field and the Local address placeholder when a
 # type is picked in Add Service - "port" is each app's documented default,
-# omitted where there isn't a real convention (rTorrent has no web UI of its
-# own; Chaptarr's isn't established).
+# omitted where there isn't a real convention (rTorrent/ruTorrent have none;
+# Chaptarr's isn't established).
 SERVICE_TYPE_DEFAULTS = {
     "radarr": {"name": "Radarr", "port": 7878},
     "sonarr": {"name": "Sonarr", "port": 8989},
@@ -43,6 +46,7 @@ SERVICE_TYPE_DEFAULTS = {
     "qbittorrent": {"name": "qBittorrent", "port": 8080},
     "deluge": {"name": "Deluge", "port": 8112},
     "rtorrent": {"name": "rTorrent", "port": None},
+    "rutorrent": {"name": "ruTorrent", "port": None},
     "overseerr": {"name": "Seerr", "port": 5055},
     "jellyseerr": {"name": "Jellyseerr", "port": 5055},
     "generic": {"name": "", "port": None},
@@ -243,7 +247,7 @@ CHECK_TYPE_META = [
     {
         "type": "rtorrent_rpc_status",
         "label": "XML-RPC endpoint reachable",
-        "applies_to": ["rtorrent"],
+        "applies_to": ["rtorrent", "rutorrent"],
         "fields": [
             {
                 "key": "rpc_path",

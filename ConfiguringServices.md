@@ -7,12 +7,14 @@ the apps you're about to monitor with it.
 
 ## Adding a service
 
-Settings tab, "Add service". Pick a type (see "Supported services" below),
-which autofills the Name field, updates the Local address placeholder with
-that app's usual default port, and switches the credential field(s) to
-match (see "Credentials" below). Set a local address, a remote address, or
-both, then hit "Test connection" for an immediate result per address before
-you even save:
+Settings tab, "Add service". The type dropdown is grouped into Arr Stack,
+Downloaders, Media Servers, and Other, alphabetical within each group, so
+you're not scanning one long flat list to find what you want. Picking a
+type (see "Supported services" below) autofills the Name field, updates the
+Local address placeholder with that app's usual default port, and switches
+the credential field(s) to match (see "Credentials" below). Set a local
+address, a remote address, or both, then hit "Test connection" for an
+immediate result per address before you even save:
 
 - **Local address**, direct/LAN URL, e.g. `http://radarr:7878`.
 - **Remote address**, public/reverse-proxied URL, if you have one, e.g.
@@ -55,8 +57,9 @@ The credential field(s) shown change based on the service type:
   login API. Leave both blank if that instance has authentication disabled.
 - **Deluge**: password only (Deluge's WebUI has no username), same real
   login verification.
-- **rTorrent**: username and password, sent as HTTP Basic Auth on the web
-  UI check (rTorrent itself has no API, this covers a ruTorrent frontend
+- **rTorrent / ruTorrent**: username and password, sent as HTTP Basic Auth
+  on the web UI check and the XML-RPC check alike (rTorrent itself has no
+  auth of its own - this covers ruTorrent, or whatever else fronts it,
   sitting behind htaccess-style auth).
 
 Every one of these credential fields has a "Use environment variable"
@@ -75,7 +78,8 @@ see [DeployingDocker.md](DeployingDocker.md).
 | Chaptarr | Web UI only for now, its API shape hasn't been verified as Servarr-compatible. Add `http_200`/`keyword_match` checks as needed. |
 | qBittorrent | Web UI, real login verification, free disk space via API |
 | Deluge | Web UI, real login verification, free disk space via API |
-| rTorrent | Web UI, pointed at whatever fronts it (usually ruTorrent). Also speaks its XML-RPC interface directly, see below. |
+| rTorrent | No web UI check (there's genuinely nothing to reach) - just its XML-RPC interface, see below. Use this for a bare rTorrent with no ruTorrent in front of it. |
+| ruTorrent | Web UI (ruTorrent's own, at `/rutorrent/` by default) plus the XML-RPC interface, defaulted to ruTorrent's httprpc plugin path. Use this instead of rTorrent above whenever ruTorrent is actually what's fronting it - see below, they're separate types because their correct defaults differ. |
 | Seerr, Jellyseerr | Web UI, API status, and a check that TMDB is reachable through the app. Jellyseerr is an API-compatible fork of Seerr, so both get identical checks. |
 | Generic | Web UI checks only, for anything else |
 
@@ -144,7 +148,7 @@ path that already has a check.
 | `deluge_login` | Deluge | Confirms the configured password actually logs in |
 | `qbittorrent_disk_space` | qBittorrent | Free space on qBittorrent's default save path |
 | `deluge_disk_space` | Deluge | Free space at a path via its API |
-| `rtorrent_rpc_status` | rTorrent | Confirms rTorrent's XML-RPC interface is reachable, see below |
+| `rtorrent_rpc_status` | rTorrent, ruTorrent | Confirms rTorrent's XML-RPC interface is reachable, see below |
 | `ftp_path` | any | Checks a path exists and has a minimum number of entries, over FTP/FTPS |
 | `overseerr_status` | Seerr, Jellyseerr | Confirms the API is reachable and the API key is valid |
 | `overseerr_tmdb_status` | Seerr, Jellyseerr | Confirms TMDB is reachable through it, see below |
@@ -167,22 +171,34 @@ They differ in where the numbers come from:
   percentage against until you fill in "Total disk size (GB)" yourself.
   Leave it blank and the check just reports free space with no threshold.
 
-rTorrent has no equivalent, its XML-RPC interface has no disk-space method.
+Neither rTorrent nor ruTorrent has an equivalent, the XML-RPC interface
+they're both built on has no disk-space method.
 
-### rTorrent's XML-RPC endpoint
+### rTorrent vs ruTorrent, and the XML-RPC endpoint
 
 rTorrent has no web UI or REST API of its own, a design decision it made
 sometime around when XML-RPC still seemed like a fine idea. `rtorrent_rpc_status`
-speaks that interface directly instead, the same protocol its usual
-ruTorrent frontend uses under the hood. The URL Path to that endpoint
-varies by setup, worth checking if this fails with a 404:
+speaks that interface directly instead, whichever service type it's
+attached to - but the correct URL Path to it depends entirely on how
+rTorrent is actually set up, which is why **rTorrent** and **ruTorrent**
+are two separate service types rather than one, each defaulting this check
+to the path that setup actually needs:
 
-- Plain `/RPC2` (the default) for a bare XML-RPC-over-HTTP bridge.
-- Something under ruTorrent's plugins directory when fronted by it,
-  commonly `/rutorrent/plugins/httprpc/action.php`, or
-  `[path to ruTorrent]/plugins/rpc/rpc.php` for older setups.
+- **rTorrent** (bare, no ruTorrent in front of it): a direct XML-RPC-over-HTTP
+  bridge, e.g. via `xmlrpc.scgi_port` and a webserver proxying to it.
+  Defaults to `/RPC2`. Has no web UI at all, so this type skips the Web UI
+  reachable check entirely rather than seeding one against nothing.
+- **ruTorrent**: rTorrent fronted by the actual ruTorrent web app, which
+  does have a real web UI (defaults to `/rutorrent/`). Its own httprpc
+  plugin is the common RPC bridge here, so this type defaults the XML-RPC
+  check to `/rutorrent/plugins/httprpc/action.php`. Older ruTorrent setups
+  instead use `[path to ruTorrent]/plugins/rpc/rpc.php`.
 
-Uses the service's username/password as HTTP Basic Auth, same as its web UI
+If you picked the right type and it's still 404ing, your install just uses
+a different path than that type's default - edit the check's URL Path
+field directly, it's just a starting point, not a hard requirement.
+
+Uses the service's username/password as HTTP Basic Auth, same as the web UI
 check.
 
 ### Seerr/Jellyseerr

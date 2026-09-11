@@ -225,6 +225,16 @@ body.wide-main main { max-width: none; }
 }
 .card-header .title { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 15px; min-width: 0; flex: 1 1 auto; }
 .card-header .title span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* .title-fade is added by loadDashboard only when a name is actually long
+   enough to be clipped - same treatment/reasoning as .label-fade below, but
+   for the card's own title running up against the status badge (compact
+   cards especially, with no Run now/History buttons in between to give it
+   breathing room). */
+.card-header .title span:last-child.title-fade {
+  text-overflow: clip;
+  -webkit-mask-image: linear-gradient(to right, black 80%, transparent 100%);
+  mask-image: linear-gradient(to right, black 80%, transparent 100%);
+}
 /* Run now/History (and, in edit mode, the remove-card button) sit next to
    the status badge instead of their own row at the card's bottom - shorter,
    more compact cards. flex-shrink: 0 so a long service name truncates
@@ -494,6 +504,18 @@ table th { color: var(--text-dim); font-weight: 600; font-size: 12px; text-trans
 }
 .column-row .drag-handle:active { cursor: grabbing; color: var(--text); }
 .column-row .drag-handle svg { display: block; }
+
+/* History's service filter - a row of toggle pills instead of a
+   checkbox-list-behind-a-button, so the current selection is always
+   visible at a glance (see renderHistoryServicePills in common.js). */
+.history-service-bar { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 14px; }
+.service-pill {
+  padding: 5px 12px; border-radius: 999px; font-size: 12px; font-weight: 600;
+  border: 1px solid var(--border); background: var(--bg-panel-alt); color: var(--text-dim);
+  cursor: pointer;
+}
+.service-pill:hover { border-color: var(--accent); color: var(--text); }
+.service-pill.active { background: var(--accent); border-color: var(--accent); color: #fff; }
 
 .severity-toggle {
   display: inline-flex; align-items: center; gap: 5px;

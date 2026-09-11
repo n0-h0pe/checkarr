@@ -141,10 +141,18 @@ async def run_check(
 
 def default_checks_for_service_type(service_type: str) -> list[dict]:
     """Sensible built-in checks pre-populated when a service is created."""
-    web_ui_config = {"path": "/web/index.html"} if service_type == "plex" else {}
-    checks = [
-        {"name": "Web UI reachable", "type": "http_200", "config": web_ui_config, "is_builtin": True},
-    ]
+    checks = []
+    # Bare rTorrent has no web UI or API of its own at all - only ruTorrent
+    # (or something else fronting it) does, so "rtorrent" (bare) skips this
+    # default entirely rather than seeding a check against nothing.
+    if service_type != "rtorrent":
+        if service_type == "plex":
+            web_ui_config = {"path": "/web/index.html"}
+        elif service_type == "rutorrent":
+            web_ui_config = {"path": "/rutorrent/"}
+        else:
+            web_ui_config = {}
+        checks.append({"name": "Web UI reachable", "type": "http_200", "config": web_ui_config, "is_builtin": True})
     if service_type in ARR_TYPES:
         checks += [
             {"name": "API status", "type": "arr_system_status", "config": {}, "is_builtin": True},
@@ -177,7 +185,21 @@ def default_checks_for_service_type(service_type: str) -> list[dict]:
         checks.append({"name": "Login (API)", "type": "deluge_login", "config": {}, "is_builtin": True})
         checks.append({"name": "Free disk space", "type": "deluge_disk_space", "config": {}, "is_builtin": True})
     if service_type == "rtorrent":
+        # config: {} -> falls back to /RPC2 (check_rtorrent_rpc_status), the
+        # bare XML-RPC-over-HTTP bridge path with no ruTorrent in front.
         checks.append({"name": "XML-RPC reachable", "type": "rtorrent_rpc_status", "config": {}, "is_builtin": True})
+    if service_type == "rutorrent":
+        # ruTorrent's own httprpc plugin, the common case for a real
+        # ruTorrent install (as opposed to a bare rTorrent RPC bridge) -
+        # still editable per-service if a setup uses a different plugin/path.
+        checks.append(
+            {
+                "name": "XML-RPC reachable",
+                "type": "rtorrent_rpc_status",
+                "config": {"rpc_path": "/rutorrent/plugins/httprpc/action.php"},
+                "is_builtin": True,
+            }
+        )
     if service_type in OVERSEERR_TYPES:
         checks.append({"name": "API status", "type": "overseerr_status", "config": {}, "is_builtin": True})
         checks.append({"name": "TMDB reachable", "type": "overseerr_tmdb_status", "config": {}, "is_builtin": True})

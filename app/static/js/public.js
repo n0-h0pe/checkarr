@@ -27,8 +27,6 @@ async function init() {
     setInterval(loadNotifications, 30000);
   } else if (window.PUBLIC_PAGE === "history") {
     initUptimeRangeSelect();
-    $("#history-services-btn").addEventListener("click", openHistoryServicesModal);
-    $("#history-services-done").addEventListener("click", closeHistoryServicesModal);
     $("#history-columns-btn").addEventListener("click", openColumnsModal);
     $("#columns-done").addEventListener("click", closeColumnsModal);
     $("#history-export-btn").addEventListener("click", exportHistoryCsv);

@@ -155,10 +155,15 @@ class DashboardLayout(Base):
     can't be trimmed, unlike ordinary custom layouts.
 
     `is_compact` marks this layout as rendering without each card's
-    individual check rows (just the status badge, address/last-checked
-    line, and uptime strip) - toggled from the Dashboard tab itself (the
-    "Compact view" button, next to Edit layout), not just a display option,
-    so admin and public both render a compact layout the same way. See
+    individual check rows, address/last-checked line, or Run now/History
+    buttons - just the icon, name, and status badge on one line, then the
+    uptime strip on a second (see renderServiceCard in common.js). Set only
+    at creation (DashboardLayoutCreate) and never changed afterward - a
+    compact layout and a full one are always two separate saved layouts,
+    not one layout flipped between the two, so switching "Compact view" on
+    the Dashboard tab switches which of your saved layouts are even offered
+    in the dropdown, rather than mutating whichever one you're looking at.
+    Admin and public both render a compact layout the same way. See
     Dashboard Settings (DashboardSettings.public_require_compact below) for
     restricting which layouts the public dashboard can be pinned to."""
 

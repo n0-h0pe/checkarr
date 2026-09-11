@@ -41,20 +41,29 @@ picking any layout from the dropdown switches the dashboard to it instantly.
 
 ### Compact view
 
-Next to Edit layout, **Compact view** toggles whether the currently
-selected layout hides each card's individual check rows, leaving just the
-service name, status badge, and uptime history strip. This is a property of
-the layout itself, not a personal display preference: it's saved on that
-layout immediately (no separate Save step) and applies wherever that layout
-is shown, including the public dashboard if it's the one pinned there (see
-Dashboard Settings below). Switching to a different layout can switch
-Compact view's own state too, since it reflects whatever that layout was
-last saved as. A layout marked this way shows "(compact)" after its name in
-the layout dropdown.
+Next to Edit layout, **Compact view** switches between two entirely
+separate pools of saved layouts: your full ones and your compact ones. A
+compact layout drops each card down to just its icon, name, and status
+badge on one line, then the uptime history strip on a second, nothing
+else, no Run now/History buttons, no type/address/last-checked line, no
+individual check rows. A long name that would otherwise run into the
+status badge fades out smoothly instead of getting cut off mid-character.
+Because there's so much less on a compact card, it can also be resized much
+smaller than a full one.
+
+A layout is fixed as compact or not the moment it's created, never flipped
+in place afterward - clicking Compact view activates one of your existing
+layouts in the other pool (whichever was last active there, or the first
+one otherwise), and the layout dropdown next to it only ever lists layouts
+from whichever pool you're currently in. The first time you switch to a
+pool with nothing in it yet, you're prompted to name your first layout
+there on the spot. **+ New** always creates within whichever pool is
+currently active, so making more compact layouts later is just Compact
+view, then + New, same as for full ones.
 
 Useful for a wall-mounted display or anywhere you want "is it up" at a
-glance rather than a full breakdown, on a dedicated compact layout, or just
-to declutter your own view of a layout you normally use in full.
+glance rather than a full breakdown, or just to keep a leaner view of your
+services alongside your normal detailed one.
 
 ### Dashboard Settings (what the public port shows)
 
@@ -62,17 +71,16 @@ Settings > Dashboard Settings controls which layout the public dashboard
 port (8090) shows, independent of whatever you currently have active in the
 admin app:
 
-- **Public dashboard layout**: pick any saved layout. The public port shows
-  this one regardless of what admin is actively editing or has switched to,
-  so you can rearrange your own view without disturbing what a housemate or
-  a status page pointed at port 8090 sees. Whether it renders compact
-  follows that layout's own Compact view setting, described above, there's
-  nothing separate to configure here for that.
+- **Public dashboard layout**: pick any saved layout, from either pool. The
+  public port shows this one regardless of what admin is actively editing
+  or has switched to, so you can rearrange your own view without disturbing
+  what a housemate or a status page pointed at port 8090 sees. Whether it
+  renders compact simply follows whether the chosen layout is one of your
+  compact ones - there's nothing separate to configure here for that.
 - **Restrict to compact layouts**: when checked, the dropdown above only
-  offers layouts that currently have Compact view on, guaranteeing the
-  public dashboard can never accidentally get pointed at a full, detailed
-  layout. Leave it unchecked to pick from every saved layout, compact or
-  not.
+  offers layouts from your compact pool, guaranteeing the public dashboard
+  can never accidentally get pointed at a full, detailed layout. Leave it
+  unchecked to pick from every saved layout, compact or not.
 
 ## History
 
@@ -82,11 +90,11 @@ picked in the top bar down to the minute, not just the hour, so "Last 5
 minutes" actually shows five minutes of data instead of quietly rounding up
 to an hour.
 
-**Services** opens a checkbox list of every configured service. Nothing is
-selected by default, so the table starts empty and loads nothing until you
-pick at least one, keeping the page fast even with a lot of history piled
-up. Pick more than one and each row gets a Service column so you can tell
-them apart.
+Every configured service gets its own pill button in a row above the table.
+Click one to toggle it on or off - nothing is selected by default, so the
+table starts empty and loads nothing until you pick at least one, keeping
+the page fast even with a lot of history piled up. Pick more than one and
+each row gets a Service column so you can tell them apart.
 
 **Columns** opens a small dialog listing every available column (Time,
 Service, Check, Type, Status, Response, Message) with a checkbox and a drag

@@ -23,12 +23,12 @@
       <div class="panel-header">
         <h2>Check history</h2>
         <div style="display:flex; gap:8px; flex-wrap:wrap;">
-          <button type="button" class="small" id="history-services-btn">Services</button>
           <div class="uptime-range-control"><select id="uptime-range-select" title="History range"></select></div>
           <button type="button" class="small" id="history-columns-btn">Columns</button>
           <button type="button" class="small" id="history-export-btn">Export CSV</button>
         </div>
       </div>
+      <div class="history-service-bar" id="history-services-bar"></div>
       <div style="overflow-x:auto;">
         <table class="history-table">
           <thead></thead>
@@ -37,17 +37,6 @@
       </div>
     </div>
   </main>
-
-  <div class="modal-backdrop hidden" id="history-services-modal">
-    <div class="modal">
-      <h3>Services</h3>
-      <div class="hint" style="margin-bottom:10px;">Nothing selected shows nothing - pick at least one.</div>
-      <div id="history-services-list"></div>
-      <div class="modal-actions">
-        <button type="button" class="primary" id="history-services-done">Done</button>
-      </div>
-    </div>
-  </div>
 
   <div class="modal-backdrop hidden" id="columns-modal">
     <div class="modal">

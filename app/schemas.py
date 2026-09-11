@@ -15,6 +15,7 @@ SERVICE_TYPES = [
     "qbittorrent",
     "deluge",
     "rtorrent",
+    "rutorrent",
     "overseerr",
     "jellyseerr",
     "generic",
@@ -274,11 +275,14 @@ class DashboardLayoutCreate(BaseModel):
 
 
 class DashboardLayoutUpdate(BaseModel):
+    # is_compact is deliberately not here - a layout is fixed as compact or
+    # not at creation (DashboardLayoutCreate), never flipped in place. A
+    # compact layout and a full one are always two separate saved layouts,
+    # see DashboardLayout's docstring.
     name: str | None = None
     sizes: dict[str, Any] | None = None
     columns: int | None = None
     card_service_ids: list[int] | None = None
-    is_compact: bool | None = None
 
 
 class NotificationChannelBase(BaseModel):
