@@ -164,16 +164,6 @@ async function deleteActiveLayout() {
 let pendingCheckChanges = new Map();
 let pendingCheckDeletions = new Set();
 
-function getCookie(name) {
-  const match = document.cookie.match(new RegExp("(?:^|; )" + name + "=([^;]*)"));
-  return match ? decodeURIComponent(match[1]) : null;
-}
-
-function setCookie(name, value, days) {
-  const expires = new Date(Date.now() + days * 864e5).toUTCString();
-  document.cookie = `${name}=${encodeURIComponent(value)}; expires=${expires}; path=/; SameSite=Lax`;
-}
-
 function loadCollapsedServiceIds() {
   const raw = getCookie("hc_collapsed_services");
   return raw ? new Set(raw.split(",").filter(Boolean).map(Number)) : new Set();
@@ -880,6 +870,7 @@ async function init() {
     buildInfo.textContent = `v${state.meta.build.version} · built ${state.meta.build.build_date}`;
   }
 
+  initUptimeRangeSelect();
   $("#add-service-btn").addEventListener("click", () => openServiceModal());
   $("#service-cancel").addEventListener("click", closeServiceModal);
   $("#service-form").addEventListener("submit", submitServiceForm);

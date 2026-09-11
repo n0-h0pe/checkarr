@@ -20,7 +20,7 @@ shows one consolidated view of what's healthy, what's degraded, and why.
 - An "Edit layout" mode for the dashboard: drag cards anywhere and resize them from the corner, snapped to an invisible grid, saved as named/switchable layouts that adapt to how wide your window is. See "Dashboard layouts" below.
 - A responsive layout on every page - the dashboard, Settings, History, and Notifications all adapt down to a phone-width screen, admin and public alike. On a card too narrow to show a check's full result message, that message shortens to something like "200 OK" or "Files OK" instead of just clipping mid-sentence.
 - API keys are encrypted at rest (Fernet/AES) and never echoed back to the browser.
-- Historic results stored in SQLite, with a History tab and per-service uptime strip on the dashboard.
+- Historic results stored in SQLite, with a History tab and per-service uptime strip on the dashboard. The strip's time range is adjustable from a dropdown in the top bar (admin and public both) - anywhere from just the last poll up to a full week - and greys out any slice of that range nothing was actually polled in.
 - Single Docker container: web GUI + API + scheduler + database, no external dependencies.
 
 ## Quick start
@@ -330,8 +330,11 @@ While editing:
 On a phone-width screen, editing looks different: there's only ever one
 card per row there anyway, so free-form drag-and-drop gives way to plain
 list reordering. Each card shows **Move to top / up / down / to bottom**
-buttons over its (blurred) check list instead of a drag handle - no
-resizing, just reordering the list. This still saves through the exact
+buttons over its (blurred) check list instead of a move handle - no
+free-form dragging, just reordering the list. The corner resize handle is
+still there, but only changes a card's height now (width always fills the
+list) - shrink one below its check list's height and that list scrolls
+independently, same as on desktop. This still saves through the exact
 same mechanism as a desktop drag, so it also remembers it was edited at a
 phone-sized width, the same as any other edit does (see below).
 

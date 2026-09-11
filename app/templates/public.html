@@ -9,7 +9,12 @@
 <body class="public-page{{ ' wide-main' if page == 'dashboard' else '' }}">
   {% if page == "dashboard" %}
   <main>
-    <div class="summary-pill" id="summary-pill" style="padding: 10px 4px 0 4px;"></div>
+    <div class="public-dashboard-bar">
+      <div class="summary-pill" id="summary-pill"></div>
+      <div class="uptime-range-control">
+        <select id="uptime-range-select" title="Uptime strip range"></select>
+      </div>
+    </div>
     <div class="cards-grid" id="dashboard-grid"></div>
   </main>
   {% elif page == "history" %}
