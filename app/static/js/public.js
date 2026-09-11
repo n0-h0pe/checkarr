@@ -6,6 +6,7 @@ async function init() {
   await loadMeta();
 
   if (window.PUBLIC_PAGE === "dashboard") {
+    initUptimeRangeSelect();
     loadDashboard(); // interactive/editable default to falsy - no Run now, no drag/resize
     setInterval(loadDashboard, 30000);
     let resizeTimer = null;

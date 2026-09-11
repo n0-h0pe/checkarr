@@ -18,6 +18,69 @@ const DEFAULT_CARD_H = 10;
 function $(sel, root = document) { return root.querySelector(sel); }
 function $all(sel, root = document) { return Array.from(root.querySelectorAll(sel)); }
 
+function getCookie(name) {
+  const match = document.cookie.match(new RegExp("(?:^|; )" + name + "=([^;]*)"));
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
+function setCookie(name, value, days) {
+  const expires = new Date(Date.now() + days * 864e5).toUTCString();
+  document.cookie = `${name}=${encodeURIComponent(value)}; expires=${expires}; path=/; SameSite=Lax`;
+}
+
+// The dashboard's uptime strip: a fixed number of bars spanning a
+// user-picked range (the dropdown in the top bar), each bar the worst
+// status seen in its slice of that range - grey ("no-data", the strip's own
+// default bar color) if nothing was polled in that slice at all. "Just the
+// last poll" is a special single-bar case using the live status already in
+// hand rather than a history fetch.
+const UPTIME_RANGES = [
+  { value: "last", minutes: 0, label: "Just the last poll" },
+  { value: "1", minutes: 1, label: "Last 1 minute" },
+  { value: "3", minutes: 3, label: "Last 3 minutes" },
+  { value: "5", minutes: 5, label: "Last 5 minutes" },
+  { value: "10", minutes: 10, label: "Last 10 minutes" },
+  { value: "15", minutes: 15, label: "Last 15 minutes" },
+  { value: "30", minutes: 30, label: "Last 30 minutes" },
+  { value: "60", minutes: 60, label: "Last 1 hour" },
+  { value: "120", minutes: 120, label: "Last 2 hours" },
+  { value: "300", minutes: 300, label: "Last 5 hours" },
+  { value: "480", minutes: 480, label: "Last 8 hours" },
+  { value: "720", minutes: 720, label: "Last 12 hours" },
+  { value: "1440", minutes: 1440, label: "Last 24 hours" },
+  { value: "2880", minutes: 2880, label: "Last 48 hours" },
+  { value: "10080", minutes: 10080, label: "Last 1 week" },
+];
+const DEFAULT_UPTIME_RANGE = "2880";
+const UPTIME_BAR_COUNT = 20;
+
+function loadUptimeRange() {
+  const saved = getCookie("hc_uptime_range");
+  return UPTIME_RANGES.some((r) => r.value === saved) ? saved : DEFAULT_UPTIME_RANGE;
+}
+
+function saveUptimeRange(value) {
+  setCookie("hc_uptime_range", value, 365);
+}
+
+state.uptimeRange = loadUptimeRange();
+
+// Shared by both the admin header and the public dashboard's equivalent bar
+// - same markup (#uptime-range-select), same behavior either side.
+function initUptimeRangeSelect() {
+  const select = $("#uptime-range-select");
+  if (!select) return;
+  select.innerHTML = "";
+  for (const r of UPTIME_RANGES) {
+    select.appendChild(el("option", { value: r.value, text: r.label, selected: r.value === state.uptimeRange ? "selected" : null }));
+  }
+  select.addEventListener("change", () => {
+    state.uptimeRange = select.value;
+    saveUptimeRange(select.value);
+    for (const s of state.statuses) loadUptimeStrip(s.service.id);
+  });
+}
+
 function el(tag, attrs = {}, children = []) {
   const node = document.createElement(tag);
   for (const [k, v] of Object.entries(attrs)) {
@@ -335,6 +398,7 @@ function renderServiceCard(s, opts = {}, pos, positions) {
     card.classList.add("card-editable");
     if (isMobileViewport()) {
       attachMobileReorderControls(body, svc.id, positions, opts.onLayoutChange);
+      attachResizeHandle(card, svc.id, pos, opts.onLayoutChange, positions);
     } else {
       attachResizeHandle(card, svc.id, pos, opts.onLayoutChange);
       attachMoveHandle(card, svc.id, pos, positions, opts.onLayoutChange);
@@ -378,13 +442,41 @@ function attachMobileReorderControls(cardBody, serviceId, positions, onLayoutCha
   cardBody.appendChild(overlay);
 }
 
-// Reorders by treating the dashboard as a plain top-to-bottom list (true on
-// mobile, where every card is already full-width): renumbers every card's Y
-// to match the new order, stacking each on the last one's bottom edge, and
-// forces every card to the same full width - "a list", not a freeform grid.
-// Saved through the same onLayoutChange/persistCardLayout path a desktop
-// drag uses, so it also stamps `columns` to the current (mobile) width,
-// same as any other edit - see computeCardLayout's big comment for why.
+// Treats the dashboard as a plain top-to-bottom list (true on mobile, where
+// every card is already full-width): given the ids in their intended order,
+// stacks each on the previous one's bottom edge and forces every card to
+// the same full width - "a list", not a freeform grid. Used both after an
+// explicit reorder and after a height resize (which can't change the order,
+// but still needs everything below the resized card to shift to match).
+// Returns just the updates for cards that actually changed, for the same
+// onLayoutChange/persistCardLayout path a desktop drag uses - which also
+// stamps `columns` to the current (mobile) width, same as any other edit,
+// see computeCardLayout's big comment for why.
+function renumberMobileList(orderedIds, positions, totalCols) {
+  const updates = [];
+  let y = 1;
+  for (const id of orderedIds) {
+    const p = positions.get(id);
+    const changed = p.x !== 1 || p.y !== y || p.w !== totalCols;
+    p.x = 1;
+    p.y = y;
+    p.w = totalCols;
+    if (changed) updates.push({ id, patch: { x: p.x, y: p.y, w: p.w } });
+    y += p.h;
+
+    const cardEl = $(`.card[data-service-id="${id}"]`);
+    if (cardEl) {
+      cardEl.style.gridColumn = `${p.x} / span ${p.w}`;
+      cardEl.style.gridRow = `${p.y} / span ${p.h}`;
+    }
+  }
+  return updates;
+}
+
+function mobileTotalCols() {
+  return Number.isFinite(state.lastGridColumns) ? state.lastGridColumns : MIN_CARD_W;
+}
+
 function reorderCardMobile(serviceId, action, positions, onLayoutChange) {
   const orderedIds = Array.from(positions.entries())
     .sort((a, b) => a[1].y - b[1].y)
@@ -401,23 +493,7 @@ function reorderCardMobile(serviceId, action, positions, onLayoutChange) {
   orderedIds.splice(idx, 1);
   orderedIds.splice(newIdx, 0, serviceId);
 
-  const totalCols = Number.isFinite(state.lastGridColumns) ? state.lastGridColumns : MIN_CARD_W;
-  const updates = [];
-  let y = 1;
-  for (const id of orderedIds) {
-    const p = positions.get(id);
-    p.x = 1;
-    p.y = y;
-    p.w = totalCols;
-    y += p.h;
-    updates.push({ id, patch: { x: p.x, y: p.y, w: p.w } });
-
-    const cardEl = $(`.card[data-service-id="${id}"]`);
-    if (cardEl) {
-      cardEl.style.gridColumn = `${p.x} / span ${p.w}`;
-      cardEl.style.gridRow = `${p.y} / span ${p.h}`;
-    }
-  }
+  const updates = renumberMobileList(orderedIds, positions, mobileTotalCols());
   onLayoutChange && onLayoutChange(updates);
 }
 
@@ -429,16 +505,27 @@ function reorderCardMobile(serviceId, action, positions, onLayoutChange) {
 // and whichever request's PUT lands second would silently wipe out the
 // first request's change (the server replaces `sizes` wholesale, it doesn't
 // merge), leaving the swap only half-persisted.
-function attachResizeHandle(card, serviceId, pos, onLayoutChange) {
-  const handle = el("div", { class: "resize-handle", title: "Drag to resize" });
+//
+// `mobilePositions`, passed only for mobile edit mode's height-only resize,
+// switches to that behavior: horizontal drag is ignored entirely (mobile
+// cards are always full list-width), and on drop every other card's Y is
+// renumbered to match the resized card's new bottom edge - a freeform
+// desktop grid just leaves a taller card overlapping whatever's below until
+// that's separately dragged out of the way, but mobile's single-column
+// "list" has no such freeform slack for that to be sorted out later.
+function attachResizeHandle(card, serviceId, pos, onLayoutChange, mobilePositions = null) {
+  const heightOnly = !!mobilePositions;
+  const handle = el("div", { class: "resize-handle", title: heightOnly ? "Drag to change height" : "Drag to resize" });
   card.appendChild(handle);
 
   let start = null;
 
   function onPointerMove(e) {
-    const dx = e.clientX - start.px;
     const dy = e.clientY - start.py;
-    pos.w = Math.max(MIN_CARD_W, start.w + Math.round(dx / GRID_UNIT));
+    if (!heightOnly) {
+      const dx = e.clientX - start.px;
+      pos.w = Math.max(MIN_CARD_W, start.w + Math.round(dx / GRID_UNIT));
+    }
     pos.h = Math.max(MIN_CARD_H, start.h + Math.round(dy / GRID_UNIT));
     card.style.gridColumn = `${pos.x} / span ${pos.w}`;
     card.style.gridRow = `${pos.y} / span ${pos.h}`;
@@ -447,7 +534,19 @@ function attachResizeHandle(card, serviceId, pos, onLayoutChange) {
   function onPointerUp() {
     document.removeEventListener("pointermove", onPointerMove);
     document.removeEventListener("pointerup", onPointerUp);
-    if (onLayoutChange && (pos.w !== start.w || pos.h !== start.h)) {
+    if (!onLayoutChange || (pos.h === start.h && pos.w === start.w)) return;
+
+    if (heightOnly) {
+      const orderedIds = Array.from(mobilePositions.entries())
+        .sort((a, b) => a[1].y - b[1].y)
+        .map(([id]) => id);
+      // renumberMobileList only patches {x,y,w} for whatever it had to move
+      // to avoid an overlap - the resized card's own new height has to be
+      // included separately, since a card is never "moved" by its own
+      // resize, only everything after it.
+      const heightPatch = { id: serviceId, patch: { h: pos.h } };
+      onLayoutChange([heightPatch, ...renumberMobileList(orderedIds, mobilePositions, mobileTotalCols())]);
+    } else {
       onLayoutChange([{ id: serviceId, patch: { w: pos.w, h: pos.h } }]);
     }
   }
@@ -510,33 +609,71 @@ function attachMoveHandle(card, serviceId, pos, positions, onLayoutChange) {
   });
 }
 
+function parseTs(iso) {
+  return new Date(iso + (iso.endsWith("Z") ? "" : "Z")).getTime();
+}
+
 async function loadUptimeStrip(serviceId) {
+  const strip = $(`#strip-${serviceId}`);
+  if (!strip) return;
+  strip.innerHTML = "";
+  strip.style.display = "flex";
+
+  const range = UPTIME_RANGES.find((r) => r.value === state.uptimeRange) || UPTIME_RANGES.find((r) => r.value === DEFAULT_UPTIME_RANGE);
+
+  if (range.value === "last") {
+    const svcStatus = state.statuses.find((s) => s.service.id === serviceId);
+    if (!svcStatus || !svcStatus.last_checked) {
+      strip.appendChild(el("div", { class: "bar", title: "No data yet" }));
+      return;
+    }
+    strip.appendChild(
+      el("div", { class: `bar ${svcStatus.overall_status}`, title: `Last poll: ${fmtTime(svcStatus.last_checked)}` })
+    );
+    return;
+  }
+
+  const hoursParam = Math.min(720, Math.max(1, Math.ceil(range.minutes / 60)));
   let rows;
   try {
-    rows = await api(`/api/history?service_id=${serviceId}&hours=24&limit=300`);
+    rows = await api(`/api/history?service_id=${serviceId}&hours=${hoursParam}&limit=2000`);
   } catch (_) {
     return;
   }
-  const strip = $(`#strip-${serviceId}`);
-  if (!strip) return;
+  // loadUptimeStrip runs once per card per render pass, all in parallel -
+  // the strip element (and the range picked) can be stale by the time this
+  // particular fetch resolves if the user changed the dropdown mid-flight.
+  if (state.uptimeRange !== range.value || !document.body.contains(strip)) return;
 
+  const order = { ok: 0, warn: 1, fail: 2 };
   const byTs = new Map();
   for (const r of rows) {
-    const key = r.timestamp;
-    const worst = byTs.get(key);
-    const order = { ok: 0, warn: 1, fail: 2 };
-    if (!worst || order[r.status] > order[worst]) byTs.set(key, r.status);
+    const worst = byTs.get(r.timestamp);
+    if (!worst || order[r.status] > order[worst]) byTs.set(r.timestamp, r.status);
   }
-  const timestamps = Array.from(byTs.keys()).sort();
-  const last = timestamps.slice(-20);
 
-  strip.innerHTML = "";
-  if (last.length === 0) {
-    strip.style.display = "none";
-    return;
+  const now = Date.now();
+  const rangeMs = range.minutes * 60000;
+  const rangeStart = now - rangeMs;
+  const bucketMs = rangeMs / UPTIME_BAR_COUNT;
+  const buckets = new Array(UPTIME_BAR_COUNT).fill(null);
+
+  for (const [ts, status] of byTs) {
+    const t = parseTs(ts);
+    if (t < rangeStart || t > now) continue;
+    const idx = Math.min(UPTIME_BAR_COUNT - 1, Math.floor((t - rangeStart) / bucketMs));
+    if (buckets[idx] === null || order[status] > order[buckets[idx]]) buckets[idx] = status;
   }
-  for (const ts of last) {
-    strip.appendChild(el("div", { class: `bar ${byTs.get(ts)}`, title: fmtTime(ts) }));
+
+  for (let i = 0; i < UPTIME_BAR_COUNT; i++) {
+    const bucketStart = new Date(rangeStart + i * bucketMs);
+    const status = buckets[i];
+    strip.appendChild(
+      el("div", {
+        class: status ? `bar ${status}` : "bar",
+        title: status ? `${bucketStart.toLocaleString()} - ${statusLabel(status)}` : `${bucketStart.toLocaleString()} - no data`,
+      })
+    );
   }
 }
 
@@ -569,6 +706,14 @@ async function loadDashboard(cardOpts = {}) {
   }
   for (const s of statuses) {
     loadUptimeStrip(s.service.id);
+  }
+
+  // Only a name that's actually being clipped gets the fade treatment (see
+  // .label-fade in style.css) - has to happen after the cards are in the
+  // document, since an element's scrollWidth/clientWidth aren't meaningful
+  // until it has a real layout box.
+  for (const label of grid.querySelectorAll(".check-row .name .label")) {
+    label.classList.toggle("label-fade", label.scrollWidth > label.clientWidth);
   }
 }
 
