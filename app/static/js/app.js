@@ -1,6 +1,15 @@
 // Admin app: full CRUD over services/checks, on top of the read-only
 // rendering shared with the public dashboard via common.js.
 
+// Inline SVGs (not a Unicode/Braille character - font-dependent glyphs like
+// "⠿" render inconsistently and can look lopsided rather than a clean grip)
+// for the checks-grid's drag handle and its "Checks" section's collapse
+// chevron, same approach as REORDER_ICONS in common.js.
+const DRAG_HANDLE_ICON =
+  '<svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><circle cx="9" cy="6" r="1.7"/><circle cx="15" cy="6" r="1.7"/><circle cx="9" cy="12" r="1.7"/><circle cx="15" cy="12" r="1.7"/><circle cx="9" cy="18" r="1.7"/><circle cx="15" cy="18" r="1.7"/></svg>';
+const CHEVRON_DOWN_ICON =
+  '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6,9 12,15 18,9"/></svg>';
+
 // ---------- tabs ----------
 
 function initTabs() {
@@ -350,7 +359,10 @@ function renderChecksPanel(svc) {
   // (rather than off at the top of the whole service row, far from what it
   // actually does) and only hides the checks-grid itself - Add check/Scan
   // libraries above it stay usable either way.
-  const toggleBtn = el("button", { class: "small expand-arrow" }, `${isCollapsed ? "▸" : "▾"} Checks (${svc.checks.length})`);
+  const toggleBtn = el("button", { class: "checks-toggle" });
+  const chevron = el("span", { class: "checks-toggle-chevron" + (isCollapsed ? " collapsed" : "") });
+  chevron.innerHTML = CHEVRON_DOWN_ICON;
+  toggleBtn.append(chevron, el("span", { text: `Checks (${svc.checks.length})` }));
   panel.appendChild(
     el("div", { style: "display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;" }, [
       toggleBtn,
@@ -376,7 +388,7 @@ function renderChecksPanel(svc) {
   toggleBtn.addEventListener("click", () => {
     const collapse = grid.style.display !== "none";
     grid.style.display = collapse ? "none" : "";
-    toggleBtn.textContent = `${collapse ? "▸" : "▾"} Checks (${svc.checks.length})`;
+    chevron.classList.toggle("collapsed", collapse);
     if (collapse) collapsedServiceIds.add(svc.id); else collapsedServiceIds.delete(svc.id);
     saveCollapsedServiceIds();
   });
@@ -388,7 +400,8 @@ function appendCheckGridRow(grid, svc, c) {
   const pendingDelete = pendingCheckDeletions.has(c.id);
   const rowClass = pendingDelete ? "row-pending-delete" : "";
 
-  const handle = el("div", { class: "drag-handle", "data-check-id": c.id, title: pendingDelete ? null : "Drag to reorder" }, pendingDelete ? "" : "⠷");
+  const handle = el("div", { class: "drag-handle", "data-check-id": c.id, title: pendingDelete ? null : "Drag to reorder" });
+  if (!pendingDelete) handle.innerHTML = DRAG_HANDLE_ICON;
   grid.appendChild(handle);
   if (!pendingDelete) attachCheckDragHandle(handle, grid, svc);
 
@@ -1523,7 +1536,6 @@ async function init() {
   $("#check-form").addEventListener("submit", submitCheckForm);
   $("#show-resolved").addEventListener("change", loadNotifications);
   $("#history-service").addEventListener("change", loadHistoryTab);
-  $("#history-hours").addEventListener("change", loadHistoryTab);
   $("#save-changes-btn").addEventListener("click", saveChanges);
   $("#discard-changes-btn").addEventListener("click", discardChanges);
   $("#save-changes-btn-bottom").addEventListener("click", saveChanges);
