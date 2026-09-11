@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, JSON, String, Text
+from sqlalchemy import Boolean, Date, DateTime, Float, ForeignKey, Integer, JSON, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .database import Base
@@ -174,3 +174,79 @@ class NotificationChannel(Base):
 
     def has_secret(self) -> bool:
         return bool(self.secret_encrypted)
+
+
+class ServiceGroup(Base):
+    """A named set of services a DowntimeSchedule can target. The seeded
+    `is_default` row ("All Services") deliberately stores no membership rows
+    at all - membership is computed as "every service that currently exists"
+    at read/evaluation time instead (see queries.get_or_create_all_services_group
+    and downtime.is_suppressed), so it can never drift out of sync as
+    services are added or removed."""
+
+    __tablename__ = "service_groups"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    is_default: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
+
+    members: Mapped[list["ServiceGroupMember"]] = relationship(
+        back_populates="group", cascade="all, delete-orphan"
+    )
+
+
+class ServiceGroupMember(Base):
+    __tablename__ = "service_group_members"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    group_id: Mapped[int] = mapped_column(ForeignKey("service_groups.id"), nullable=False)
+    service_id: Mapped[int] = mapped_column(ForeignKey("services.id"), nullable=False)
+
+    group: Mapped["ServiceGroup"] = relationship(back_populates="members")
+
+
+class DowntimeSchedule(Base):
+    """A maintenance window during which Push Notifications alerts (not
+    check results, not the Notifications tab - just the outbound alert
+    dispatch, see downtime.is_suppressed) are suppressed for whichever
+    services its linked ServiceGroups cover.
+
+    `start_at`/`end_at` are stored in UTC (the frontend converts from/to the
+    browser's local time at the API boundary, same convention as every other
+    timestamp in this app). For "once", they're literal - the schedule is
+    active for exactly that one range. For a recurring `recurrence`, their
+    DATE components instead supply the recurrence pattern (weekday for
+    weekly, day-of-month for monthly, month+day for yearly - daily has no
+    pattern beyond "every day") while `end_at - start_at` is the window's
+    duration, reapplied to each occurrence - see downtime._schedule_active.
+    """
+
+    __tablename__ = "downtime_schedules"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    recurrence: Mapped[str] = mapped_column(String(10), nullable=False)  # once/daily/weekly/monthly/yearly
+    start_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    end_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    repeat_until: Mapped[datetime | None] = mapped_column(Date, nullable=True)
+    suppress_warn: Mapped[bool] = mapped_column(Boolean, default=True)
+    suppress_fail: Mapped[bool] = mapped_column(Boolean, default=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
+
+    groups: Mapped[list["DowntimeScheduleGroup"]] = relationship(
+        back_populates="schedule", cascade="all, delete-orphan"
+    )
+
+
+class DowntimeScheduleGroup(Base):
+    __tablename__ = "downtime_schedule_groups"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    schedule_id: Mapped[int] = mapped_column(ForeignKey("downtime_schedules.id"), nullable=False)
+    group_id: Mapped[int] = mapped_column(ForeignKey("service_groups.id"), nullable=False)
+
+    schedule: Mapped["DowntimeSchedule"] = relationship(back_populates="groups")

@@ -150,6 +150,9 @@ def delete_service(service_id: int, db: Session = Depends(get_db)):
     if not service:
         raise HTTPException(404, "Service not found")
     unschedule_service(service_id)
+    # Not cascaded via an ORM relationship on Service - clean up explicitly
+    # so a Service Group never keeps a dangling membership row.
+    db.query(models.ServiceGroupMember).filter_by(service_id=service_id).delete()
     db.delete(service)
     db.commit()
     return None

@@ -42,3 +42,22 @@ def build_headers(api_key: str | None, extra: dict[str, Any] | None = None) -> d
     if extra:
         headers.update(extra)
     return headers
+
+
+def humanize_bytes(num_bytes: float) -> str:
+    """Auto-scaled size for disk-space check messages - TB above 1024 GB, GB
+    above 1024 MB, and so on down to bytes, each with just enough decimal
+    precision to be useful at that magnitude (a reading in the tens of GB
+    doesn't need 2 decimal places; one just over 1 TB does). No space before
+    the unit - keeps these status messages as short as possible, since they
+    compete with the check name for room on a dashboard card."""
+    step = 1024.0
+    if num_bytes >= step**4:
+        return f"{num_bytes / step**4:.2f}TB"
+    if num_bytes >= step**3:
+        return f"{num_bytes / step**3:.1f}GB"
+    if num_bytes >= step**2:
+        return f"{num_bytes / step**2:.0f}MB"
+    if num_bytes >= step:
+        return f"{num_bytes / step:.0f}KB"
+    return f"{num_bytes:.0f}B"

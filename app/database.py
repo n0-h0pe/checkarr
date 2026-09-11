@@ -24,6 +24,14 @@ def init_db() -> None:
     Base.metadata.create_all(bind=engine)
     _run_migrations()
 
+    from .queries import get_or_create_all_services_group
+
+    db = SessionLocal()
+    try:
+        get_or_create_all_services_group(db)
+    finally:
+        db.close()
+
 
 def _table_columns(conn, table: str) -> set[str]:
     return {row[1] for row in conn.exec_driver_sql(f"PRAGMA table_info({table})").fetchall()}

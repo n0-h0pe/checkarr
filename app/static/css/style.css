@@ -452,6 +452,30 @@ table th { color: var(--text-dim); font-weight: 600; font-size: 12px; text-trans
 .severity-toggle.warn { border-color: rgba(245,166,35,.4); color: var(--warn); }
 .severity-toggle:hover { border-color: var(--accent); }
 
+/* Scheduled Down Time: each schedule is a card (not a table row) since it
+   carries a variable-length list of group checkboxes beneath its own
+   details - a table can't cleanly hold that. */
+.schedule-card {
+  background: var(--bg-panel-alt); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 12px 14px; margin-bottom: 10px;
+}
+.schedule-card:last-child { margin-bottom: 0; }
+.schedule-card-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.schedule-card-desc { font-size: 12px; margin-top: 2px; }
+.schedule-card-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.schedule-card-groups {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 10px;
+  margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border);
+  font-size: 13px;
+}
+.schedule-group-toggle { display: inline-flex; align-items: center; gap: 5px; cursor: pointer; }
+
+/* The group-edit modal's service checklist can run long - scroll it rather
+   than letting the modal itself grow past the viewport. */
+#grp-services-list { max-height: 260px; overflow-y: auto; border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; }
+#grp-services-list .field.checkbox { margin-bottom: 6px; }
+#grp-services-list .field.checkbox:last-child { margin-bottom: 0; }
+
 .unsaved-banner[hidden] { display: none; }
 .unsaved-banner {
   display: flex; align-items: center; justify-content: space-between;
@@ -626,6 +650,9 @@ table th { color: var(--text-dim); font-weight: 600; font-size: 12px; text-trans
   }
   #services-body tr.service-detail-row td { padding-top: 0; }
   #services-body tr:first-child.service-row { margin-top: 0; }
+
+  .schedule-card-header { flex-direction: column; }
+  .schedule-card-actions { flex-wrap: wrap; }
 
   .public-footer-links { position: static; justify-content: flex-end; padding: 8px 12px; }
 }

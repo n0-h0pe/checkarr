@@ -3,7 +3,7 @@ import xmlrpc.client as xmlrpc_client
 
 import httpx
 
-from .base import STATUS_FAIL, STATUS_OK, STATUS_WARN, CheckOutcome
+from .base import STATUS_FAIL, STATUS_OK, STATUS_WARN, CheckOutcome, humanize_bytes
 
 GIB = 1024 ** 3
 
@@ -90,7 +90,7 @@ async def check_qbittorrent_disk_space(
     except (ValueError, KeyError, TypeError) as exc:
         return CheckOutcome(STATUS_FAIL, f"Could not read free space from qBittorrent's response: {exc}", elapsed)
 
-    return _disk_space_outcome(free_bytes, config, elapsed, "qBittorrent's default save path")
+    return _disk_space_outcome(free_bytes, config, elapsed, "default save path")
 
 
 async def _deluge_login(client: httpx.AsyncClient, base_url: str, password: str) -> tuple[bool, str, float]:
@@ -184,7 +184,7 @@ async def check_deluge_disk_space(
     if not isinstance(free_bytes, (int, float)):
         return CheckOutcome(STATUS_FAIL, "Could not read free space from Deluge's response", elapsed)
 
-    return _disk_space_outcome(free_bytes, config, elapsed, path or "Deluge's download location")
+    return _disk_space_outcome(free_bytes, config, elapsed, path or "download location")
 
 
 def _disk_space_outcome(free_bytes: float, config: dict, elapsed: float, label: str) -> CheckOutcome:
@@ -193,19 +193,19 @@ def _disk_space_outcome(free_bytes: float, config: dict, elapsed: float, label: 
     supplied manually in the check's config (it rarely changes, unlike free
     space). Without it, this just reports the free space with no threshold
     applied - still useful at a glance, just not something that can page you.
+    ("(%?)" is deliberately terse - the Edit check panel's own hint explains
+    it in full; this message has to share a dashboard card row with the
+    check's name.)
     """
-    free_gb = free_bytes / GIB
+    free_str = humanize_bytes(free_bytes)
     total_gb = config.get("total_disk_gb")
     if not total_gb:
-        return CheckOutcome(
-            STATUS_OK,
-            f"{label}: {free_gb:.1f} GB free (set 'Total disk size' on this check to enable the %-free thresholds)",
-            elapsed,
-        )
+        return CheckOutcome(STATUS_OK, f"{label}: {free_str} free (%?)", elapsed)
 
     warn_percent = config.get("warn_percent", 10)
     fail_percent = config.get("fail_percent", 3)
-    percent_free = (free_bytes / (total_gb * GIB)) * 100
+    total_bytes = total_gb * GIB
+    percent_free = (free_bytes / total_bytes) * 100
 
     if percent_free < fail_percent:
         status = STATUS_FAIL
@@ -213,7 +213,9 @@ def _disk_space_outcome(free_bytes: float, config: dict, elapsed: float, label: 
         status = STATUS_WARN
     else:
         status = STATUS_OK
-    return CheckOutcome(status, f"{label}: {free_gb:.1f} GB free ({percent_free:.1f}% of {total_gb:g} GB)", elapsed)
+    return CheckOutcome(
+        status, f"{label}: {free_str} free ({percent_free:.1f}% of {humanize_bytes(total_bytes)})", elapsed
+    )
 
 
 async def check_rtorrent_rpc_status(

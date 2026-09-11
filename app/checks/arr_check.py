@@ -2,9 +2,7 @@ import time
 
 import httpx
 
-from .base import STATUS_FAIL, STATUS_OK, STATUS_WARN, CheckOutcome, NotificationItem, build_headers
-
-GIB = 1024 ** 3
+from .base import STATUS_FAIL, STATUS_OK, STATUS_WARN, CheckOutcome, NotificationItem, build_headers, humanize_bytes
 
 # All Servarr-family apps expose a structurally identical REST API, just at
 # different version prefixes. Radarr/Sonarr are on v3; Whisparr is a Radarr
@@ -203,8 +201,8 @@ async def check_arr_disk_space(
         if worst_percent is None or percent < worst_percent:
             worst, worst_percent = e, percent
 
-    free_gb = (worst.get("freeSpace") or 0) / GIB
-    total_gb = (worst.get("totalSpace") or 0) / GIB
+    free_str = humanize_bytes(worst.get("freeSpace") or 0)
+    total_str = humanize_bytes(worst.get("totalSpace") or 0)
     label = worst.get("path") or worst.get("label") or "disk"
     worst_of = f" (worst of {len(entries)} monitored disks)" if len(entries) > 1 else ""
 
@@ -215,7 +213,7 @@ async def check_arr_disk_space(
     else:
         status = STATUS_OK
     return CheckOutcome(
-        status, f"{label}: {free_gb:.1f} GB free ({worst_percent:.1f}% of {total_gb:.0f} GB){worst_of}", elapsed
+        status, f"{label}: {free_str} free ({worst_percent:.1f}% of {total_str}){worst_of}", elapsed
     )
 
 

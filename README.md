@@ -222,7 +222,13 @@ They differ in where the numbers come from:
   from their APIs, not the disk's total capacity, so there's nothing to
   compute a percentage against until you fill in **Total disk size (GB)**
   yourself (it rarely changes). Leave it blank and the check just reports
-  the free space with no threshold applied - still useful at a glance.
+  the free space with no threshold applied (message ends in `(%?)` as a
+  reminder that a total isn't configured) - still useful at a glance.
+
+All of them show free/total space auto-scaled to whatever unit reads best -
+TB above 1024GB, GB above 1024MB, and so on down to bytes - rather than a
+raw GB figure that gets unwieldy for a large disk (e.g. "4.59TB free"
+instead of "4699.1 GB free").
 
 None of these show the generic **Alert level** field in Add/Edit check - it
 would only conflict with (or accidentally downgrade) the warn/fail decision
@@ -419,6 +425,32 @@ An alert fires on:
 The channel type is deliberately pluggable - adding another alerting service
 (Discord, Pushbullet, etc.) later is a matter of one more channel type, not
 a redesign of this system.
+
+## Scheduled Down Time
+
+Settings > **Scheduled Down Time** suppresses Push Notifications alerts
+during known-noisy windows (an update, a planned reboot) so they don't page
+you the same as a real incident - check results, the Notifications tab, and
+the dashboard are all completely unaffected either way; only the outbound
+alert is held back. Two sections:
+
+- **Service Groups** - which services a schedule covers. **All Services**
+  always exists and can't be edited or deleted - it covers every service
+  automatically, including ones added later. Create your own groups with
+  **+ Add group** and a simple checkbox per service.
+- **Schedules** - when, how often, and which severities to suppress. **+ Add
+  schedule** sets the schedule's own details: a **Recurrence** (Once, Daily,
+  Weekly, Monthly, or Yearly - Weekly/Monthly/Yearly derive their pattern
+  from a single date you pick, e.g. "every week on this date's weekday"),
+  its time window (crossing midnight is fine, e.g. 22:00-06:00), an optional
+  **Repeat until** date for recurring types, and **Suppress Warn alerts** /
+  **Suppress Fail alerts** (at least one is required). Times are entered and
+  shown in your browser's local time.
+
+  Once saved, a schedule appears as a card - its own details, plus a
+  checkbox per Service Group beneath. Check whichever groups it should apply
+  to; each toggle saves immediately, no separate save step. A schedule
+  applying to no group suppresses nothing (nothing is checked by default).
 
 ## Public dashboard
 

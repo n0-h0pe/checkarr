@@ -36,3 +36,37 @@ def serialize_notification_channel(channel: models.NotificationChannel) -> schem
         created_at=channel.created_at,
         updated_at=channel.updated_at,
     )
+
+
+def serialize_service_group(
+    group: models.ServiceGroup, all_service_ids: list[int]
+) -> schemas.ServiceGroupOut:
+    """`all_service_ids` (every current service id) is required for the
+    `is_default` ("All Services") group, whose membership is never stored -
+    see ServiceGroup's docstring - and harmlessly ignored otherwise."""
+    service_ids = all_service_ids if group.is_default else [m.service_id for m in group.members]
+    return schemas.ServiceGroupOut(
+        id=group.id,
+        name=group.name,
+        is_default=group.is_default,
+        service_ids=service_ids,
+        created_at=group.created_at,
+        updated_at=group.updated_at,
+    )
+
+
+def serialize_downtime_schedule(schedule: models.DowntimeSchedule) -> schemas.DowntimeScheduleOut:
+    return schemas.DowntimeScheduleOut(
+        id=schedule.id,
+        name=schedule.name,
+        recurrence=schedule.recurrence,
+        start_at=schedule.start_at,
+        end_at=schedule.end_at,
+        repeat_until=schedule.repeat_until,
+        suppress_warn=schedule.suppress_warn,
+        suppress_fail=schedule.suppress_fail,
+        enabled=schedule.enabled,
+        group_ids=[g.group_id for g in schedule.groups],
+        created_at=schedule.created_at,
+        updated_at=schedule.updated_at,
+    )
