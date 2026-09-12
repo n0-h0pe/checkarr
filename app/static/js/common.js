@@ -915,7 +915,23 @@ const NOTHING_TO_REPORT_LINES = [
   "Nothing to see here!",
   "Clean bill of health.",
   "I forgot to code this bit... Just kidding! There's no notifications.",
+  "Nothing to report, Captain.",
+  "“These aren’t the notifications you’re looking for. \u{1F44B} There’s nothing to see here.”",
+  "“Breaking News: Absolutely nothing has happened. More at 10.”",
+  "“Houston, we have no problems…”",
+  "“There’s nothing here. We checked twice. Then we checked again because apparently that’s what debugging is.”",
+  "“Beep boop. Nothing to report!”",
+  "“Nothing to see here. Move along, citizen. This page is completely normal.”",
+  "“All caught up! You’re officially more organised than whoever wrote this page.”",
+  "“No notifications. The machines have nothing to report. Yet.”",
+  "“Congratulations on having nothing to worry about. Please enjoy this suspiciously empty screen.”",
+  "“No news is good news. Unless you were expecting news. In which case… awkward.”",
 ];
+// A joke on the joke - 1 in 10000 odds, checked separately below rather
+// than just being one more entry in the list above (which would make it
+// roughly as common as every other line instead of a genuine rarity).
+const NOTHING_TO_REPORT_RARE_LINE = "You actually have notifications! Trust me bro, they're here: https://www.youtube.com/watch?v=dQw4w9WgXcQ";
+const NOTHING_TO_REPORT_RARE_ODDS = 10000;
 
 // "Notifications" here means "checks currently in warn/fail" (see
 // queries.get_active_issues) - not models.Notification, which is a
@@ -935,7 +951,9 @@ async function loadNotifications() {
   if (!list) return;
   list.innerHTML = "";
   if (items.length === 0) {
-    const line = NOTHING_TO_REPORT_LINES[Math.floor(Math.random() * NOTHING_TO_REPORT_LINES.length)];
+    const line = Math.random() < 1 / NOTHING_TO_REPORT_RARE_ODDS
+      ? NOTHING_TO_REPORT_RARE_LINE
+      : NOTHING_TO_REPORT_LINES[Math.floor(Math.random() * NOTHING_TO_REPORT_LINES.length)];
     list.appendChild(el("div", { class: "empty-state", text: line }));
     return;
   }
