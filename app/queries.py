@@ -11,7 +11,18 @@ from sqlalchemy.orm import Session
 
 from . import models, schemas
 from .checks.base import STATUS_FAIL, STATUS_WARN, worst_status
+from .downtime import SuppressionContext
 from .serializers import serialize_service
+
+
+def _as_aware(dt: datetime) -> datetime:
+    """SQLite round-trips DateTime columns as naive; treat naive as UTC -
+    same convention as downtime.py's/poller.py's own _as_aware. Needed here
+    (rather than importing theirs) because SuppressionContext.was_suppressed
+    compares straight against whatever's passed in - a naive
+    CheckResult.timestamp has to be made aware before it can be compared
+    against a DowntimeSchedule's own (also coerced-aware) start_at/end_at."""
+    return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
 
 
 def get_service_statuses(db: Session) -> list[schemas.ServiceStatusOut]:
@@ -73,7 +84,7 @@ def get_history(
     limit: int,
     before_id: int | None = None,
     statuses: list[str] | None = None,
-) -> list[models.CheckResult]:
+) -> list[schemas.CheckResultOut]:
     """Ordered by id, not timestamp - id is assigned in insertion order,
     which for a given service's rows already matches timestamp order (ties
     only happen between rows from the same poll, which are contiguous in
@@ -102,6 +113,12 @@ def get_history(
     an empty statuses list isn't itself a "show nothing" signal here - the
     frontend already turns an all-pills-off selection into an empty
     service_ids-style short-circuit before ever calling this).
+
+    Each row's `in_sdt` (see schemas.CheckResultOut) is computed against a
+    single downtime.SuppressionContext built once for the whole page here,
+    rather than re-querying schedules/groups per row - see its docstring
+    for what "was this in SDT" means precisely and its one known gap
+    (a since-expired-and-reaped Instant SDT window).
     """
     if not service_ids:
         return []
@@ -121,19 +138,39 @@ def get_history(
             q = q.filter(models.CheckResult.id < before_id)
         if statuses:
             q = q.filter(models.CheckResult.status.in_(statuses))
-        return q.order_by(models.CheckResult.id.desc()).limit(limit).all()
+        rows = q.order_by(models.CheckResult.id.desc()).limit(limit).all()
+    else:
+        cutoff = datetime.now(timezone.utc) - timedelta(minutes=minutes)
+        q = db.query(models.CheckResult).filter(
+            models.CheckResult.service_id.in_(service_ids), models.CheckResult.timestamp >= cutoff
+        )
+        if check_id is not None:
+            q = q.filter(models.CheckResult.check_id == check_id)
+        if before_id is not None:
+            q = q.filter(models.CheckResult.id < before_id)
+        if statuses:
+            q = q.filter(models.CheckResult.status.in_(statuses))
+        rows = q.order_by(models.CheckResult.id.desc()).limit(limit).all()
 
-    cutoff = datetime.now(timezone.utc) - timedelta(minutes=minutes)
-    q = db.query(models.CheckResult).filter(
-        models.CheckResult.service_id.in_(service_ids), models.CheckResult.timestamp >= cutoff
-    )
-    if check_id is not None:
-        q = q.filter(models.CheckResult.check_id == check_id)
-    if before_id is not None:
-        q = q.filter(models.CheckResult.id < before_id)
-    if statuses:
-        q = q.filter(models.CheckResult.status.in_(statuses))
-    return q.order_by(models.CheckResult.id.desc()).limit(limit).all()
+    ctx = SuppressionContext(db)
+    out = []
+    for r in rows:
+        in_sdt = r.status in (STATUS_WARN, STATUS_FAIL) and ctx.was_suppressed(r.service_id, r.status, _as_aware(r.timestamp))
+        out.append(
+            schemas.CheckResultOut(
+                id=r.id,
+                service_id=r.service_id,
+                check_id=r.check_id,
+                check_name=r.check_name,
+                check_type=r.check_type,
+                status=r.status,
+                message=r.message,
+                response_time_ms=r.response_time_ms,
+                timestamp=r.timestamp,
+                in_sdt=in_sdt,
+            )
+        )
+    return out
 
 
 def get_notifications(

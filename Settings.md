@@ -133,6 +133,18 @@ service pills, all three start selected (matching what you'd see with no
 filter at all), so this is purely a narrowing tool, not something you have
 to configure before the table shows anything.
 
+A warn/fail row that happened while its service was covered by an active
+Scheduled Down Time schedule gets a small bell-with-a-slash icon next to
+its Status badge - hover it for a reminder of what it means (that row's
+alert was suppressed, not sent). This is reconstructed after the fact from
+your current schedules, not logged at the time, so it has one gap: an
+Instant SDT window (Settings > Scheduled Down Time) is deleted once it
+ends to keep that list tidy, so a row that happened during one stops
+showing the icon once that particular window has aged out, even though it
+genuinely was suppressed at the time. A regular saved schedule doesn't
+have this gap - it stays evaluable for any past row for as long as the
+schedule itself exists.
+
 **Columns** opens a small dialog listing every available column (Time,
 Service, Check, Type, Status, Response, Message) with a checkbox and a drag
 handle, check to show, drag to reorder, at least one has to stay visible.
@@ -144,18 +156,23 @@ renders History instead.
 
 **Export CSV** downloads every row matching the current service/severity
 selection and time range, not just whatever happened to be scrolled into
-view, using whichever columns are currently shown, in that order.
+view, using whichever columns are currently shown, in that order, plus an
+"In SDT" TRUE/FALSE column at the end - always included regardless of
+which columns are currently shown, since it's audit data rather than a
+display preference.
 
 ### On a phone
 
 The column layout above gives way to one compact line per event instead:
 a short date/time (`YY-MM-DD HH:MM`), the service's icon alone (no name -
 it doesn't fit, and the icon is enough once you know your own services), a
-short OK/WARN/FAIL badge, and the same abbreviated result summary the
-mobile dashboard cards use (`200 OK`, `Files OK`, and so on). Tap the "›"
-at the end of a row to expand it into everything left out - full service
-and check name, check type, exact time, response time, and the complete
-message - the same detail the row would show outright on a wider screen.
+short OK/WARN/FAIL badge, the same Scheduled Down Time icon described
+above when it applies, and the same abbreviated result summary the mobile
+dashboard cards use (`200 OK`, `Files OK`, and so on). Tap the "›" at the
+end of a row to expand it into everything left out - full service and
+check name, check type, exact time, response time, an explicit "In SDT"
+line when it applies, and the complete message - the same detail the row
+would show outright on a wider screen.
 
 ## Notifications tab
 

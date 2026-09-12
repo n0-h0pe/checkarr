@@ -189,6 +189,12 @@ class CheckResultOut(BaseModel):
     message: str
     response_time_ms: float | None
     timestamp: datetime
+    # Whether an alert for this result would have been suppressed by
+    # Scheduled Down Time at the moment it happened (see
+    # downtime.SuppressionContext.was_suppressed, which computes this in
+    # queries.get_history) - always False for an "ok" result, since there's
+    # no alert tier to suppress in the first place.
+    in_sdt: bool = False
 
 
 class NotificationOut(BaseModel):
