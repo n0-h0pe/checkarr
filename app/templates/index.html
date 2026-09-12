@@ -176,13 +176,13 @@
             <h2>Dashboard Settings</h2>
           </div>
           <form id="dashboard-settings-form">
-            <div class="field checkbox">
-              <label><input type="checkbox" id="dashboard-settings-require-compact"> Restrict to compact layouts <span class="hint">(only layouts with Compact view on, from the Dashboard tab, can be picked below)</span></label>
+            <div class="field">
+              <label>Dashboard to show on Desktop <span class="hint">(port 8090, desktop-width visitors)</span></label>
+              <select id="dashboard-settings-layout-desktop" style="max-width:280px;"></select>
             </div>
             <div class="field">
-              <label>Public dashboard layout <span class="hint">(what shows on port 8090)</span></label>
-              <select id="dashboard-settings-layout" style="max-width:280px;"></select>
-              <div class="hint">A visitor on a phone always gets that install's Mobile (or Mobile-Compact) layout instead, whatever's picked here - pin one of those directly if you want to curate what phone visitors see rather than just getting the default "All Services" for it.</div>
+              <label>Dashboard to show on Mobile <span class="hint">(port 8090, phone-width visitors)</span></label>
+              <select id="dashboard-settings-layout-mobile" style="max-width:280px;"></select>
             </div>
             <div class="modal-actions" style="justify-content:flex-start;">
               <button type="submit" class="primary">Save</button>

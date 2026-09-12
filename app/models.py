@@ -199,8 +199,9 @@ class DashboardLayout(Base):
     (see database.py's _ensure_default_layouts) if it doesn't already
     exist, which can't be deleted (see routers/dashboard_layouts.py) and
     whose card set can't be trimmed, unlike ordinary custom layouts. See
-    Dashboard Settings (DashboardSettings.public_require_compact below) for
-    restricting which layouts the public dashboard can be pinned to."""
+    Dashboard Settings (DashboardSettings.public_layout_id/
+    public_layout_id_mobile below) for which layout the public dashboard
+    actually shows."""
 
     __tablename__ = "dashboard_layouts"
 
@@ -380,19 +381,29 @@ class DashboardSettings(Base):
     """Singleton row (see queries.get_or_create_dashboard_settings)
     controlling what the public dashboard port (8090) shows, independent of
     whatever layout the admin app currently has active/is editing.
-    `public_layout_id` is a loose reference (no FK constraint, same style as
+
+    `public_layout_id` (the Desktop pin) and `public_layout_id_mobile` (the
+    Mobile pin) are each a loose reference (no FK constraint, same style as
     DashboardLayout.card_service_ids' loose id lists) to a DashboardLayout -
-    falls back to the default "All Services" layout if unset or if that
-    layout was since deleted. Whether the public dashboard actually renders
-    compact is entirely a property of *which layout* is pinned
-    (DashboardLayout.is_compact above), not a separate flag here -
-    `public_require_compact`, when set, only restricts which layouts are
-    valid to pin (compact ones only, enforced in routers/dashboard_settings.py),
-    it doesn't itself force compact rendering."""
+    picked between by queries.get_public_layout based on the requesting
+    viewport, each falling back independently to that pool's own default
+    "All Services" layout if unset or if the pinned one was since deleted.
+    Whether the public dashboard actually renders compact is entirely a
+    property of *which layout* is pinned (DashboardLayout.is_compact
+    above), not a separate flag - both dropdowns simply offer every layout
+    in their own device pool, compact or not.
+
+    `public_require_compact` is retired - the public dashboard used to
+    support restricting its pin to compact layouts only, before Mobile
+    layouts existed as their own pool; picking a Desktop vs a Mobile
+    layout now happens automatically by viewport instead, which made that
+    restriction redundant. Left in place unused rather than dropped, same
+    as every other retired column in database.py."""
 
     __tablename__ = "dashboard_settings"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     public_layout_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    public_layout_id_mobile: Mapped[int | None] = mapped_column(Integer, nullable=True)
     public_require_compact: Mapped[bool] = mapped_column(Boolean, default=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)

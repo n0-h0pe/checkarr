@@ -2067,28 +2067,26 @@ async function submitPruningForm(ev) {
 
 // ---------- settings: dashboard settings ----------
 
-// Compactness lives on the layout itself now (DashboardLayout.is_compact,
-// toggled from the Dashboard tab's "Compact view" button) - "Restrict to
-// compact layouts" here only narrows which layouts this dropdown offers,
-// it doesn't force compact rendering on its own. Layouts are fetched once
-// per tab visit and re-filtered client-side as the checkbox is toggled,
-// no need to re-fetch for that.
+// Two independent pins - Desktop and Mobile each get their own dropdown,
+// offering only layouts from that device pool (DashboardLayout.is_mobile -
+// see its docstring), since a Desktop visitor could never usefully be
+// pointed at a Mobile-pool layout or vice versa. Layouts are fetched once
+// per tab visit; each dropdown re-filters the same list by is_mobile.
 let dashboardSettingsLayouts = [];
 let dashboardSettingsPublicLayoutId = null;
+let dashboardSettingsPublicLayoutIdMobile = null;
 
-function renderDashboardSettingsLayoutSelect() {
-  const select = $("#dashboard-settings-layout");
-  const requireCompact = $("#dashboard-settings-require-compact").checked;
-  const options = requireCompact ? dashboardSettingsLayouts.filter((l) => l.is_compact) : dashboardSettingsLayouts;
+function renderDashboardSettingsLayoutSelect(selectId, mobile, selectedId) {
+  const select = $(selectId);
+  const options = dashboardSettingsLayouts.filter((l) => !!l.is_mobile === mobile);
   select.innerHTML = "";
   for (const l of options) {
     let text = l.name;
-    if (l.is_mobile) text += " (mobile)";
     if (l.is_compact) text += " (compact)";
     if (l.is_default) text += " (default)";
-    select.appendChild(el("option", { value: l.id, text, selected: l.id === dashboardSettingsPublicLayoutId ? "selected" : null }));
+    select.appendChild(el("option", { value: l.id, text, selected: l.id === selectedId ? "selected" : null }));
   }
-  if (!options.some((l) => l.id === dashboardSettingsPublicLayoutId)) select.value = "";
+  if (!options.some((l) => l.id === selectedId)) select.value = "";
 }
 
 async function loadDashboardSettings() {
@@ -2101,20 +2099,23 @@ async function loadDashboardSettings() {
   }
   dashboardSettingsLayouts = layouts;
   dashboardSettingsPublicLayoutId = s.public_layout_id;
-  $("#dashboard-settings-require-compact").checked = s.public_require_compact;
-  renderDashboardSettingsLayoutSelect();
+  dashboardSettingsPublicLayoutIdMobile = s.public_layout_id_mobile;
+  renderDashboardSettingsLayoutSelect("#dashboard-settings-layout-desktop", false, dashboardSettingsPublicLayoutId);
+  renderDashboardSettingsLayoutSelect("#dashboard-settings-layout-mobile", true, dashboardSettingsPublicLayoutIdMobile);
 }
 
 async function submitDashboardSettingsForm(ev) {
   ev.preventDefault();
-  const layoutId = $("#dashboard-settings-layout").value;
+  const desktopId = $("#dashboard-settings-layout-desktop").value;
+  const mobileId = $("#dashboard-settings-layout-mobile").value;
   try {
     await api("/api/dashboard-settings", {
       method: "PUT",
       body: JSON.stringify({
-        public_layout_id: layoutId ? parseInt(layoutId, 10) : null,
-        clear_public_layout: !layoutId,
-        public_require_compact: $("#dashboard-settings-require-compact").checked,
+        public_layout_id: desktopId ? parseInt(desktopId, 10) : null,
+        clear_public_layout: !desktopId,
+        public_layout_id_mobile: mobileId ? parseInt(mobileId, 10) : null,
+        clear_public_layout_mobile: !mobileId,
       }),
     });
     toast("Dashboard settings saved");
@@ -2212,7 +2213,6 @@ async function init() {
   $("#pruning-form").addEventListener("submit", submitPruningForm);
   $("#prune-now-btn").addEventListener("click", pruneNow);
   $("#dashboard-settings-form").addEventListener("submit", submitDashboardSettingsForm);
-  $("#dashboard-settings-require-compact").addEventListener("change", renderDashboardSettingsLayoutSelect);
 
   let resizeTimer = null;
   let lastViewportWidth = window.innerWidth;

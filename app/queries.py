@@ -253,10 +253,10 @@ def get_or_create_log_pruning_settings(db: Session) -> models.LogPruningSettings
 
 def get_or_create_dashboard_settings(db: Session) -> models.DashboardSettings:
     """Seeds the singleton Dashboard Settings row (defaults: no pinned
-    public layout - falls back to the default "All Services" layout - and
-    compact mode off) - idempotent, called once at startup (see
-    database.init_db) and by routers/dashboard_settings.py/public.py
-    whenever the current settings are needed."""
+    public layout for either Desktop or Mobile - each falls back to that
+    pool's own default "All Services" layout) - idempotent, called once at
+    startup (see database.init_db) and by routers/dashboard_settings.py/
+    public.py whenever the current settings are needed."""
     settings_row = db.query(models.DashboardSettings).first()
     if settings_row:
         return settings_row
@@ -312,15 +312,23 @@ def resolve_layout_for_viewport(
     return match or layout
 
 
-def get_public_layout(db: Session) -> models.DashboardLayout:
+def get_public_layout(db: Session, mobile: bool | None = None) -> models.DashboardLayout:
     """What the public dashboard port (8090) actually renders - independent
     of whatever layout the admin app currently has active (see
-    get_or_create_active_layout above). Falls back to the default "All
-    Services" layout if no public layout is pinned, or if the one that was
-    pinned has since been deleted."""
+    get_or_create_active_layout above). Dashboard Settings pins one layout
+    for Desktop visitors (`public_layout_id`) and a separate one for Mobile
+    visitors (`public_layout_id_mobile`) - `mobile` picks which of the two
+    applies; `None` (no viewport info given, e.g. an API client) falls back
+    to the Desktop pin, same as before the Mobile pin existed. Whichever
+    one applies falls back further to get_or_create_active_layout if unset
+    or if the pinned layout has since been deleted - the caller (public.py)
+    still runs the result through resolve_layout_for_viewport afterward, so
+    a pin that somehow points at the wrong device pool's layout still gets
+    corrected rather than rendered as-is."""
     settings_row = get_or_create_dashboard_settings(db)
-    if settings_row.public_layout_id is not None:
-        layout = db.get(models.DashboardLayout, settings_row.public_layout_id)
+    pinned_id = settings_row.public_layout_id_mobile if mobile else settings_row.public_layout_id
+    if pinned_id is not None:
+        layout = db.get(models.DashboardLayout, pinned_id)
         if layout:
             return layout
     return get_or_create_active_layout(db)

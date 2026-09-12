@@ -466,11 +466,12 @@ class PruneNowResult(BaseModel):
 class DashboardSettingsOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     public_layout_id: int | None
-    public_require_compact: bool
+    public_layout_id_mobile: int | None
     updated_at: datetime
 
 
 class DashboardSettingsUpdate(BaseModel):
     public_layout_id: int | None = None
     clear_public_layout: bool = False
-    public_require_compact: bool | None = None
+    public_layout_id_mobile: int | None = None
+    clear_public_layout_mobile: bool = False
