@@ -2083,7 +2083,6 @@ function renderDashboardSettingsLayoutSelect(selectId, mobile, selectedId) {
   for (const l of options) {
     let text = l.name;
     if (l.is_compact) text += " (compact)";
-    if (l.is_default) text += " (default)";
     select.appendChild(el("option", { value: l.id, text, selected: l.id === selectedId ? "selected" : null }));
   }
   if (!options.some((l) => l.id === selectedId)) select.value = "";
