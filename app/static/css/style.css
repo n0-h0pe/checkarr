@@ -378,6 +378,14 @@ table th { color: var(--text-dim); font-weight: 600; font-size: 12px; text-trans
 }
 .col-resize-handle:hover, .col-resize-handle:active { background: var(--accent); opacity: .4; }
 
+/* History's Status column: the badge plus, when a warn/fail row's own
+   in_sdt says so (see queries.get_history), the "bell-off" icon next to
+   it - hover explains itself via the icon's own title attribute, so this
+   stays compact instead of a whole extra column to scan. Same icon reused
+   inline in the mobile compact row (see .history-row-compact below). */
+.history-status-cell { display: inline-flex; align-items: center; gap: 6px; }
+.sdt-icon { display: inline-flex; color: var(--warn); flex-shrink: 0; cursor: help; }
+
 /* Settings' own inner tab strip (Services / Push Notifications) - same
    show/hide pattern as the top-level nav.tabs/.tab-panel, just smaller and
    unboxed since it's nested inside a tab that's already active. */
@@ -777,7 +785,7 @@ table th { color: var(--text-dim); font-weight: 600; font-size: 12px; text-trans
   .history-row-mobile td { padding: 6px 0; }
   .history-row-compact { display: flex; align-items: center; gap: 6px; font-size: 12px; }
   .history-compact-time { color: var(--text-dim); font-variant-numeric: tabular-nums; flex-shrink: 0; white-space: nowrap; }
-  .history-row-compact .type-icon, .history-row-compact .type-icon-fallback, .history-row-compact .type-icon-emoji { flex-shrink: 0; }
+  .history-row-compact .type-icon, .history-row-compact .type-icon-fallback, .history-row-compact .type-icon-emoji, .history-row-compact .sdt-icon { flex-shrink: 0; }
   .history-compact-msg { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-dim); }
   .badge-sm { padding: 2px 6px; font-size: 10px; }
   .history-expand-btn {

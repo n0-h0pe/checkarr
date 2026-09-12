@@ -1083,6 +1083,25 @@ async function loadNotifications() {
 // exempts a column from the ellipsis-truncation every other column gets -
 // only Time uses it, so it's never forced onto two lines (see
 // renderHistoryHeader/historyRowElement and the .col-nowrap CSS rule).
+// "bell-off" (Feather-style outline icon, matching REORDER_ICONS/
+// DRAG_HANDLE_ICON's stroke-based visual language) - shown next to a
+// warn/fail row's status whenever that result's own in_sdt (see
+// schemas.CheckResultOut) says an alert for it would have been suppressed
+// by Scheduled Down Time at the time. Hover explains it via the element's
+// own title attribute (see sdtIcon below) rather than a separate label,
+// so it stays a compact icon instead of another column to scan.
+const SDT_ICON =
+  '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13.73 21a2 2 0 0 1-3.46 0"/><path d="M18.63 13A17.89 17.89 0 0 1 18 8"/><path d="M6.26 6.26A5.86 5.86 0 0 0 6 8c0 7-3 9-3 9h14"/><path d="M18 8a6 6 0 0 0-9.33-5"/><line x1="1" y1="1" x2="23" y2="23"/></svg>';
+
+function sdtIcon() {
+  const span = el("span", {
+    class: "sdt-icon",
+    title: "This service was in Scheduled Down Time when this happened - any alert for it was suppressed.",
+  });
+  span.innerHTML = SDT_ICON;
+  return span;
+}
+
 const HISTORY_COLUMNS = {
   time: { label: "Time", value: (r) => fmtTime(r.timestamp), nowrap: true },
   service: { label: "Service", value: (r) => serviceNameById(r.service_id) },
@@ -1091,7 +1110,11 @@ const HISTORY_COLUMNS = {
   status: {
     label: "Status",
     value: (r) => r.status,
-    renderCell: (r) => el("span", { class: `badge ${r.status}`, text: r.status }),
+    renderCell: (r) =>
+      el("span", { class: "history-status-cell" }, [
+        el("span", { class: `badge ${r.status}`, text: r.status }),
+        r.in_sdt ? sdtIcon() : null,
+      ]),
   },
   response: { label: "Response", value: (r) => (r.response_time_ms ? `${Math.round(r.response_time_ms)} ms` : "-") },
   message: { label: "Message", value: (r) => r.message },
@@ -1262,6 +1285,7 @@ function historyRowElementMobile(r) {
     r.response_time_ms
       ? el("div", {}, [el("span", { class: "text-dim" }, "Response: "), `${Math.round(r.response_time_ms)} ms`])
       : null,
+    r.in_sdt ? el("div", {}, [el("span", { class: "text-dim" }, "In SDT: "), "Yes - alert was suppressed"]) : null,
     el("div", {}, [el("span", { class: "text-dim" }, "Message: "), r.message || "(none)"]),
   ]);
   const expandBtn = el(
@@ -1277,6 +1301,7 @@ function historyRowElementMobile(r) {
     el("span", { class: "history-compact-time", text: fmtTimeCompact(r.timestamp) }),
     svc ? typeIcon(svc) : null,
     el("span", { class: `badge ${r.status} badge-sm`, text: HISTORY_SEVERITY_SHORT_LABEL[r.status] || r.status }),
+    r.in_sdt ? sdtIcon() : null,
     el("span", { class: "history-compact-msg", text: shortCheckSummary(r.check_type, r.status, r.message) }),
     expandBtn,
   ]);
@@ -1546,9 +1571,17 @@ async function exportHistoryCsv() {
     return;
   }
 
+  // "In SDT" always exports regardless of which columns are currently
+  // shown/hidden on screen - it's audit data (was this row's alert
+  // suppressed by Scheduled Down Time), not really a display preference
+  // the Columns dialog's show/hide is meant to cover, unlike the rest.
   const cols = state.historyColumns.map((k) => HISTORY_COLUMNS[k]);
-  const lines = [cols.map((c) => csvEscape(c.label)).join(",")];
-  for (const r of allRows) lines.push(cols.map((c) => csvEscape(c.value(r))).join(","));
+  const header = [...cols.map((c) => c.label), "In SDT"];
+  const lines = [header.map(csvEscape).join(",")];
+  for (const r of allRows) {
+    const values = [...cols.map((c) => c.value(r)), r.in_sdt ? "TRUE" : "FALSE"];
+    lines.push(values.map(csvEscape).join(","));
+  }
 
   const blob = new Blob([lines.join("\r\n")], { type: "text/csv;charset=utf-8;" });
   const url = URL.createObjectURL(blob);
