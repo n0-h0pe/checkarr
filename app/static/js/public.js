@@ -11,6 +11,11 @@ async function init() {
     // (DashboardLayout.is_compact, see loadDashboard in common.js) - no
     // separate settings fetch needed here.
     loadDashboard(); // interactive/editable default to falsy - no Run now, no drag/resize
+    // See the matching setTimeout in app.js's init for why - catches a
+    // wrong initial device-pool guess (from window.innerWidth reading 0
+    // before the page actually finished laying out) well before the
+    // 30-second poll below would.
+    setTimeout(loadDashboard, 1000);
     setInterval(loadDashboard, 30000);
     let resizeTimer = null;
     let lastViewportWidth = window.innerWidth;

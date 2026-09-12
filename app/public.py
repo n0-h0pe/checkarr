@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 
 from . import schemas
 from .database import get_db
-from .queries import get_active_issues, get_history, get_public_layout, get_service_statuses
+from .queries import get_active_issues, get_history, get_public_layout, get_service_statuses, resolve_layout_for_viewport
 from .routers.meta import get_meta
 from .version import VERSION
 
@@ -50,11 +50,15 @@ def meta():
 
 
 @public_app.get("/api/dashboard-layouts/active", response_model=schemas.DashboardLayoutOut)
-def active_layout(db: Session = Depends(get_db)):
+def active_layout(mobile: bool | None = Query(None), db: Session = Depends(get_db)):
     """Whichever layout is pinned in Dashboard Settings (or the default, if
-    none is) - its own `is_compact` flag is what tells the frontend whether
-    to render compact, no separate settings fetch needed for that."""
-    return get_public_layout(db)
+    none is) - its own `is_compact`/`is_mobile` flags are what tell the
+    frontend how to render it, no separate settings fetch needed for that.
+    `mobile`, if given, can still substitute a different layout than the
+    one actually pinned - see resolve_layout_for_viewport - so a phone
+    visitor never gets stuck looking at whatever free-form desktop grid the
+    admin pinned for everyone else."""
+    return resolve_layout_for_viewport(db, get_public_layout(db), mobile)
 
 
 @public_app.get("/", response_class=HTMLResponse)

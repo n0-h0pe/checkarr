@@ -11,55 +11,76 @@ Click "Edit layout" in the top bar to rearrange the dashboard, drag and
 resize only work in this mode, so normal day-to-day viewing can't
 accidentally bump a card out of place.
 
-While editing:
+Every saved layout belongs to one of four pools - **Desktop**,
+**Desktop-Compact**, **Mobile**, and **Mobile-Compact** - and which pool
+you're currently editing/viewing determines how editing works:
 
-- Drag a card from anywhere on it (except the resize handle and its own
-  buttons) to move it anywhere on the grid, it snaps to an invisible grid.
-  Drop it on or across other cards and whatever's in the way gets pushed
-  out of your way rather than refusing the move.
-- Every card has a drag handle in its bottom-right corner, drag it to make
-  the card wider or taller.
+- **Desktop / Desktop-Compact**: free-form. Drag a card from anywhere on it
+  (except the resize handle and its own buttons) to move it anywhere on the
+  grid, it snaps to an invisible grid. Drop it on or across other cards and
+  whatever's in the way gets pushed out of your way rather than refusing
+  the move. Every card has a drag handle in its bottom-right corner, drag
+  it to make the card wider or taller.
+- **Mobile / Mobile-Compact**: always a single column, one card per row,
+  full width, no free-form drag - each card gets Move to top/up/down/to
+  bottom buttons instead, and its resize handle only changes height. This
+  isn't a narrow-screen fallback view of the same layout your desktop
+  edits - it's its own separate saved layout with its own card order,
+  never affected by anything you do to a Desktop/Desktop-Compact one.
 
-On a phone-width screen, editing looks different: there's only ever one
-card per row anyway, so free-form drag-and-drop gives way to plain list
-reordering with Move to top/up/down/to bottom buttons.
+Sizes and positions save automatically as soon as you release the drag (or
+click a reorder button), no separate Save step. Every one of the four pools
+always has an "All Services" layout (locked in the dropdown) that always
+shows every service, including ones added after the layout was created,
+and can't be deleted - every install gets all four the moment it starts up,
+nothing to set up first. Any other custom layout only shows the cards
+you've explicitly put on it: while editing a custom layout, each card gets
+a small remove button next to its status badge, and an Add card dropdown
+appears in the top bar. A newly added service only ever appears on All
+Services automatically, never inserted into a custom layout behind your
+back.
 
-Sizes and positions save automatically as soon as you release the drag, no
-separate Save step. Every install has one "All Services" layout (locked in
-the dropdown) that always shows every service, including ones added after
-the layout was created, and can't be deleted. Any other custom layout only
-shows the cards you've explicitly put on it: while editing a custom layout,
-each card gets a small remove button next to its status badge, and an Add
-card dropdown appears in the top bar. A newly added service only ever
-appears on All Services automatically, never inserted into a custom layout
-behind your back.
+The dropdown in the top bar next to Edit layout holds your saved layouts
+**from whichever pool you're currently in** - New saves the current
+arrangement as a new layout in that same pool, Rename and Delete act on the
+one currently selected (Delete is disabled for All Services), and picking
+any layout from the dropdown switches the dashboard to it instantly.
 
-The dropdown in the top bar next to Edit layout holds your saved layouts:
-New saves the current arrangement as a new layout, Rename and Delete act on
-the one currently selected (Delete is disabled for All Services), and
-picking any layout from the dropdown switches the dashboard to it instantly.
+Which of the two *device* pools (Desktop-ish vs Mobile-ish) you're looking
+at isn't something you pick - it follows the actual width of whatever
+you're viewing it on, automatically, every time the page loads or your
+window crosses roughly phone width. Narrow your browser window (or open
+the dashboard on a phone) and it switches itself to a Mobile/Mobile-Compact
+layout; widen it back out and it switches back - always landing on that
+pool's All Services layout unless you've specifically activated a
+different one of your own in it. This is also what fixed cards being able
+to render partway off the edge of a narrow screen with the rest of the
+page scrolling sideways to reach them: a Mobile-pool layout only ever
+stores each card's up/down position, never a desktop-shaped horizontal one
+that could end up placed past where a narrow screen actually has room.
 
 ### Compact view
 
-Next to Edit layout, **Compact view** switches between two entirely
-separate pools of saved layouts: your full ones and your compact ones. A
-compact layout drops each card down to just its icon, name, and status
-badge on one line, then the uptime history strip on a second, nothing
-else, no Run now/History buttons, no type/address/last-checked line, no
-individual check rows. A long name that would otherwise run into the
-status badge fades out smoothly instead of getting cut off mid-character.
-Because there's so much less on a compact card, it can also be resized much
-smaller than a full one.
+Next to Edit layout, **Compact view** switches between the compact and
+full pool *for whichever device pool you're currently in* - Desktop ⇄
+Desktop-Compact, or Mobile ⇄ Mobile-Compact, never crossing between device
+pools itself (that half is automatic, see above). A compact layout drops
+each card down to just its icon, name, and status badge on one line, then
+the uptime history strip on a second, nothing else, no Run now/History
+buttons, no type/address/last-checked line, no individual check rows. A
+long name that would otherwise run into the status badge fades out
+smoothly instead of getting cut off mid-character. Because there's so much
+less on a compact card, it can also be resized much smaller than a full
+one (on Desktop-Compact; Mobile-Compact cards are always full list-width
+either way).
 
-A layout is fixed as compact or not the moment it's created, never flipped
-in place afterward - clicking Compact view activates one of your existing
-layouts in the other pool (whichever was last active there, or the first
-one otherwise), and the layout dropdown next to it only ever lists layouts
-from whichever pool you're currently in. The first time you switch to a
-pool with nothing in it yet, you're prompted to name your first layout
-there on the spot. **+ New** always creates within whichever pool is
-currently active, so making more compact layouts later is just Compact
-view, then + New, same as for full ones.
+A layout is fixed as compact or not (and Desktop or Mobile) the moment it's
+created, never flipped in place afterward - clicking Compact view activates
+one of your existing layouts in the other compact-ness within your current
+device pool, and the layout dropdown next to it only ever lists layouts
+from whichever of the four pools you're currently in. **+ New** always
+creates within whichever pool is currently active, so making more compact
+layouts later is just Compact view, then + New, same as for full ones.
 
 Useful for a wall-mounted display or anywhere you want "is it up" at a
 glance rather than a full breakdown, or just to keep a leaner view of your
@@ -71,16 +92,23 @@ Settings > Dashboard Settings controls which layout the public dashboard
 port (8090) shows, independent of whatever you currently have active in the
 admin app:
 
-- **Public dashboard layout**: pick any saved layout, from either pool. The
-  public port shows this one regardless of what admin is actively editing
-  or has switched to, so you can rearrange your own view without disturbing
-  what a housemate or a status page pointed at port 8090 sees. Whether it
-  renders compact simply follows whether the chosen layout is one of your
-  compact ones - there's nothing separate to configure here for that.
+- **Public dashboard layout**: pick any saved layout, from any of the four
+  pools. The public port shows this one regardless of what admin is
+  actively editing or has switched to, so you can rearrange your own view
+  without disturbing what a housemate or a status page pointed at port
+  8090 sees. Whether it renders compact simply follows whether the chosen
+  layout is one of your compact ones - there's nothing separate to
+  configure here for that. A visitor on a phone is the one exception: they
+  always get that install's Mobile (or Mobile-Compact, matching whatever
+  you picked here) layout instead, the same automatic device-pool
+  switching described above - falling back to Mobile's own All Services if
+  you haven't specifically pinned one of your own Mobile layouts, but
+  never rendered whatever Desktop layout is pinned here.
 - **Restrict to compact layouts**: when checked, the dropdown above only
-  offers layouts from your compact pool, guaranteeing the public dashboard
-  can never accidentally get pointed at a full, detailed layout. Leave it
-  unchecked to pick from every saved layout, compact or not.
+  offers layouts from your compact pools (Desktop-Compact and
+  Mobile-Compact), guaranteeing the public dashboard can never accidentally
+  get pointed at a full, detailed layout. Leave it unchecked to pick from
+  every saved layout, compact or not.
 
 ## History
 
