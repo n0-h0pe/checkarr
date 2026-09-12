@@ -61,6 +61,7 @@
           </div>
         </div>
         <div class="history-service-bar" id="history-services-bar"></div>
+        <div class="history-service-bar" id="history-severity-bar"></div>
         <div style="overflow-x:auto;">
           <table class="history-table">
             <thead></thead>
@@ -206,6 +207,14 @@
           <select id="svc-type"></select>
         </div>
         <div class="field">
+          <label>Icon <span class="hint">(defaults to the type's own logo above)</span></label>
+          <div style="display:flex; align-items:center; gap:10px;">
+            <span id="svc-icon-preview" class="icon-preview"></span>
+            <button type="button" class="small" id="svc-icon-change-btn">Change icon</button>
+            <button type="button" class="small" id="svc-icon-reset-btn" hidden>Reset to default</button>
+          </div>
+        </div>
+        <div class="field">
           <label>Local address</label>
           <div class="input-with-status">
             <input type="text" id="svc-local-url" placeholder="http://radarr:7878">
@@ -268,6 +277,36 @@
           <button type="submit" class="primary">Save</button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <div class="modal-backdrop hidden" id="icon-picker-modal">
+    <div class="modal">
+      <h3>Choose an icon</h3>
+      <div class="sub-tabs">
+        <button type="button" class="sub-tab-btn active icon-picker-tab-btn" data-tab="library">App logos</button>
+        <button type="button" class="sub-tab-btn icon-picker-tab-btn" data-tab="emoji">Emoji</button>
+        <button type="button" class="sub-tab-btn icon-picker-tab-btn" data-tab="upload">Upload</button>
+      </div>
+      <div class="icon-picker-pane" data-pane="library">
+        <div class="icon-picker-library-grid" id="icon-picker-library-grid"></div>
+      </div>
+      <div class="icon-picker-pane" data-pane="emoji" hidden>
+        <div id="icon-picker-emoji-groups"></div>
+      </div>
+      <div class="icon-picker-pane" data-pane="upload" hidden>
+        <div class="field">
+          <label>Image file <span class="hint">(SVG, PNG, JPEG, or WebP - 1&nbsp;MB max)</span></label>
+          <input type="file" id="icon-picker-upload-input" accept=".svg,.png,.jpg,.jpeg,.webp,image/svg+xml,image/png,image/jpeg,image/webp">
+        </div>
+        <div id="icon-picker-upload-preview"></div>
+        <div class="modal-actions" style="justify-content:flex-start;">
+          <button type="button" class="small primary" id="icon-picker-upload-btn" disabled>Upload</button>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button type="button" id="icon-picker-cancel">Cancel</button>
+      </div>
     </div>
   </div>
 

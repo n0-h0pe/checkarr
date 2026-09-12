@@ -164,6 +164,15 @@ function fmtTime(iso) {
   return d.toLocaleString();
 }
 
+// Compact "YY-MM-DD HH:MM" stand-in for fmtTime, for the History tab's
+// mobile row (see historyRowElement) - narrow enough to share a line with
+// everything else there, unlike a full locale datetime string.
+function fmtTimeCompact(iso) {
+  const d = new Date(iso + (iso.endsWith("Z") ? "" : "Z"));
+  const p = (n) => String(n).padStart(2, "0");
+  return `${String(d.getFullYear()).slice(-2)}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
 function statusLabel(s) {
   return { ok: "OK", warn: "Warning", fail: "Failing", unknown: "Unknown", disabled: "Disabled" }[s] || s;
 }
@@ -251,16 +260,39 @@ function iconUrlFor(type) {
   return icons[type] || icons.generic || "";
 }
 
-function typeIcon(type) {
-  const url = iconUrlFor(type);
-  if (!url) return el("span", { class: "type-icon-fallback", text: "\u{1F9E9}" }); // puzzle piece
+// Fallback img/emoji-as-image loader shared by every icon path below -
+// if it 404s or otherwise fails to load (a deleted upload, a renamed
+// library key), drop back to the generic puzzle piece rather than leaving
+// a broken-image icon in its place.
+function _iconImg(src, alt) {
   return el("img", {
     class: "type-icon",
-    src: url,
-    alt: type,
+    src,
+    alt,
     loading: "lazy",
     onerror: function () { this.replaceWith(el("span", { class: "type-icon-fallback", text: "\u{1F9E9}" })); },
   });
+}
+
+// `svc` is anything with `.type` plus optionally `.icon_type`/`.icon_value`
+// (a full ServiceOut works; a plain string type still works too, for any
+// caller that only ever has the bare type and no per-service override to
+// honor). See models.Service.icon_type's docstring for what each
+// icon_type means and why an "upload" is always rendered via <img src>
+// here, never inline.
+function typeIcon(svc) {
+  if (typeof svc === "string") svc = { type: svc };
+  svc = svc || {};
+  if (svc.icon_type === "emoji" && svc.icon_value) {
+    return el("span", { class: "type-icon-emoji", text: svc.icon_value });
+  }
+  if (svc.icon_type === "upload" && svc.icon_value) {
+    return _iconImg(`/custom-icons/${svc.icon_value}`, svc.type || "");
+  }
+  const libraryType = svc.icon_type === "library" && svc.icon_value ? svc.icon_value : svc.type;
+  const url = iconUrlFor(libraryType);
+  if (!url) return el("span", { class: "type-icon-fallback", text: "\u{1F9E9}" }); // puzzle piece
+  return _iconImg(url, svc.type || libraryType);
 }
 
 async function loadMeta() {
@@ -518,7 +550,7 @@ function renderServiceCard(s, opts = {}, pos, positions) {
   );
   card.appendChild(
     el("div", { class: "card-header" }, [
-      el("div", { class: "title" }, [typeIcon(svc.type), el("span", { text: svc.name })]),
+      el("div", { class: "title" }, [typeIcon(svc), el("span", { text: svc.name })]),
       headerRight,
     ])
   );
@@ -1029,7 +1061,7 @@ async function loadNotifications() {
   for (const n of items) {
     const row = el("div", { class: "notif-row" }, [
       el("div", { class: "top" }, [
-        typeIcon(n.service_type),
+        typeIcon({ type: n.service_type, icon_type: n.icon_type, icon_value: n.icon_value }),
         el("span", { class: `badge ${n.status}`, text: n.status }),
         el("span", { class: "service-name", text: n.service_name }),
         el("span", { class: "text-dim", text: n.check_name }),
@@ -1106,6 +1138,17 @@ state.historyColumnWidths = loadHistoryColumnWidths();
 // fetched) until the user actually picks at least one.
 state.historySelectedServiceIds = [];
 
+// Which result severities currently show - unlike the service filter
+// above, defaults to all three (existing behavior, unfiltered) rather than
+// none, since narrowing this down is a refinement of an already-useful
+// view, not a prerequisite to seeing anything at all. Also not persisted.
+const HISTORY_SEVERITIES = [
+  { value: "ok", label: "OK" },
+  { value: "warn", label: "Warn" },
+  { value: "fail", label: "Fail" },
+];
+state.historySelectedSeverities = HISTORY_SEVERITIES.map((s) => s.value);
+
 function historyTable() {
   const body = $("#history-body");
   return body ? body.closest("table") : null;
@@ -1174,7 +1217,15 @@ function attachColumnResizeHandle(handle, key) {
   });
 }
 
+function serviceById(serviceId) {
+  const s = state.statuses.find((s) => s.service.id === serviceId);
+  return s ? s.service : null;
+}
+
+const HISTORY_SEVERITY_SHORT_LABEL = { ok: "OK", warn: "WARN", fail: "FAIL" };
+
 function historyRowElement(r) {
+  if (isMobileViewport()) return historyRowElementMobile(r);
   return el(
     "tr",
     {},
@@ -1186,6 +1237,53 @@ function historyRowElement(r) {
         col.renderCell ? col.renderCell(r) : col.value(r)
       );
     })
+  );
+}
+
+// Mobile's History row: everything that matters at a glance on one line -
+// compact time, the service's icon alone (its full name doesn't fit and
+// rarely adds much once you recognize the icon), a short severity badge,
+// and the same abbreviated result summary the mobile dashboard card checks
+// use (shortCheckSummary) - then a ">" button that expands a second block
+// with everything left out (full service/check name, type, full message,
+// response time), the same information the row would have shown outright
+// before this compact layout existed. One <td> (not one per column - the
+// column-customization feature is desktop-only, there's nothing to
+// individually show/hide/reorder here) keeps this compatible with the
+// same infinite-scroll append logic (loadMoreHistoryRows) as the desktop
+// row.
+function historyRowElementMobile(r) {
+  const svc = serviceById(r.service_id);
+  const detail = el("div", { class: "history-row-detail hidden" }, [
+    el("div", {}, [el("span", { class: "text-dim" }, "Service: "), svc ? svc.name : `#${r.service_id}`]),
+    el("div", {}, [el("span", { class: "text-dim" }, "Check: "), r.check_name]),
+    el("div", {}, [el("span", { class: "text-dim" }, "Type: "), r.check_type]),
+    el("div", {}, [el("span", { class: "text-dim" }, "Time: "), fmtTime(r.timestamp)]),
+    r.response_time_ms
+      ? el("div", {}, [el("span", { class: "text-dim" }, "Response: "), `${Math.round(r.response_time_ms)} ms`])
+      : null,
+    el("div", {}, [el("span", { class: "text-dim" }, "Message: "), r.message || "(none)"]),
+  ]);
+  const expandBtn = el(
+    "button",
+    { type: "button", class: "history-expand-btn", "aria-label": "More info", title: "More info" },
+    "›"
+  );
+  expandBtn.addEventListener("click", () => {
+    const expanded = detail.classList.toggle("hidden") === false;
+    expandBtn.classList.toggle("expanded", expanded);
+  });
+  const compactRow = el("div", { class: "history-row-compact" }, [
+    el("span", { class: "history-compact-time", text: fmtTimeCompact(r.timestamp) }),
+    svc ? typeIcon(svc) : null,
+    el("span", { class: `badge ${r.status} badge-sm`, text: HISTORY_SEVERITY_SHORT_LABEL[r.status] || r.status }),
+    el("span", { class: "history-compact-msg", text: shortCheckSummary(r.check_type, r.status, r.message) }),
+    expandBtn,
+  ]);
+  return el(
+    "tr",
+    { class: "history-row-mobile" },
+    el("td", { colspan: String(Math.max(1, state.historyColumns.length)) }, [compactRow, detail])
   );
 }
 
@@ -1205,13 +1303,18 @@ function historyServiceIdsQuery() {
   return state.historySelectedServiceIds.map((id) => `service_ids=${id}`).join("&");
 }
 
-// Resets to page 1 - called on service-selection/range change and whenever
-// the column set changes (simplest way to keep already-rendered rows in
-// sync with a new column list, and cheap enough at this page size to just
-// do).
+function historySeveritiesQuery() {
+  return state.historySelectedSeverities.map((s) => `statuses=${s}`).join("&");
+}
+
+// Resets to page 1 - called on service-selection/severity/range change and
+// whenever the column set changes (simplest way to keep already-rendered
+// rows in sync with a new column list, and cheap enough at this page size
+// to just do).
 async function loadHistoryTab() {
   await ensureStatuses();
   renderHistoryServicePills();
+  renderHistorySeverityPills();
   renderHistoryHeader();
   state.historyBeforeId = null;
   state.historyExhausted = false;
@@ -1219,10 +1322,9 @@ async function loadHistoryTab() {
   const body = $("#history-body");
   if (!body) return;
   body.innerHTML = "";
-  if (state.historySelectedServiceIds.length === 0) {
-    body.appendChild(
-      el("tr", {}, el("td", { colspan: String(Math.max(1, state.historyColumns.length)), class: "empty-state", text: "Pick at least one service above" }))
-    );
+  if (state.historySelectedServiceIds.length === 0 || state.historySelectedSeverities.length === 0) {
+    const text = state.historySelectedServiceIds.length === 0 ? "Pick at least one service above" : "Pick at least one severity above";
+    body.appendChild(el("tr", {}, el("td", { colspan: String(Math.max(1, state.historyColumns.length)), class: "empty-state", text })));
     return;
   }
   await loadMoreHistoryRows();
@@ -1237,14 +1339,14 @@ async function loadHistoryTab() {
 // doesn't matter which - loads more automatically.
 async function loadMoreHistoryRows() {
   if (state.historyLoading || state.historyExhausted) return;
-  if (state.historySelectedServiceIds.length === 0) return;
+  if (state.historySelectedServiceIds.length === 0 || state.historySelectedSeverities.length === 0) return;
   state.historyLoading = true;
 
   let rows;
   try {
     const cursor = state.historyBeforeId != null ? `&before_id=${state.historyBeforeId}` : "";
     rows = await api(
-      `/api/history?${historyServiceIdsQuery()}&minutes=${uptimeRangeMinutes()}&limit=${HISTORY_PAGE_SIZE}${cursor}`
+      `/api/history?${historyServiceIdsQuery()}&${historySeveritiesQuery()}&minutes=${uptimeRangeMinutes()}&limit=${HISTORY_PAGE_SIZE}${cursor}`
     );
   } catch (e) {
     toast("Failed to load history: " + e.message, true);
@@ -1323,6 +1425,39 @@ function setHistorySelectedServices(ids) {
   state.historySelectedServiceIds = ids.slice();
 }
 
+// Same floating pill pattern as the service filter above, one per result
+// severity - click to toggle it in or out of the result set. Colored by
+// severity when active (rather than the generic accent every other pill
+// uses) so Fail/Warn/OK are distinguishable at a glance in the bar itself,
+// not just in the rows below it.
+function renderHistorySeverityPills() {
+  const bar = $("#history-severity-bar");
+  if (!bar) return;
+  bar.innerHTML = "";
+  const selected = new Set(state.historySelectedSeverities);
+  for (const sev of HISTORY_SEVERITIES) {
+    const active = selected.has(sev.value);
+    bar.appendChild(
+      el(
+        "button",
+        {
+          type: "button",
+          class: `service-pill severity-pill-${sev.value}${active ? " active" : ""}`,
+          "aria-pressed": active ? "true" : "false",
+          onclick: () => {
+            const next = new Set(state.historySelectedSeverities);
+            if (next.has(sev.value)) next.delete(sev.value);
+            else next.add(sev.value);
+            state.historySelectedSeverities = [...next];
+            loadHistoryTab();
+          },
+        },
+        sev.label
+      )
+    );
+  }
+}
+
 // ---------- history: column customization ----------
 
 function openColumnsModal() {
@@ -1377,7 +1512,7 @@ function csvEscape(value) {
 }
 
 async function exportHistoryCsv() {
-  if (state.historySelectedServiceIds.length === 0) return;
+  if (state.historySelectedServiceIds.length === 0 || state.historySelectedSeverities.length === 0) return;
   const btn = $("#history-export-btn");
   const originalLabel = btn ? btn.textContent : "";
   if (btn) {
@@ -1396,7 +1531,7 @@ async function exportHistoryCsv() {
     for (let page = 0; page < MAX_PAGES; page++) {
       const cursor = beforeId != null ? `&before_id=${beforeId}` : "";
       const rows = await api(
-        `/api/history?${historyServiceIdsQuery()}&minutes=${uptimeRangeMinutes()}&limit=${EXPORT_PAGE_SIZE}${cursor}`
+        `/api/history?${historyServiceIdsQuery()}&${historySeveritiesQuery()}&minutes=${uptimeRangeMinutes()}&limit=${EXPORT_PAGE_SIZE}${cursor}`
       );
       allRows.push(...rows);
       if (rows.length < EXPORT_PAGE_SIZE) break;

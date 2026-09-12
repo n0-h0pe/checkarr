@@ -12,6 +12,7 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
 from . import schemas
+from .config import settings
 from .database import get_db
 from .queries import get_active_issues, get_history, get_public_layout, get_service_statuses, resolve_layout_for_viewport
 from .routers.meta import get_meta
@@ -19,6 +20,9 @@ from .version import VERSION
 
 public_app = FastAPI(title="Checkarr Status", docs_url=None, redoc_url=None, openapi_url=None)
 public_app.mount("/static", StaticFiles(directory="app/static"), name="static")
+# Read-only here (uploading is an admin-only route, see routers/icon_uploads.py)
+# - just needs to be servable wherever a service with a custom icon shows up.
+public_app.mount("/custom-icons", StaticFiles(directory=str(settings.icons_path)), name="custom-icons")
 templates = Jinja2Templates(directory="app/templates")
 
 
@@ -34,9 +38,10 @@ def history(
     minutes: int = Query(1440, ge=1, le=10080),
     limit: int = Query(100, ge=1, le=5000),
     before_id: int | None = Query(None),
+    statuses: list[str] = Query([]),
     db: Session = Depends(get_db),
 ):
-    return get_history(db, service_ids, check_id, minutes, limit, before_id)
+    return get_history(db, service_ids, check_id, minutes, limit, before_id, statuses)
 
 
 @public_app.get("/api/notifications", response_model=list[schemas.ActiveIssueOut])

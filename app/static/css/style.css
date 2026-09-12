@@ -535,6 +535,12 @@ table th { color: var(--text-dim); font-weight: 600; font-size: 12px; text-trans
 }
 .service-pill:hover { border-color: var(--accent); color: var(--text); }
 .service-pill.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+/* The severity filter pills (same .service-pill shape/size) get their own
+   active color per severity instead of the generic accent, so Fail/Warn/OK
+   read at a glance in the bar itself, not just in the rows it filters. */
+.service-pill.severity-pill-ok.active { background: var(--ok); border-color: var(--ok); color: #08210f; }
+.service-pill.severity-pill-warn.active { background: var(--warn); border-color: var(--warn); color: #241900; }
+.service-pill.severity-pill-fail.active { background: var(--fail); border-color: var(--fail); color: #fff; }
 
 .severity-toggle {
   display: inline-flex; align-items: center; gap: 5px;
@@ -605,6 +611,38 @@ table th { color: var(--text-dim); font-weight: 600; font-size: 12px; text-trans
 .unsaved-banner-actions button:not(.primary) { color: var(--text); }
 .type-icon { width: 18px; height: 18px; object-fit: contain; vertical-align: -4px; }
 .type-icon-fallback { font-size: 15px; }
+.type-icon-emoji { font-size: 16px; line-height: 1; vertical-align: -3px; }
+
+/* Add/Edit service's icon preview + the picker modal it opens (Settings >
+   Add service). */
+.icon-preview { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; }
+.icon-preview .type-icon { width: 28px; height: 28px; vertical-align: middle; }
+.icon-preview .type-icon-fallback { font-size: 22px; }
+.icon-preview .type-icon-emoji { font-size: 24px; }
+#icon-picker-modal .modal { max-width: 620px; }
+.icon-picker-pane { max-height: 360px; overflow-y: auto; padding-top: 4px; }
+.icon-picker-library-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px;
+}
+.icon-picker-cell {
+  display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 10px 6px;
+  background: var(--bg-panel-alt); border: 1px solid var(--border); border-radius: 6px; cursor: pointer;
+}
+.icon-picker-cell:hover { border-color: var(--accent); }
+.icon-picker-cell .type-icon, .icon-picker-cell .type-icon-fallback { width: 24px; height: 24px; font-size: 20px; }
+.icon-picker-cell-label { font-size: 11px; color: var(--text-dim); text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+.icon-picker-emoji-heading {
+  font-size: 11px; text-transform: uppercase; letter-spacing: .03em; color: var(--text-dim);
+  margin: 12px 0 6px; font-weight: 600;
+}
+.icon-picker-emoji-heading:first-child { margin-top: 0; }
+.icon-picker-emoji-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(36px, 1fr)); gap: 2px; }
+.icon-picker-emoji-cell {
+  font-size: 20px; line-height: 1; padding: 6px 0; background: none; border: 1px solid transparent;
+  border-radius: 6px; cursor: pointer;
+}
+.icon-picker-emoji-cell:hover { background: var(--bg-panel-alt); border-color: var(--border); }
+.icon-picker-upload-preview-img { width: 48px; height: 48px; object-fit: contain; margin: 8px 0; display: block; }
 
 .build-info { font-size: 11px; font-weight: 400; color: var(--text-dim); margin-left: 6px; vertical-align: middle; }
 
@@ -722,9 +760,36 @@ table th { color: var(--text-dim); font-weight: 600; font-size: 12px; text-trans
   /* The History table's desktop-only column truncation/fixed-width rules
      (.history-table above) would otherwise clip every stacked value here -
      nothing is side-by-side on mobile, so there's nothing to truncate
-     against. Back to the plain stacked behavior every other table gets. */
+     against. Back to the plain stacked behavior every other table gets.
+     Doesn't apply to a History row itself though - see below, mobile
+     replaces the whole per-column layout with its own compact one line
+     (historyRowElementMobile in common.js), not the generic table-row
+     stacking every other table on this breakpoint gets. */
   .history-table { table-layout: auto; }
   .history-table th, .history-table td { overflow: visible; text-overflow: clip; white-space: normal; }
+
+  /* One line per History row on mobile: compact time, the service's icon
+     alone (no name - it doesn't fit and the icon alone is enough to
+     recognize once you know your own services), a short severity badge,
+     and the same abbreviated result summary the mobile dashboard card's
+     checks use. Everything the line leaves out lives in .history-row-detail,
+     revealed by the "›" button. */
+  .history-row-mobile td { padding: 6px 0; }
+  .history-row-compact { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+  .history-compact-time { color: var(--text-dim); font-variant-numeric: tabular-nums; flex-shrink: 0; white-space: nowrap; }
+  .history-row-compact .type-icon, .history-row-compact .type-icon-fallback, .history-row-compact .type-icon-emoji { flex-shrink: 0; }
+  .history-compact-msg { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-dim); }
+  .badge-sm { padding: 2px 6px; font-size: 10px; }
+  .history-expand-btn {
+    flex-shrink: 0; background: none; border: none; color: var(--text-dim); font-size: 20px;
+    line-height: 1; padding: 2px 6px; cursor: pointer; transition: transform .15s, color .15s;
+  }
+  .history-expand-btn.expanded { transform: rotate(90deg); color: var(--text); }
+  .history-row-detail {
+    margin-top: 6px; padding: 8px 10px; background: var(--bg-panel-alt); border-radius: 6px;
+    font-size: 12px; display: flex; flex-direction: column; gap: 4px;
+  }
+  .history-row-detail.hidden { display: none; }
 
   /* Same stacking approach for the checks-grid (a CSS Grid, not a <table> -
      see its own comment above for why), plus a rule between each group of

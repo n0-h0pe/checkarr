@@ -43,6 +43,24 @@ class Service(Base):
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     poll_interval_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Overrides the icon a card/row would otherwise show for this service's
+    # `type` (see meta.SERVICE_TYPE_ICONS / common.js's typeIcon). Both null
+    # (the default) means "just use the type's own icon" - the original
+    # behavior. icon_type says how to read icon_value:
+    #   "library" -> another entry in SERVICE_TYPE_ICONS, looked up by this
+    #                value instead of this service's own `type` (e.g. a
+    #                Radarr service rendered with Sonarr's logo)
+    #   "emoji"   -> icon_value is the literal emoji character(s) to render
+    #                as text, no image involved
+    #   "upload"  -> icon_value is the filename of a user-uploaded image
+    #                under settings.icons_path, served at /custom-icons/
+    #                (see routers/icon_uploads.py) - never rendered as
+    #                inline SVG, always via <img src>, so an uploaded SVG
+    #                can't execute a script the way it could inline.
+    # Editable at any time (unlike DashboardLayout's creation-only flags) -
+    # see ServiceUpdate.
+    icon_type: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    icon_value: Mapped[str | None] = mapped_column(String(255), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
 

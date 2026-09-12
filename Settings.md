@@ -127,17 +127,35 @@ table starts empty and loads nothing until you pick at least one, keeping
 the page fast even with a lot of history piled up. Pick more than one and
 each row gets a Service column so you can tell them apart.
 
+A second row of pills right below it - **OK / Warn / Fail** - filters by
+result severity the same way, toggle any combination on or off. Unlike the
+service pills, all three start selected (matching what you'd see with no
+filter at all), so this is purely a narrowing tool, not something you have
+to configure before the table shows anything.
+
 **Columns** opens a small dialog listing every available column (Time,
 Service, Check, Type, Status, Response, Message) with a checkbox and a drag
 handle, check to show, drag to reorder, at least one has to stay visible.
 The Time column never wraps onto a second line; every other column
 truncates with an ellipsis instead of wrapping the row. Drag the edge of a
 column header to resize it, both the column set and any manual widths are
-remembered.
+remembered. This is desktop only - see below for how a phone-width screen
+renders History instead.
 
-**Export CSV** downloads every row matching the current service selection
-and time range, not just whatever happened to be scrolled into view, using
-whichever columns are currently shown, in that order.
+**Export CSV** downloads every row matching the current service/severity
+selection and time range, not just whatever happened to be scrolled into
+view, using whichever columns are currently shown, in that order.
+
+### On a phone
+
+The column layout above gives way to one compact line per event instead:
+a short date/time (`YY-MM-DD HH:MM`), the service's icon alone (no name -
+it doesn't fit, and the icon is enough once you know your own services), a
+short OK/WARN/FAIL badge, and the same abbreviated result summary the
+mobile dashboard cards use (`200 OK`, `Files OK`, and so on). Tap the "›"
+at the end of a row to expand it into everything left out - full service
+and check name, check type, exact time, response time, and the complete
+message - the same detail the row would show outright on a wider screen.
 
 ## Notifications tab
 
