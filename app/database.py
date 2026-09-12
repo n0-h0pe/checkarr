@@ -24,6 +24,7 @@ def init_db() -> None:
     Base.metadata.create_all(bind=engine)
     _run_migrations()
     _migrate_dashboard_layout_cards()
+    _ensure_default_layouts()
 
     from .queries import (
         get_or_create_all_services_group,
@@ -119,6 +120,8 @@ def _run_migrations() -> None:
             conn.exec_driver_sql("ALTER TABLE dashboard_layouts ADD COLUMN is_default BOOLEAN DEFAULT 0")
         if "is_compact" not in layout_cols:
             conn.exec_driver_sql("ALTER TABLE dashboard_layouts ADD COLUMN is_compact BOOLEAN DEFAULT 0")
+        if "is_mobile" not in layout_cols:
+            conn.exec_driver_sql("ALTER TABLE dashboard_layouts ADD COLUMN is_mobile BOOLEAN DEFAULT 0")
 
         downtime_cols = _table_columns(conn, "downtime_schedules")
         if "is_instant" not in downtime_cols:
@@ -168,6 +171,49 @@ def _migrate_dashboard_layout_cards() -> None:
         for layout in layouts:
             if layout.card_service_ids is None:
                 layout.card_service_ids = [] if layout.is_default else list(all_service_ids)
+                changed = True
+        if changed:
+            db.commit()
+    finally:
+        db.close()
+
+
+def _ensure_default_layouts() -> None:
+    """Guarantees every one of the four layout pools - (is_mobile,
+    is_compact) each True/False, i.e. Desktop / Desktop-Compact / Mobile /
+    Mobile-Compact - has its own protected "All Services" layout, run on
+    every startup (idempotent: a pool that already has one is left alone).
+
+    Before is_mobile existed, only the Desktop pool was guaranteed a
+    default (seeded by get_or_create_active_layout, or backfilled onto the
+    oldest layout by _migrate_dashboard_layout_cards above) - the other
+    three pools would otherwise start out empty, and ensureActiveLayout's
+    (common.js) viewport-driven fallback needs somewhere to land in every
+    pool, not just the one an existing install happened to already have."""
+    from . import models
+
+    db = SessionLocal()
+    try:
+        changed = False
+        for is_mobile in (False, True):
+            for is_compact in (False, True):
+                exists = (
+                    db.query(models.DashboardLayout)
+                    .filter_by(is_default=True, is_mobile=is_mobile, is_compact=is_compact)
+                    .first()
+                )
+                if exists:
+                    continue
+                db.add(
+                    models.DashboardLayout(
+                        name="All Services",
+                        sizes={},
+                        card_service_ids=[],
+                        is_default=True,
+                        is_compact=is_compact,
+                        is_mobile=is_mobile,
+                    )
+                )
                 changed = True
         if changed:
             db.commit()

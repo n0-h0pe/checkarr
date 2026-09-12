@@ -23,6 +23,12 @@ body {
   color: var(--text);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   font-size: 14px;
+  /* Belt-and-suspenders: the dashboard grid is never supposed to render
+     anything wider than the viewport (see DashboardLayout.is_mobile's
+     docstring for the bug this used to let happen), but this keeps any
+     other future overflow from turning into a sideways-scrolling page
+     rather than just clipping in place. */
+  overflow-x: hidden;
 }
 
 header.app-header {

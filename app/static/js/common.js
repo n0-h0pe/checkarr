@@ -276,13 +276,41 @@ async function ensureStatuses(force = false) {
   return state.statuses;
 }
 
+// Re-fetches whenever the cached layout's own device pool (is_mobile)
+// doesn't match the actual current viewport, not just on first load -
+// resize across the phone-width breakpoint (see isMobileViewport below)
+// needs to land on a genuinely different saved layout now, not just a
+// different rendering of the same one. The `mobile` hint travels to the
+// server either way (harmless on the fast path, where it's not even
+// looked at again) so a fresh page load already asks for the right pool
+// the first time, no "loads desktop, flashes to mobile" round trip.
 async function ensureActiveLayout(force = false) {
-  if (force || !state.activeLayout) {
+  const mobileNow = await _currentViewportMobile();
+  const upToDate = mobileNow !== null && state.activeLayout && !!state.activeLayout.is_mobile === mobileNow;
+  if (force || !upToDate) {
     try {
-      state.activeLayout = await api("/api/dashboard-layouts/active");
+      const qs = mobileNow === null ? "" : `?mobile=${mobileNow}`;
+      state.activeLayout = await api(`/api/dashboard-layouts/active${qs}`);
     } catch (_) { /* leave whatever we had, or null - computeCardLayout() falls back to defaults */ }
   }
   return state.activeLayout;
+}
+
+// window.innerWidth briefly reads 0 - never a real device width - on a tab
+// that technically exists but hasn't actually been laid out/painted yet
+// (this call landing before the very first layout pass). Trusting it then
+// would risk landing on the wrong device pool with nothing to correct it
+// until the next resize event or 30-second poll (see the resize listeners
+// in app.js/public.js, which only re-check on an actual width *change*).
+// One rendered frame is enough for a real width to show up; if it somehow
+// still hasn't, `null` skips the `mobile` hint entirely rather than guess,
+// same as never sending it at all (the pre-device-pools behavior).
+async function _currentViewportMobile() {
+  if (window.innerWidth === 0) {
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    if (window.innerWidth === 0) return null;
+  }
+  return isMobileViewport();
 }
 
 // Shelf-packs items left to right, wrapping to a new row of tracks whenever
@@ -320,7 +348,18 @@ function rectsOverlap(a, b) {
 // the exact saved arrangement again, untouched. Editing while reflowed is
 // still allowed - saving from there simply adopts the narrower width as the
 // layout's new reference width, same as editing at any other width would.
-function computeCardLayout(statuses, compact = false) {
+//
+// None of the above applies to a mobile-pool layout (`mobile` true, see
+// DashboardLayout.is_mobile) - it's handled by its own much simpler branch
+// below instead, since it's always a single full-width column regardless of
+// actual window width, ordered by each card's saved `y` alone. Only `y`/`h`
+// are ever read back from a mobile layout's saved sizes - `x`/`w` are always
+// forced to 1/full-width, never taken from saved data, which is what used
+// to let a card end up positioned past the edge of the grid the app was
+// actually rendering (a desktop-shaped x position surviving into a much
+// narrower render) and create implicit off-screen columns the whole page
+// could scroll sideways to reach.
+function computeCardLayout(statuses, compact = false, mobile = false) {
   const minW = compact ? MIN_CARD_W_COMPACT : MIN_CARD_W;
   const minH = compact ? MIN_CARD_H_COMPACT : MIN_CARD_H;
   const defaultW = compact ? DEFAULT_CARD_W_COMPACT : DEFAULT_CARD_W;
@@ -332,6 +371,30 @@ function computeCardLayout(statuses, compact = false) {
 
   const layout = state.activeLayout;
   const sizes = (layout && layout.sizes) || {};
+
+  if (mobile) {
+    const entries = statuses.map((s, i) => {
+      const id = s.service.id;
+      const saved = sizes[String(id)];
+      const h = saved && Number.isFinite(saved.h) ? Math.max(minH, saved.h) : defaultH;
+      // Unset (no saved y - a brand new card) sorts after every positioned
+      // one, in whatever order `statuses` already had them - the `|| `
+      // fallback below only ever kicks in when both sides are the same
+      // (including both Infinity, where `Infinity - Infinity` is NaN, which
+      // is falsy), so it's a stable tiebreak, not a real comparison.
+      const y = saved && Number.isFinite(saved.y) ? saved.y : Infinity;
+      return { id, h, y, i };
+    });
+    entries.sort((a, b) => (a.y - b.y) || (a.i - b.i));
+    const positions = new Map();
+    let cursorY = 1;
+    for (const it of entries) {
+      positions.set(it.id, { x: 1, y: cursorY, w: totalCols, h: it.h });
+      cursorY += it.h;
+    }
+    return positions;
+  }
+
   const savedCols = layout && Number.isFinite(layout.columns) ? layout.columns : null;
   const reflow = savedCols !== null && totalCols < savedCols;
 
@@ -344,12 +407,7 @@ function computeCardLayout(statuses, compact = false) {
     // above, so the saved width still comes back on a wide-enough screen
     // untouched.
     const savedW = saved && Number.isFinite(saved.w) ? Math.max(minW, saved.w) : defaultW;
-    // On mobile every card is a full-width single-column list, always -
-    // clamping a saved/default width down to totalCols (as below) still
-    // leaves a gap for anything narrower than totalCols (a brand new
-    // service with no saved size, or a card saved narrower on desktop), so
-    // mobile forces w to totalCols outright rather than just capping it.
-    const w = isMobileViewport() ? totalCols : Math.min(savedW, totalCols);
+    const w = Math.min(savedW, totalCols);
     const h = saved && Number.isFinite(saved.h) ? Math.max(minH, saved.h) : defaultH;
     const hasPos = saved && Number.isFinite(saved.x) && Number.isFinite(saved.y);
     return {
@@ -510,7 +568,14 @@ function renderServiceCard(s, opts = {}, pos, positions) {
 
   if (opts.editable) {
     card.classList.add("card-editable");
-    if (isMobileViewport()) {
+    // Which edit controls a card gets is a property of the layout's own
+    // pool (opts.mobile, from DashboardLayout.is_mobile) now, not the
+    // actual current window width - a mobile-pool layout is always a
+    // single reorderable column, even previewed on a wide screen; a
+    // desktop-pool one always gets free-form drag/resize, even narrowed
+    // below the phone breakpoint. See ensureActiveLayout for how the
+    // *active* layout's pool itself does still follow the real viewport.
+    if (opts.mobile) {
       attachMobileReorderControls(body, svc.id, positions, opts.onLayoutChange);
       attachResizeHandle(card, svc.id, pos, opts.onLayoutChange, positions, opts.compact);
     } else {
@@ -522,12 +587,14 @@ function renderServiceCard(s, opts = {}, pos, positions) {
   return card;
 }
 
-// Below ~700px (same breakpoint as the CSS), there's only ever one card per
-// row anyway - free-form drag-to-move/resize stops being a meaningful
-// interaction (there's nowhere else on the row to drag to) and is fiddly on
-// a touchscreen besides, so edit mode switches to plain list reordering
-// instead. Matches the `main { max-width: 700px }`-ish breakpoint in
-// style.css, not a coincidence - keep them in sync if either changes.
+// Below ~700px, there's only ever room for one card per row anyway - the
+// `mobile` hint ensureActiveLayout sends the server on every fetch, so the
+// dashboard actually renders a Mobile/Mobile-Compact pool layout (single
+// column, Move to top/up/down/bottom instead of free-form drag-to-move/
+// resize - see DashboardLayout.is_mobile) below this width, a Desktop/
+// Desktop-Compact one above it. Matches the `main { max-width: 700px }`-ish
+// breakpoint in style.css, not a coincidence - keep them in sync if either
+// changes.
 function isMobileViewport() {
   return window.matchMedia("(max-width: 700px)").matches;
 }
@@ -852,11 +919,13 @@ async function loadDashboard(cardOpts = {}) {
   if (!grid) return;
   grid.innerHTML = "";
 
-  // Compact is a property of the layout itself (DashboardLayout.is_compact,
-  // toggled from the "Compact view" button in the top bar), not a
-  // per-viewer display option - so admin and public both render a compact
-  // layout the same way, wherever it's shown.
-  const opts = { ...cardOpts, compact: !!(layout && layout.is_compact) };
+  // Compact and mobile are both properties of the layout itself
+  // (DashboardLayout.is_compact/is_mobile) - not a per-viewer display
+  // option - so admin and public both render a given layout the same way,
+  // wherever it's shown. Which layout is active in the first place *is*
+  // viewport-driven (see ensureActiveLayout), but once one's chosen,
+  // rendering it is deterministic.
+  const opts = { ...cardOpts, compact: !!(layout && layout.is_compact), mobile: !!(layout && layout.is_mobile) };
 
   const visible = layoutVisibleStatuses(statuses, layout);
 
@@ -881,7 +950,7 @@ async function loadDashboard(cardOpts = {}) {
   const refresh = $("#last-refresh");
   if (refresh) refresh.textContent = "Updated " + new Date().toLocaleTimeString();
 
-  const positions = computeCardLayout(visible, opts.compact);
+  const positions = computeCardLayout(visible, opts.compact, opts.mobile);
   for (const s of visible) {
     grid.appendChild(renderServiceCard(s, opts, positions.get(s.service.id), positions));
   }

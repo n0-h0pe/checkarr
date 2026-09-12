@@ -3,12 +3,12 @@ dropdown in the top bar. Exactly one is "active" at a time - that's what
 gets rendered (and, on the admin app, resized) on the Dashboard tab.
 """
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from .. import models, schemas
 from ..database import get_db
-from ..queries import get_or_create_active_layout
+from ..queries import get_or_create_active_layout, resolve_layout_for_viewport
 from ..security import require_auth
 
 router = APIRouter(prefix="/api/dashboard-layouts", tags=["dashboard-layouts"], dependencies=[Depends(require_auth)])
@@ -21,8 +21,9 @@ def list_layouts(db: Session = Depends(get_db)):
 
 
 @router.get("/active", response_model=schemas.DashboardLayoutOut)
-def get_active_layout(db: Session = Depends(get_db)):
-    return get_or_create_active_layout(db)
+def get_active_layout(mobile: bool | None = Query(None), db: Session = Depends(get_db)):
+    layout = get_or_create_active_layout(db)
+    return resolve_layout_for_viewport(db, layout, mobile)
 
 
 @router.post("", response_model=schemas.DashboardLayoutOut, status_code=201)
@@ -38,6 +39,7 @@ def create_layout(payload: schemas.DashboardLayoutCreate, db: Session = Depends(
         card_service_ids=card_service_ids,
         is_active=True,
         is_compact=payload.is_compact,
+        is_mobile=payload.is_mobile,
     )
     db.add(layout)
     db.commit()

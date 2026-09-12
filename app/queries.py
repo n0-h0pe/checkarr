@@ -266,6 +266,38 @@ def get_or_create_self_monitoring_state(db: Session) -> models.SelfMonitoringSta
     return state
 
 
+def resolve_layout_for_viewport(
+    db: Session, layout: models.DashboardLayout | None, mobile: bool | None
+) -> models.DashboardLayout | None:
+    """Given whichever layout is otherwise active/pinned, and whether the
+    requesting client is on a phone-width viewport, substitutes that
+    device's own pool's is_default "All Services" layout whenever `layout`
+    doesn't already belong to it - a Desktop layout stays active/pinned for
+    a desktop visitor, but a phone visitor gets bounced to that install's
+    Mobile default instead, never rendered the free-form grid (see
+    DashboardLayout.is_mobile's docstring for what that used to do to a
+    narrow screen).
+
+    `mobile` is None when the caller has no viewport info to offer (e.g. an
+    API client, or a request made before the frontend's first render) - in
+    that case `layout` is returned untouched, same as before this existed.
+    Read-only: unlike the admin app's explicit "Compact view" switch (which
+    persists which layout is active), this never changes what's stored -
+    every call re-derives the answer from the actual requesting viewport,
+    so there's nothing to remember between visits, and two visitors on
+    different devices can never fight over shared state the way persisting
+    this would risk on the public dashboard, seen by more than one visitor
+    at once."""
+    if layout is None or mobile is None or bool(layout.is_mobile) == mobile:
+        return layout
+    match = (
+        db.query(models.DashboardLayout)
+        .filter_by(is_default=True, is_mobile=mobile, is_compact=layout.is_compact)
+        .first()
+    )
+    return match or layout
+
+
 def get_public_layout(db: Session) -> models.DashboardLayout:
     """What the public dashboard port (8090) actually renders - independent
     of whatever layout the admin app currently has active (see

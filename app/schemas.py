@@ -258,6 +258,7 @@ class DashboardLayoutOut(BaseModel):
     is_default: bool
     is_active: bool
     is_compact: bool
+    is_mobile: bool
     created_at: datetime
     updated_at: datetime
 
@@ -269,6 +270,7 @@ class DashboardLayoutSummary(BaseModel):
     is_active: bool
     is_default: bool
     is_compact: bool
+    is_mobile: bool
 
 
 class DashboardLayoutCreate(BaseModel):
@@ -279,13 +281,14 @@ class DashboardLayoutCreate(BaseModel):
     # sensible starting point for a brand new layout the user then trims.
     card_service_ids: list[int] | None = None
     is_compact: bool = False
+    is_mobile: bool = False
 
 
 class DashboardLayoutUpdate(BaseModel):
-    # is_compact is deliberately not here - a layout is fixed as compact or
-    # not at creation (DashboardLayoutCreate), never flipped in place. A
-    # compact layout and a full one are always two separate saved layouts,
-    # see DashboardLayout's docstring.
+    # is_compact/is_mobile are deliberately not here - a layout is fixed
+    # into one of the four (is_mobile, is_compact) pools at creation
+    # (DashboardLayoutCreate), never flipped in place afterward, see
+    # DashboardLayout's docstring.
     name: str | None = None
     sizes: dict[str, Any] | None = None
     columns: int | None = None

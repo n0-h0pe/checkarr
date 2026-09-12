@@ -74,11 +74,13 @@ async function loadDashboardAdmin() {
 // Compact is fixed on a layout at creation, not a flag flippable on an
 // existing one - a layout is either one of your compact layouts or one of
 // your full ones, never both at different times (see newLayoutFromCurrent,
-// which creates within whichever mode is currently active). "Compact view"
+// which creates within whichever pool is currently active). "Compact view"
 // is a mode switch, not a per-layout toggle: it activates one of your
-// compact layouts (or one of your full ones), and the layout dropdown
-// (loadLayoutList) only ever lists the ones matching the mode you're
-// currently in.
+// compact layouts (or one of your full ones) *within the same device pool*
+// you're currently in - it never also switches you between Desktop and
+// Mobile, that half follows the actual viewport on its own (see
+// ensureActiveLayout in common.js) - and the layout dropdown (loadLayoutList)
+// only ever lists the ones matching the pool you're currently in.
 function updateCompactBtn() {
   const btn = $("#layout-compact-btn");
   if (!btn || !state.activeLayout) return;
@@ -88,7 +90,9 @@ function updateCompactBtn() {
 }
 
 async function toggleLayoutCompact() {
-  const targetCompact = !(state.activeLayout && state.activeLayout.is_compact);
+  if (!state.activeLayout) return;
+  const targetCompact = !state.activeLayout.is_compact;
+  const currentMobile = !!state.activeLayout.is_mobile;
   let layouts;
   try {
     layouts = await api("/api/dashboard-layouts");
@@ -96,33 +100,13 @@ async function toggleLayoutCompact() {
     toast("Could not load layouts: " + e.message, true);
     return;
   }
-  const candidates = layouts.filter((l) => !!l.is_compact === targetCompact);
-
-  if (candidates.length === 0) {
-    // Bootstrap case: +New always creates within whatever mode is
-    // currently active, so switching to a mode with nothing in it yet
-    // needs its own explicit "create the first one" prompt instead.
-    const name = prompt(`No ${targetCompact ? "compact" : "full"} layouts yet - name your first one:`);
-    if (!name) return;
-    try {
-      state.activeLayout = await api("/api/dashboard-layouts", {
-        method: "POST",
-        body: JSON.stringify({
-          name,
-          card_service_ids: state.statuses.map((s) => s.service.id),
-          is_compact: targetCompact,
-        }),
-      });
-    } catch (e) {
-      toast("Could not create layout: " + e.message, true);
-      return;
-    }
-    toast(`Layout "${name}" created`);
-    loadDashboardAdmin();
-    return;
-  }
-
-  const target = candidates.find((l) => l.is_active) || candidates[0];
+  // Every pool is guaranteed at least its is_default "All Services" layout
+  // (seeded at startup - see database._ensure_default_layouts), so unlike
+  // some previous versions of this feature, there's never an empty pool to
+  // bootstrap here.
+  const candidates = layouts.filter((l) => !!l.is_compact === targetCompact && !!l.is_mobile === currentMobile);
+  const target = candidates.find((l) => l.is_default) || candidates[0];
+  if (!target) return;
   try {
     state.activeLayout = await api(`/api/dashboard-layouts/${target.id}/activate`, { method: "POST" });
   } catch (e) {
@@ -190,18 +174,26 @@ async function loadLayoutList() {
   } catch (e) {
     return;
   }
-  // Only ever lists layouts matching the current mode (see
-  // toggleLayoutCompact) - a compact and a full layout are never options in
-  // the same dropdown, since switching between them is what the Compact
-  // view button next to this is for.
+  // Only ever lists layouts matching the current pool (see
+  // toggleLayoutCompact/ensureActiveLayout) - the four pools (Desktop/
+  // Desktop-Compact/Mobile/Mobile-Compact) are never mixed in the same
+  // dropdown, since switching between the compact axis is what the Compact
+  // view button next to this is for, and the device axis follows the
+  // actual viewport on its own.
   const compactMode = !!(state.activeLayout && state.activeLayout.is_compact);
+  const mobileMode = !!(state.activeLayout && state.activeLayout.is_mobile);
+  // Selected by id, not each option's own is_active flag - state.activeLayout
+  // can be a viewport-substituted stand-in (see ensureActiveLayout) whose
+  // is_active in the database still belongs to a *different* pool's layout,
+  // not this one, even though this is what's actually on screen right now.
+  const activeId = state.activeLayout && state.activeLayout.id;
   const select = $("#layout-select");
   select.innerHTML = "";
   for (const l of layouts) {
-    if (!!l.is_compact !== compactMode) continue;
+    if (!!l.is_compact !== compactMode || !!l.is_mobile !== mobileMode) continue;
     let text = l.name;
     if (l.is_default) text += " 🔒";
-    select.appendChild(el("option", { value: l.id, text, selected: l.is_active ? "selected" : null }));
+    select.appendChild(el("option", { value: l.id, text, selected: l.id === activeId ? "selected" : null }));
   }
   const deleteBtn = $("#layout-delete-btn");
   if (deleteBtn) {
@@ -294,10 +286,11 @@ async function newLayoutFromCurrent() {
     ? state.statuses.map((s) => s.service.id)
     : state.activeLayout.card_service_ids;
   const isCompact = state.activeLayout ? !!state.activeLayout.is_compact : false;
+  const isMobile = state.activeLayout ? !!state.activeLayout.is_mobile : false;
   try {
     state.activeLayout = await api("/api/dashboard-layouts", {
       method: "POST",
-      body: JSON.stringify({ name, sizes, columns, card_service_ids: cardServiceIds, is_compact: isCompact }),
+      body: JSON.stringify({ name, sizes, columns, card_service_ids: cardServiceIds, is_compact: isCompact, is_mobile: isMobile }),
     });
   } catch (e) {
     toast("Could not create layout: " + e.message, true);
@@ -1954,6 +1947,7 @@ function renderDashboardSettingsLayoutSelect() {
   select.innerHTML = "";
   for (const l of options) {
     let text = l.name;
+    if (l.is_mobile) text += " (mobile)";
     if (l.is_compact) text += " (compact)";
     if (l.is_default) text += " (default)";
     select.appendChild(el("option", { value: l.id, text, selected: l.id === dashboardSettingsPublicLayoutId ? "selected" : null }));
@@ -2089,6 +2083,15 @@ async function init() {
   document.body.classList.add("wide-main"); // dashboard is the default active tab
   updateHeaderControlsVisibility("dashboard");
   loadDashboardAdmin();
+  // One extra check shortly after the very first load, in case the browser
+  // hadn't actually finished laying out the page yet when that first call's
+  // viewport check ran (window.innerWidth reads 0 then, never a real
+  // width - see _currentViewportMobile in common.js) - otherwise nothing
+  // would catch a wrong initial device-pool guess until an actual resize or
+  // the 30-second poll below. Cheap either way: loadDashboardAdmin's own
+  // viewport check is a no-op, no network call at all, once it's already
+  // looking at the right pool.
+  setTimeout(() => { if (state.tab === "dashboard" && !layoutEditMode) loadDashboardAdmin(); }, 1000);
   setInterval(() => { if (state.tab === "dashboard" && !layoutEditMode) loadDashboardAdmin(); }, 30000);
   setInterval(() => { if (state.tab === "notifications") loadNotifications(); }, 30000);
 }

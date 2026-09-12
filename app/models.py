@@ -144,26 +144,43 @@ class DashboardLayout(Base):
     Exactly one row has is_active=True at a time - that's what the
     dashboard (admin and public) renders.
 
-    `card_service_ids` is which services' cards actually show on this
-    layout - explicit, not "everything that exists": a newly-created
-    service doesn't silently appear on every hand-curated custom layout,
-    only on the one is_default layout (see below), which is exempt from
-    this list entirely and always shows every service regardless of what's
-    stored here. Exactly one row has is_default=True - the protected
-    "All Services" layout seeded by get_or_create_active_layout, which
-    can't be deleted (see routers/dashboard_layouts.py) and whose card set
-    can't be trimmed, unlike ordinary custom layouts.
-
     `is_compact` marks this layout as rendering without each card's
     individual check rows, address/last-checked line, or Run now/History
     buttons - just the icon, name, and status badge on one line, then the
-    uptime strip on a second (see renderServiceCard in common.js). Set only
-    at creation (DashboardLayoutCreate) and never changed afterward - a
-    compact layout and a full one are always two separate saved layouts,
-    not one layout flipped between the two, so switching "Compact view" on
-    the Dashboard tab switches which of your saved layouts are even offered
-    in the dropdown, rather than mutating whichever one you're looking at.
-    Admin and public both render a compact layout the same way. See
+    uptime strip on a second (see renderServiceCard in common.js).
+
+    `is_mobile` marks this layout as a single always-full-width column,
+    reordered with Move to top/up/down/bottom controls instead of free-form
+    drag-to-move/resize - meant for (and, see below, auto-selected on) a
+    phone-width screen, where free-form placement has nowhere to drag to
+    and a stray desktop x-position used to be able to push a card past the
+    edge of the visible grid, creating implicit columns off-screen and
+    making the whole page scroll sideways. A mobile layout's `sizes` only
+    ever store each card's `y` (its position in the list) and `h` - `x`/`w`
+    are never read back from saved data at all, always forced to
+    1/full-width, so that bug class can't recur.
+
+    Both flags are set only at creation (DashboardLayoutCreate) and never
+    changed afterward - together they split saved layouts into four
+    independent pools (Desktop, Desktop-Compact, Mobile, Mobile-Compact),
+    never one layout flipped between them. Switching "Compact view" on the
+    Dashboard tab switches which pool's layouts are even offered in the
+    dropdown, rather than mutating whichever one you're looking at; which
+    of the two device pools is offered switches automatically with the
+    actual viewport width, no separate button for that - see
+    ensureActiveLayout in common.js and resolve_layout_for_viewport in
+    queries.py, which fall back to that pool's is_default layout whenever
+    the active/pinned one doesn't match the viewport actually asking for it,
+    so every pool always has something safe to show.
+
+    `card_service_ids` is which services' cards actually show on this
+    layout - explicit, not "everything that exists": a newly-created
+    service doesn't silently appear on every hand-curated custom layout.
+    Every one of the four pools has exactly one is_default=True layout -
+    the protected "All Services" layout for that pool, seeded at startup
+    (see database.py's _ensure_default_layouts) if it doesn't already
+    exist, which can't be deleted (see routers/dashboard_layouts.py) and
+    whose card set can't be trimmed, unlike ordinary custom layouts. See
     Dashboard Settings (DashboardSettings.public_require_compact below) for
     restricting which layouts the public dashboard can be pinned to."""
 
@@ -177,6 +194,7 @@ class DashboardLayout(Base):
     is_default: Mapped[bool] = mapped_column(Boolean, default=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=False)
     is_compact: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_mobile: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
 
