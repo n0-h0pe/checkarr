@@ -136,14 +136,13 @@ to configure before the table shows anything.
 A warn/fail row that happened while its service was covered by an active
 Scheduled Down Time schedule gets a small bell-with-a-slash icon next to
 its Status badge - hover it for a reminder of what it means (that row's
-alert was suppressed, not sent). This is reconstructed after the fact from
-your current schedules, not logged at the time, so it has one gap: an
-Instant SDT window (Settings > Scheduled Down Time) is deleted once it
-ends to keep that list tidy, so a row that happened during one stops
-showing the icon once that particular window has aged out, even though it
-genuinely was suppressed at the time. A regular saved schedule doesn't
-have this gap - it stays evaluable for any past row for as long as the
-schedule itself exists.
+alert was suppressed, not sent). This is recorded permanently at the
+moment each check actually runs, not worked out after the fact from
+whatever schedules happen to still exist later - so it stays accurate for
+that row forever, including for an Instant SDT window that's long since
+ended and been cleaned up (Settings > Scheduled Down Time deletes those
+once they're over, to keep that list from growing forever; the History
+rows that happened during one keep their icon regardless).
 
 **Columns** opens a small dialog listing every available column (Time,
 Service, Check, Type, Status, Response, Message) with a checkbox and a drag
