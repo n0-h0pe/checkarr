@@ -137,15 +137,19 @@ def _run_migrations() -> None:
 
         # dashboard_settings is guaranteed to exist by create_all() above by
         # the time this runs. An install that already ran an earlier build
-        # of it briefly had `public_compact` (a flat force-compact flag)
-        # instead of today's `public_require_compact` (a restriction on
-        # which layouts can be pinned - compactness now lives on the layout
-        # itself, see DashboardLayout.is_compact above). The old column, if
-        # present, is simply left in place unused, same as every other
+        # of it briefly had `public_compact` (a flat force-compact flag),
+        # then `public_require_compact` (a restriction on which layouts
+        # could be pinned - compactness lives on the layout itself, see
+        # DashboardLayout.is_compact above), before the public dashboard's
+        # Desktop/Mobile pins were split into two separate columns and that
+        # restriction was dropped as redundant. Both old columns, if
+        # present, are simply left in place unused, same as every other
         # renamed/retired column in this function.
         settings_cols = _table_columns(conn, "dashboard_settings")
         if "public_require_compact" not in settings_cols:
             conn.exec_driver_sql("ALTER TABLE dashboard_settings ADD COLUMN public_require_compact BOOLEAN DEFAULT 0")
+        if "public_layout_id_mobile" not in settings_cols:
+            conn.exec_driver_sql("ALTER TABLE dashboard_settings ADD COLUMN public_layout_id_mobile INTEGER")
 
 
 def _migrate_dashboard_layout_cards() -> None:

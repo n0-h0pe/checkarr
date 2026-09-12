@@ -56,14 +56,15 @@ def meta():
 
 @public_app.get("/api/dashboard-layouts/active", response_model=schemas.DashboardLayoutOut)
 def active_layout(mobile: bool | None = Query(None), db: Session = Depends(get_db)):
-    """Whichever layout is pinned in Dashboard Settings (or the default, if
-    none is) - its own `is_compact`/`is_mobile` flags are what tell the
-    frontend how to render it, no separate settings fetch needed for that.
-    `mobile`, if given, can still substitute a different layout than the
-    one actually pinned - see resolve_layout_for_viewport - so a phone
-    visitor never gets stuck looking at whatever free-form desktop grid the
-    admin pinned for everyone else."""
-    return resolve_layout_for_viewport(db, get_public_layout(db), mobile)
+    """Whichever layout is pinned in Dashboard Settings for this viewport -
+    Desktop or Mobile, each pinned separately (see get_public_layout) - or
+    the default, if that one isn't set. Its own `is_compact`/`is_mobile`
+    flags are what tell the frontend how to render it, no separate settings
+    fetch needed for that. `mobile` also still runs through
+    resolve_layout_for_viewport as a safety net - so a phone visitor can
+    never end up rendered the free-form desktop grid even if the Desktop
+    pin somehow ended up pointed at a non-Mobile layout."""
+    return resolve_layout_for_viewport(db, get_public_layout(db, mobile), mobile)
 
 
 @public_app.get("/", response_class=HTMLResponse)

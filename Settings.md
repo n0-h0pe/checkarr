@@ -90,25 +90,25 @@ services alongside your normal detailed one.
 
 Settings > Dashboard Settings controls which layout the public dashboard
 port (8090) shows, independent of whatever you currently have active in the
-admin app:
+admin app - two separate pins, not one:
 
-- **Public dashboard layout**: pick any saved layout, from any of the four
-  pools. The public port shows this one regardless of what admin is
-  actively editing or has switched to, so you can rearrange your own view
-  without disturbing what a housemate or a status page pointed at port
-  8090 sees. Whether it renders compact simply follows whether the chosen
-  layout is one of your compact ones - there's nothing separate to
-  configure here for that. A visitor on a phone is the one exception: they
-  always get that install's Mobile (or Mobile-Compact, matching whatever
-  you picked here) layout instead, the same automatic device-pool
-  switching described above - falling back to Mobile's own All Services if
-  you haven't specifically pinned one of your own Mobile layouts, but
-  never rendered whatever Desktop layout is pinned here.
-- **Restrict to compact layouts**: when checked, the dropdown above only
-  offers layouts from your compact pools (Desktop-Compact and
-  Mobile-Compact), guaranteeing the public dashboard can never accidentally
-  get pointed at a full, detailed layout. Leave it unchecked to pick from
-  every saved layout, compact or not.
+- **Dashboard to show on Desktop**: which layout a desktop-width visitor to
+  port 8090 gets. Only lists your Desktop and Desktop-Compact layouts
+  (compact ones are labeled so you can tell them apart) - a Mobile-pool
+  layout would never be a sensible pick here, so it isn't offered. Leave
+  unset to fall back to your Desktop pool's All Services.
+- **Dashboard to show on Mobile**: the equivalent pin for a phone-width
+  visitor, offering only your Mobile and Mobile-Compact layouts. This is
+  what actually fixes a phone getting rendered the wrong dashboard - before
+  these were split, a phone visitor could only ever fall back to the
+  Mobile pool's default, with no way to pin a specific curated Mobile
+  layout of your own the way Desktop always could.
+
+Either pin shows this one regardless of what admin is actively editing or
+has switched to, so you can rearrange your own view without disturbing
+what a housemate or a status page pointed at port 8090 sees. Whether a pin
+renders compact simply follows whether the layout you picked for it is one
+of your compact ones - there's nothing separate to configure for that.
 
 ## History
 
