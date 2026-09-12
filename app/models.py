@@ -126,6 +126,14 @@ class CheckResult(Base):
     message: Mapped[str] = mapped_column(Text, default="")
     response_time_ms: Mapped[float | None] = mapped_column(Float, nullable=True)
     timestamp: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
+    # Recorded once, at poll time (see poller.poll_service), not
+    # reconstructed later from whatever schedules happen to exist when
+    # History is viewed - a permanent audit trail rather than a live
+    # lookup, so it stays accurate even after an Instant SDT window (which
+    # is deleted once it ends, see routers/downtime.py's reaping) is long
+    # gone. Always False for an "ok" result (no alert tier to suppress in
+    # the first place) and for anything predating this column.
+    in_sdt: Mapped[bool] = mapped_column(Boolean, default=False)
 
     service: Mapped["Service"] = relationship(back_populates="results")
 

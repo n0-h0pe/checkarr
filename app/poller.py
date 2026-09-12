@@ -131,7 +131,17 @@ async def poll_service(service_id: int) -> None:
             if status == STATUS_FAIL and (check.config or {}).get("alert_level") == "warn":
                 status = STATUS_WARN
 
+            # Recorded on this result permanently, not reconstructed later
+            # from whatever schedules happen to still exist when History is
+            # viewed - see CheckResult.in_sdt's docstring. Checked on every
+            # warn/fail result, not just ones that go on to trigger a new
+            # alert below - an ongoing, already-alerted issue still needs an
+            # accurate in_sdt on every poll while it continues.
+            in_sdt = False
             if status in (STATUS_WARN, STATUS_FAIL):
+                tier = "warn" if status == STATUS_WARN else "fail"
+                in_sdt = is_suppressed(db, service.id, tier, now)
+
                 previous = (
                     db.query(CheckResult)
                     .filter(CheckResult.check_id == check.id)
@@ -142,7 +152,6 @@ async def poll_service(service_id: int) -> None:
                 # poll while it stays that way - matches how Notification
                 # dedup below only fires once per ongoing issue too.
                 if not previous or previous.status != status:
-                    tier = "warn" if status == STATUS_WARN else "fail"
                     alerts_to_send.append(
                         (tier, f"[Checkarr] {service.name} - {check_name}: {status.upper()}", outcome.message)
                     )
@@ -157,6 +166,7 @@ async def poll_service(service_id: int) -> None:
                     message=outcome.message,
                     response_time_ms=outcome.response_time_ms,
                     timestamp=now,
+                    in_sdt=in_sdt,
                 )
             )
             if check.type == "arr_health":

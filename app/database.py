@@ -115,6 +115,10 @@ def _run_migrations() -> None:
         if "sort_order" not in check_cols:
             conn.exec_driver_sql("ALTER TABLE check_definitions ADD COLUMN sort_order INTEGER DEFAULT 0")
 
+        result_cols = _table_columns(conn, "check_results")
+        if "in_sdt" not in result_cols:
+            conn.exec_driver_sql("ALTER TABLE check_results ADD COLUMN in_sdt BOOLEAN DEFAULT 0")
+
         layout_cols = _table_columns(conn, "dashboard_layouts")
         if "columns" not in layout_cols:
             conn.exec_driver_sql("ALTER TABLE dashboard_layouts ADD COLUMN columns INTEGER")
