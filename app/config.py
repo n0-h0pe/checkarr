@@ -32,6 +32,12 @@ class Settings(BaseSettings):
         return self.data_path / "secret.key"
 
     @property
+    def icons_path(self) -> Path:
+        p = self.data_path / "icons"
+        p.mkdir(parents=True, exist_ok=True)
+        return p
+
+    @property
     def database_url(self) -> str:
         return f"sqlite:///{self.db_path.as_posix()}"
 

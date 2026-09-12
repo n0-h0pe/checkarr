@@ -467,7 +467,7 @@ function renderServiceRow(svc) {
   const tr = el("tr", { class: "service-row" });
 
   tr.appendChild(el("td", { "data-label": "Name", text: svc.name }));
-  tr.appendChild(el("td", { "data-label": "Type" }, el("span", {}, [typeIcon(svc.type), " " + svc.type])));
+  tr.appendChild(el("td", { "data-label": "Type" }, el("span", {}, [typeIcon(svc), " " + svc.type])));
   tr.appendChild(el("td", { "data-label": "Local", text: svc.local_url || "-" }));
   tr.appendChild(el("td", { "data-label": "Remote", text: svc.remote_url || "-" }));
   tr.appendChild(el("td", { "data-label": "Interval", text: svc.poll_interval_seconds ? `${svc.poll_interval_seconds}s` : "default" }));
@@ -772,6 +772,132 @@ function applyServiceTypeDefaults(type, { autofillName } = {}) {
   localInput.placeholder = defaults.port ? `http://${type}:${defaults.port}` : `http://${type}`;
 }
 
+// ---------- icon picker ----------
+
+// Splits into user-perceived characters ("grapheme clusters"), not raw
+// UTF-16 code units the way String.prototype.split("") would - almost
+// every emoji below is a surrogate pair (outside the Basic Multilingual
+// Plane) and a flag is two regional-indicator codepoints together; naive
+// .split("") tears both apart into orphaned, unrenderable halves. Falls
+// back to codepoint-level splitting (still correct for surrogate pairs,
+// just not flag pairs) only if Intl.Segmenter isn't available at all.
+function splitEmoji(str) {
+  if (typeof Intl !== "undefined" && Intl.Segmenter) {
+    return [...new Intl.Segmenter(undefined, { granularity: "grapheme" }).segment(str)].map((s) => s.segment);
+  }
+  return Array.from(str);
+}
+
+// A broad, hand-curated set of commonly-used emoji (not literally every
+// codepoint Unicode defines - a full registry with search keywords is a
+// real dataset, not something to hand-maintain here) grouped the way most
+// emoji pickers group them, for the Emoji tab below.
+const EMOJI_CATEGORIES = [
+  { label: "Smileys", emoji: splitEmoji("😀😃😄😁😆😅😂🤣😊😇🙂🙃😉😌😍🥰😘😗😙😚😋😛😝😜🤪🤨🧐🤓😎🥸🤩🥳😏😒😞😔😟😕🙁☹️😣😖😫😩🥺😢😭😤😠😡🤬🤯😳🥵🥶😱😨😰😥😓🤗🤔🤭🤫🤥😶😐😑😬🙄😯😦😧😮😲🥱😴🤤😪😵🤐🥴🤢🤮🤧😷🤒🤕🤑🤠😈👿👹👺🤡💩👻💀☠️👽👾🤖"), },
+  { label: "People", emoji: splitEmoji("👋🤚🖐✋🖖👌🤏✌🤞🤟🤘🤙👈👉👆🖕👇☝👍👎✊👊🤛🤜👏🙌👐🤲🤝🙏💅🤳💪🦾🦵🦶👂🦻👃🧠🦷🦴👀👁👅👄👶🧒👦👧🧑👨👩🧓👴👵"), },
+  { label: "Animals", emoji: splitEmoji("🐶🐱🐭🐹🐰🦊🐻🐼🐨🐯🦁🐮🐷🐽🐸🐵🙈🙉🙊🐒🐔🐧🐦🐤🐣🐥🦆🦅🦉🦇🐺🐗🐴🦄🐝🐛🦋🐌🐞🐜🦟🕷🕸🦂🐢🐍🦎🦖🦕🐙🦑🦐🦞🦀🐡🐠🐟🐬🐳🐋🦈🐊🐅🐆🦓🦍🐘🦛🦏🐪🐫🦒🐃🐂🐄🐎🐖🐏🐑🐐🦌🐕🐩🐈🐓🦃🦚🦜🦢🕊🐇🦝🦡🦦🦥🐁🐀🐿"), },
+  { label: "Food & Drink", emoji: splitEmoji("🍏🍎🍐🍊🍋🍌🍉🍇🍓🍈🍒🍑🥭🍍🥥🥝🍅🥑🥦🥬🥒🌶🌽🥕🧄🧅🥔🍠🥐🍞🥖🧀🥚🍳🥞🥓🥩🍗🍖🌭🍔🍟🍕🥪🌮🌯🥗🍝🍜🍲🍛🍣🍱🍤🍙🍚🍘🍥🍢🍡🍧🍨🍦🥧🧁🍰🎂🍮🍭🍬🍫🍿🍩🍪🌰🥜🍯🥛☕🍵🧃🥤🍶🍺🍻🥂🍷🥃🍸🍹🍾"), },
+  { label: "Activities", emoji: splitEmoji("⚽🏀🏈⚾🥎🎾🏐🏉🎱🏓🏸🏒🏑🥍🏏🥅⛳🏹🎣🥊🥋🎽🛹🛷⛸🥌🎿⛷🏂🏋🤼🤸⛹🤺🤾🏌🏇🧘🏄🏊🤽🚣🧗🚵🚴🏆🥇🥈🥉🏅🎖🎪🎭🎨🎬🎤🎧🎼🎹🥁🎷🎺🎸🎻🎲♟🎯🎳🎮🎰🧩"), },
+  { label: "Travel", emoji: splitEmoji("🚗🚕🚙🚌🚎🏎🚓🚑🚒🚐🚚🚛🚜🛴🚲🏍🛺🚨🚔🚍🚘🚖🚡🚠🚟🚃🚋🚞🚝🚄🚅🚈🚂🚆🚇🚊🚉✈🛫🛬🛩💺🚀🛸🚁⛵🚤🛳⛴🚢⚓🚧🚦🚥🚏🗺🗽🗼🏰🏯🎡🎢🎠⛲🏖🏝🏜🌋⛰🏔🗻🏕⛺🏠🏡🏢🏬🏥🏦🏨⛪🕌🛕⛩🌅🌄🌠🎇🎆🌇🌃🌉"), },
+  { label: "Objects", emoji: splitEmoji("⌚📱💻⌨🖥🖨🖱🕹💽💾💿📀📷📸📹🎥📽📞☎📟📺📻🎙🧭⏱⏰🕰⌛⏳🔋🔌💡🔦🕯🧯💸💵💰💳💎⚖🧰🔧🔨🛠⛏🔩⚙🔗⛓🧲🔫🧨🪓🔪🗡🛡🔮🔭🔬💊💉🩸🌡🧹🧺🧻🚽🚿🛁🧼🪒🧴🛒"), },
+  { label: "Symbols", emoji: splitEmoji("❤🧡💛💚💙💜🖤🤍🤎💔❣💕💞💓💗💖💘💝☮✝☪🕉☸✡🔯☯☦🛐⚛🆔📴📳✴🆚💮🉐㊙㊗❌⭕🛑⛔📛🚫💯💢♨🚷🚯🚳🚱🔞📵🚭❗❓❕❔‼⁉⚠✅❎🌐💠🌀💤♿🅿️🔟🔢#️⃣▶⏸⏹⏺⏭⏮⏩⏪🔼🔽➡⬅⬆⬇🔀🔁🔂🔄🎵🎶➕➖➗✖💲💱™©®🔚🔙🔛🔝🔜✔☑🔘🔴🟠🟡🟢🔵🟣⚫⚪🟤🔺🔻🔶🔷⬛⬜"), },
+  { label: "Flags", emoji: splitEmoji("🏁🚩🎌🏴🏳️🇺🇸🇬🇧🇨🇦🇦🇺🇳🇿🇮🇪🇩🇪🇫🇷🇮🇹🇪🇸🇵🇹🇳🇱🇧🇪🇨🇭🇦🇹🇸🇪🇳🇴🇩🇰🇫🇮🇮🇸🇵🇱🇨🇿🇬🇷🇹🇷🇷🇺🇺🇦🇯🇵🇰🇷🇨🇳🇮🇳🇧🇷🇲🇽🇿🇦🇪🇬"), },
+];
+
+let pendingServiceIcon = { type: null, value: null };
+let iconPickerOnSelect = null;
+
+function openIconPicker(current, onSelect) {
+  iconPickerOnSelect = onSelect;
+  switchIconPickerTab("library");
+  $("#icon-picker-upload-input").value = "";
+  $("#icon-picker-upload-preview").innerHTML = "";
+  $("#icon-picker-upload-btn").disabled = true;
+  $("#icon-picker-modal").classList.remove("hidden");
+}
+
+function closeIconPicker() {
+  $("#icon-picker-modal").classList.add("hidden");
+  iconPickerOnSelect = null;
+}
+
+function chooseIcon(type, value) {
+  if (iconPickerOnSelect) iconPickerOnSelect(type, value);
+  closeIconPicker();
+}
+
+function switchIconPickerTab(tab) {
+  $all(".icon-picker-tab-btn").forEach((b) => b.classList.toggle("active", b.dataset.tab === tab));
+  $all(".icon-picker-pane").forEach((p) => { p.hidden = p.dataset.pane !== tab; });
+  if (tab === "library") renderIconPickerLibrary();
+  if (tab === "emoji") renderIconPickerEmoji();
+}
+
+function renderIconPickerLibrary() {
+  const grid = $("#icon-picker-library-grid");
+  grid.innerHTML = "";
+  // Only types that actually have a real logo - "generic" (and anything
+  // else with no entry in service_type_icons) would just be another way to
+  // pick the same puzzle-piece fallback you already get by default.
+  const types = (state.meta.service_types || [])
+    .filter((t) => iconUrlFor(t))
+    .sort((a, b) => serviceTypeLabel(a).localeCompare(serviceTypeLabel(b)));
+  for (const t of types) {
+    const btn = el("button", { type: "button", class: "icon-picker-cell", title: serviceTypeLabel(t) }, [
+      typeIcon({ type: t }),
+      el("span", { class: "icon-picker-cell-label", text: serviceTypeLabel(t) }),
+    ]);
+    btn.addEventListener("click", () => chooseIcon("library", t));
+    grid.appendChild(btn);
+  }
+}
+
+function renderIconPickerEmoji() {
+  const wrap = $("#icon-picker-emoji-groups");
+  wrap.innerHTML = "";
+  for (const cat of EMOJI_CATEGORIES) {
+    wrap.appendChild(el("div", { class: "icon-picker-emoji-heading", text: cat.label }));
+    const grid = el("div", { class: "icon-picker-emoji-grid" });
+    for (const emoji of cat.emoji) {
+      const btn = el("button", { type: "button", class: "icon-picker-emoji-cell", text: emoji, title: emoji });
+      btn.addEventListener("click", () => chooseIcon("emoji", emoji));
+      grid.appendChild(btn);
+    }
+    wrap.appendChild(grid);
+  }
+}
+
+async function uploadIconFile() {
+  const input = $("#icon-picker-upload-input");
+  const file = input.files && input.files[0];
+  if (!file) return;
+  const btn = $("#icon-picker-upload-btn");
+  btn.disabled = true;
+  btn.textContent = "Uploading…";
+  try {
+    const fd = new FormData();
+    fd.append("file", file);
+    // headers: {} (not omitted) overrides api()'s default JSON
+    // Content-Type entirely rather than adding to it - required here so
+    // the browser can set its own multipart boundary instead.
+    const data = await api("/api/icon-uploads", { method: "POST", body: fd, headers: {} });
+    chooseIcon("upload", data.filename);
+  } catch (e) {
+    toast("Upload failed: " + e.message, true);
+    btn.disabled = false;
+    btn.textContent = "Upload";
+  }
+}
+
+function updateServiceIconPreview() {
+  const preview = $("#svc-icon-preview");
+  if (!preview) return;
+  preview.innerHTML = "";
+  const type = $("#svc-type").value;
+  preview.appendChild(typeIcon({ type, icon_type: pendingServiceIcon.type, icon_value: pendingServiceIcon.value }));
+  $("#svc-icon-reset-btn").hidden = !pendingServiceIcon.type;
+}
+
 function resetConnStatus() {
   for (const which of ["local", "remote"]) {
     const node = $(`#svc-${which}-status`);
@@ -801,6 +927,8 @@ function openServiceModal(svc = null) {
   $("#svc-notes").value = svc && svc.notes ? svc.notes : "";
   resetConnStatus();
 
+  pendingServiceIcon = { type: svc ? svc.icon_type || null : null, value: svc ? svc.icon_value || null : null };
+
   const typeSelect = $("#svc-type");
   typeSelect.innerHTML = "";
   const knownTypes = new Set(state.meta.service_types);
@@ -820,12 +948,14 @@ function openServiceModal(svc = null) {
   typeSelect.onchange = () => {
     applyServiceTypeDefaults(typeSelect.value, { autofillName: true });
     updateCredentialFieldsForType(typeSelect.value);
+    updateServiceIconPreview();
   };
   if (initialType) {
     // typeSelect is disabled while editing, so onchange (and thus autofill)
     // can never fire mid-edit - autofillName only ever applies when adding.
     applyServiceTypeDefaults(initialType, { autofillName: !svc });
     updateCredentialFieldsForType(initialType);
+    updateServiceIconPreview();
   }
 
   $("#service-modal").classList.remove("hidden");
@@ -944,6 +1074,12 @@ async function submitServiceForm(ev) {
     poll_interval_seconds: $("#svc-interval").value ? parseInt($("#svc-interval").value, 10) : null,
     notes: $("#svc-notes").value.trim() || null,
   };
+  if (pendingServiceIcon.type) {
+    payload.icon_type = pendingServiceIcon.type;
+    payload.icon_value = pendingServiceIcon.value;
+  } else if (id) {
+    payload.clear_icon = true;
+  }
 
   const apiKey = readSecretField($("#svc-key"), $("#svc-key-use-env"));
   if (apiKey.useEnv && !apiKey.envVar) {
@@ -2020,6 +2156,26 @@ async function init() {
   $("#service-form").addEventListener("submit", submitServiceForm);
   $("#svc-test-connection").addEventListener("click", testServiceConnection);
   $("#svc-plex-signin").addEventListener("click", startPlexSignIn);
+  $("#svc-icon-change-btn").addEventListener("click", () => {
+    openIconPicker(pendingServiceIcon, (type, value) => {
+      pendingServiceIcon = { type, value };
+      updateServiceIconPreview();
+    });
+  });
+  $("#svc-icon-reset-btn").addEventListener("click", () => {
+    pendingServiceIcon = { type: null, value: null };
+    updateServiceIconPreview();
+  });
+  $all(".icon-picker-tab-btn").forEach((b) => b.addEventListener("click", () => switchIconPickerTab(b.dataset.tab)));
+  $("#icon-picker-cancel").addEventListener("click", closeIconPicker);
+  $("#icon-picker-upload-input").addEventListener("change", () => {
+    const file = $("#icon-picker-upload-input").files[0];
+    $("#icon-picker-upload-btn").disabled = !file;
+    const preview = $("#icon-picker-upload-preview");
+    preview.innerHTML = "";
+    if (file) preview.appendChild(el("img", { src: URL.createObjectURL(file), class: "icon-picker-upload-preview-img" }));
+  });
+  $("#icon-picker-upload-btn").addEventListener("click", uploadIconFile);
   initSecretField($("#svc-key"), $("#svc-key-use-env"));
   initSecretField($("#svc-jellyfin-admin-password"), $("#svc-jellyfin-admin-password-use-env"));
   $("#check-cancel").addEventListener("click", closeCheckModal);

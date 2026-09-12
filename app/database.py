@@ -93,6 +93,10 @@ def _run_migrations() -> None:
             conn.exec_driver_sql("ALTER TABLE services ADD COLUMN api_key_env_var VARCHAR(255)")
         if "jellyfin_admin_password_env_var" not in service_cols:
             conn.exec_driver_sql("ALTER TABLE services ADD COLUMN jellyfin_admin_password_env_var VARCHAR(255)")
+        if "icon_type" not in service_cols:
+            conn.exec_driver_sql("ALTER TABLE services ADD COLUMN icon_type VARCHAR(20)")
+        if "icon_value" not in service_cols:
+            conn.exec_driver_sql("ALTER TABLE services ADD COLUMN icon_value VARCHAR(255)")
         if "verify_ssl" in service_cols:
             # The per-service "Verify SSL certificates" toggle is gone - the
             # new dedicated ssl_certificate check now owns cert validation,

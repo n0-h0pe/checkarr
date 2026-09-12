@@ -36,6 +36,28 @@ A sensible set of default checks is created automatically based on the
 type, add more from the service's expanded row, each with its own optional
 poll interval override (see "Per-check poll interval" below).
 
+### Icon
+
+Every service shows the type's own logo by default (the same picture as its
+entry in the type dropdown above). "Change icon" next to it opens a picker
+with three tabs:
+
+- **App logos**: every logo Checkarr already knows, not just the one for
+  this service's own type - handy for, say, a second Radarr instance you
+  want to visually tell apart from the first by giving it a different app's
+  logo.
+- **Emoji**: a broad, categorized collection of emoji to use as a plain
+  text icon instead of an image.
+- **Upload**: your own SVG, PNG, JPEG, or WebP image (1 MB max), stored
+  locally under `/config/icons` and served back at `/custom-icons/<file>`
+  on both the admin and public ports - wherever this service's card shows
+  up. An uploaded SVG is only ever rendered as an `<img>`, never injected
+  inline, so it can't run a script embedded in it even if it had one.
+
+Picking anything replaces the default immediately (no separate confirm
+step); "Reset to default" next to "Change icon" goes back to following the
+type's own logo again.
+
 ### Credentials
 
 The credential field(s) shown change based on the service type:

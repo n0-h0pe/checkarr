@@ -9,7 +9,7 @@ from fastapi.templating import Jinja2Templates
 from . import scheduler as scheduler_module
 from .config import settings
 from .database import init_db
-from .routers import checks_bulk, dashboard_layouts, dashboard_settings, downtime, log_pruning, meta, notification_channels, notifications, plex_auth, services, status
+from .routers import checks_bulk, dashboard_layouts, dashboard_settings, downtime, icon_uploads, log_pruning, meta, notification_channels, notifications, plex_auth, services, status
 from .security import require_auth
 from .version import VERSION
 
@@ -29,9 +29,17 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="Checkarr", lifespan=lifespan)
 
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
+# settings.icons_path creates the directory (under /config) the first time
+# it's accessed if it doesn't exist yet - needed here since StaticFiles
+# requires the directory to already exist at mount time, which runs at
+# import time, before lifespan's init_db() would otherwise have a chance to
+# set anything up. Also mounted on the public app (public.py) - a custom
+# icon needs to load there too, wherever that service's card shows up.
+app.mount("/custom-icons", StaticFiles(directory=str(settings.icons_path)), name="custom-icons")
 templates = Jinja2Templates(directory="app/templates")
 
 app.include_router(services.router)
+app.include_router(icon_uploads.router)
 app.include_router(status.router)
 app.include_router(notifications.router)
 app.include_router(meta.router)

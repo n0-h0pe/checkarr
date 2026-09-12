@@ -13,6 +13,8 @@ def serialize_service(service: models.Service) -> schemas.ServiceOut:
         enabled=service.enabled,
         poll_interval_seconds=service.poll_interval_seconds,
         notes=service.notes,
+        icon_type=service.icon_type,
+        icon_value=service.icon_value,
         has_api_key=bool(service.api_key_encrypted or service.api_key_env_var),
         api_key_env_var=service.api_key_env_var,
         has_jellyfin_admin_password=bool(service.jellyfin_admin_password_encrypted or service.jellyfin_admin_password_env_var),

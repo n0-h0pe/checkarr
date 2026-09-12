@@ -40,6 +40,8 @@ def create_service(payload: schemas.ServiceCreate, db: Session = Depends(get_db)
         enabled=payload.enabled,
         poll_interval_seconds=payload.poll_interval_seconds,
         notes=payload.notes,
+        icon_type=payload.icon_type,
+        icon_value=payload.icon_value,
     )
     apply_secret_field(
         service, "api_key_encrypted", "api_key_env_var",
@@ -140,6 +142,12 @@ def update_service(service_id: int, payload: schemas.ServiceUpdate, db: Session 
         service.poll_interval_seconds = payload.poll_interval_seconds
     if payload.notes is not None:
         service.notes = payload.notes
+    if payload.clear_icon:
+        service.icon_type = None
+        service.icon_value = None
+    elif payload.icon_type is not None:
+        service.icon_type = payload.icon_type
+        service.icon_value = payload.icon_value
 
     _maybe_add_ssl_check(service, db)
 

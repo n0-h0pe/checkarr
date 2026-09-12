@@ -72,6 +72,7 @@ def get_history(
     minutes: int,
     limit: int,
     before_id: int | None = None,
+    statuses: list[str] | None = None,
 ) -> list[models.CheckResult]:
     """Ordered by id, not timestamp - id is assigned in insertion order,
     which for a given service's rows already matches timestamp order (ties
@@ -94,6 +95,13 @@ def get_history(
     `service_ids` empty means "nothing selected" (the History tab's
     checkbox filter defaults to none checked) - returns no rows without
     even querying, rather than every service's history.
+
+    `statuses`, if given non-empty, restricts to just those result statuses
+    (ok/warn/fail) - the History tab's severity filter pills. Empty or None
+    means no filtering, same as omitting it entirely (unlike service_ids,
+    an empty statuses list isn't itself a "show nothing" signal here - the
+    frontend already turns an all-pills-off selection into an empty
+    service_ids-style short-circuit before ever calling this).
     """
     if not service_ids:
         return []
@@ -111,6 +119,8 @@ def get_history(
         q = db.query(models.CheckResult).join(latest, models.CheckResult.id == latest.c.max_id)
         if before_id is not None:
             q = q.filter(models.CheckResult.id < before_id)
+        if statuses:
+            q = q.filter(models.CheckResult.status.in_(statuses))
         return q.order_by(models.CheckResult.id.desc()).limit(limit).all()
 
     cutoff = datetime.now(timezone.utc) - timedelta(minutes=minutes)
@@ -121,6 +131,8 @@ def get_history(
         q = q.filter(models.CheckResult.check_id == check_id)
     if before_id is not None:
         q = q.filter(models.CheckResult.id < before_id)
+    if statuses:
+        q = q.filter(models.CheckResult.status.in_(statuses))
     return q.order_by(models.CheckResult.id.desc()).limit(limit).all()
 
 
@@ -164,6 +176,8 @@ def get_active_issues(db: Session) -> list[schemas.ActiveIssueOut]:
                         service_id=service.id,
                         service_name=service.name,
                         service_type=service.type,
+                        icon_type=service.icon_type,
+                        icon_value=service.icon_value,
                         check_name=r.check_name,
                         check_type=r.check_type,
                         status=r.status,

@@ -88,6 +88,9 @@ class ChecksReorderRequest(BaseModel):
     ordered_ids: list[int]
 
 
+ICON_TYPES = ["library", "emoji", "upload"]
+
+
 class ServiceBase(BaseModel):
     name: str
     type: str
@@ -98,11 +101,23 @@ class ServiceBase(BaseModel):
     enabled: bool = True
     poll_interval_seconds: int | None = None
     notes: str | None = None
+    # Icon override - see models.Service.icon_type's docstring. Both null
+    # (the default) falls back to the type's own icon.
+    icon_type: str | None = None
+    icon_value: str | None = None
 
     @model_validator(mode="after")
     def _require_an_address(self):
         if not self.local_url and not self.remote_url:
             raise ValueError("At least one of local_url or remote_url must be set")
+        return self
+
+    @model_validator(mode="after")
+    def _validate_icon(self):
+        if self.icon_type is not None and self.icon_type not in ICON_TYPES:
+            raise ValueError(f"Unknown icon_type '{self.icon_type}'")
+        if self.icon_type is not None and not self.icon_value:
+            raise ValueError("icon_value is required when icon_type is set")
         return self
 
 
@@ -134,6 +149,21 @@ class ServiceUpdate(BaseModel):
     enabled: bool | None = None
     poll_interval_seconds: int | None = None
     notes: str | None = None
+    icon_type: str | None = None
+    icon_value: str | None = None
+    # Explicit reset back to the type's own default icon - null icon_type/
+    # icon_value in the payload just means "not touching this", same
+    # omitted-vs-null ambiguity every other clearable field here works
+    # around the same way (clear_local_url etc above).
+    clear_icon: bool = False
+
+    @model_validator(mode="after")
+    def _validate_icon(self):
+        if self.icon_type is not None and self.icon_type not in ICON_TYPES:
+            raise ValueError(f"Unknown icon_type '{self.icon_type}'")
+        if self.icon_type is not None and not self.icon_value:
+            raise ValueError("icon_value is required when icon_type is set")
+        return self
 
 
 class ServiceOut(ServiceBase):
@@ -184,6 +214,8 @@ class ActiveIssueOut(BaseModel):
     service_id: int
     service_name: str
     service_type: str
+    icon_type: str | None = None
+    icon_value: str | None = None
     check_name: str
     check_type: str
     status: str
@@ -197,6 +229,11 @@ class ServiceStatusOut(BaseModel):
     last_checked: datetime | None
     latest_results: list[CheckResultOut]
     active_notification_count: int
+
+
+class IconUploadOut(BaseModel):
+    filename: str
+    url: str
 
 
 class ConnectionTestRequest(BaseModel):
