@@ -46,6 +46,7 @@ CHECK_TYPES = [
     "deluge_disk_space",
     "rtorrent_rpc_status",
     "ftp_path",
+    "external_port_open",
     "overseerr_status",
     "overseerr_tmdb_status",
     "ssl_certificate",
