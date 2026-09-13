@@ -192,11 +192,33 @@ lines at random each time rather than always saying the same thing.
 Settings > Push Notifications manages outbound alerting channels, a table
 of configured channels, Add channel to add one, Edit/Delete per row.
 
-Today's only channel type is Email (SMTP): host, port, optional
-username/password, STARTTLS toggle, From address, and one or more To
-addresses. Each channel has its own Send for Warn alerts / Send for Fail
-alerts toggles, and a Send test button in its edit form. Passwords are
-encrypted at rest the same way API keys are.
+Eight channel types are available, add as many of each as you want (e.g.
+one Discord channel for Warn, another for Fail, with different
+severity toggles on each):
+
+- **Email (SMTP)**: host, port, optional username/password, STARTTLS
+  toggle, From address, and one or more To addresses.
+- **Discord**: an incoming webhook URL (Server Settings > Integrations >
+  Webhooks on the channel you want alerts in).
+- **Slack**: an incoming webhook URL the same way.
+- **Telegram**: a bot token (from @BotFather) plus the chat ID to send to.
+- **Pushbullet**: an access token (Settings > Account > Create Access
+  Token).
+- **Pushover**: an application API token plus your user key.
+- **Webhook (generic)**: any URL that accepts a JSON POST, for anything
+  without a named integration above - Home Assistant, ntfy, n8n, a script
+  of your own. Posts `{"subject": "...", "message": "..."}`.
+- **Browser**: a native OS notification in any admin browser tab that's
+  currently open and connected - see "Browser notifications" below, this
+  one works differently from the rest.
+
+Every channel has its own Send for Warn alerts / Send for Fail alerts
+toggles, and a Send test button in its edit form. Whichever field is that
+channel's actual credential (a webhook URL, a bot token, an access token)
+is encrypted at rest the same way API keys are, with the same "Use
+environment variable" option; anything else a type needs (a chat ID, a
+user key) is stored as plain configuration alongside it, it isn't secret in
+the same way.
 
 An alert fires on a check transitioning into warn or fail (not on every
 poll while it stays that way, and not on recovery), or a new consolidated
@@ -214,6 +236,29 @@ notification provider's rate limit) has a bad night.
 
 The channel type is deliberately pluggable, adding another alerting
 service later is a matter of one more channel type, not a redesign.
+
+### Browser notifications
+
+Unlike every other channel type, Browser doesn't send anywhere external -
+when an alert matches an enabled Browser channel, it's pushed live to every
+admin tab that's currently open and connected, which then shows it as a
+native OS-level notification. There's no address or account to configure,
+just this browser.
+
+This is genuinely best-effort, the same way a phone that's locked and
+asleep doesn't see a push notification either:
+
+- The connection only exists while an admin tab is open, so a closed
+  browser (or one that's lost its connection) simply doesn't get the
+  alert - it isn't queued for when the tab reopens.
+- Each browser has to grant notification permission separately, once - Add
+  or Edit a Browser channel and click "Grant browser notification
+  permission". If a browser has already blocked notifications for this
+  site, the button won't reappear; allow it again in that browser's own
+  site settings first.
+- Every other enabled channel still receives the alert as normal
+  regardless of whether any tab is connected - Browser is one more
+  destination, not a replacement for the others.
 
 ### Self-monitoring alerts
 

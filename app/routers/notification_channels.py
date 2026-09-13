@@ -1,13 +1,46 @@
+import asyncio
+import json
+
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from .. import models, schemas
 from ..alerting import send_via_channel
 from ..database import get_db
+from ..notifiers.browser import subscribe as browser_subscribe, unsubscribe as browser_unsubscribe
 from ..security import apply_secret_field, require_auth
 from ..serializers import serialize_notification_channel as _out
 
 router = APIRouter(prefix="/api/notification-channels", tags=["notification-channels"], dependencies=[Depends(require_auth)])
+
+# How often to send an SSE keep-alive comment while nothing's actually
+# fired - well under any reverse proxy/browser idle-connection timeout, and
+# cheap enough that having several admin tabs open at once is a non-issue.
+_STREAM_KEEPALIVE_SECONDS = 20
+
+
+@router.get("/stream")
+async def browser_notification_stream():
+    """The Browser channel's actual delivery path - see notifiers/browser.py.
+    An admin tab opens this as an EventSource and gets a `data:` line per
+    alert routed to a Browser channel for as long as the tab stays open;
+    closing it (or losing the connection) unsubscribes automatically via the
+    finally block below, there's nothing else to clean this up."""
+    queue = browser_subscribe()
+
+    async def events():
+        try:
+            while True:
+                try:
+                    item = await asyncio.wait_for(queue.get(), timeout=_STREAM_KEEPALIVE_SECONDS)
+                    yield f"data: {json.dumps(item)}\n\n"
+                except asyncio.TimeoutError:
+                    yield ": keep-alive\n\n"
+        finally:
+            browser_unsubscribe(queue)
+
+    return StreamingResponse(events(), media_type="text/event-stream")
 
 
 @router.get("", response_model=list[schemas.NotificationChannelOut])

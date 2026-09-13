@@ -52,7 +52,16 @@ CHECK_TYPES = [
     "immich_jobs",
 ]
 
-NOTIFICATION_CHANNEL_TYPES = ["email"]
+NOTIFICATION_CHANNEL_TYPES = [
+    "email",
+    "discord",
+    "slack",
+    "telegram",
+    "pushbullet",
+    "pushover",
+    "webhook",
+    "browser",
+]
 
 
 class CheckDefinitionBase(BaseModel):

@@ -1391,6 +1391,15 @@ function renderChannelDynamicFields(channelType, existingConfig = {}, hasSecret 
     if (value === undefined || value === null) value = f.default ?? "";
     const label = f.label;
 
+    if (f.kind === "info") {
+      // Not a real input - a rendered note with nothing to save, no
+      // id="chn-field-..." element at all, so submitChannelForm's lookup
+      // for it just comes back null and skips it like any other field a
+      // given channel type doesn't have.
+      container.appendChild(el("p", { class: "text-dim", style: "margin-top:0;", text: label }));
+      continue;
+    }
+
     if (f.kind === "checkbox") {
       const input = el("input", { type: "checkbox", id: `chn-field-${f.key}` });
       input.checked = !!value;
@@ -1426,6 +1435,67 @@ function renderChannelDynamicFields(channelType, existingConfig = {}, hasSecret 
     fieldWrap.appendChild(input);
     container.appendChild(fieldWrap);
   }
+
+  updateBrowserPermissionButton(channelType === "browser");
+}
+
+// The Browser channel type has no config fields of its own to render - what
+// it actually needs is this button, since Notification.requestPermission()
+// only means anything as a direct response to a click, not something that
+// can be triggered just because this modal opened. See notifiers/browser.py
+// and initBrowserNotificationStream below for the rest of that channel.
+function updateBrowserPermissionButton(show) {
+  const btn = $("#chn-browser-permission-btn");
+  const status = $("#chn-browser-permission-status");
+  btn.hidden = !show;
+  status.hidden = !show;
+  if (!show) return;
+
+  if (!("Notification" in window)) {
+    btn.hidden = true;
+    status.textContent = "This browser doesn't support notifications.";
+    return;
+  }
+  if (Notification.permission === "granted") {
+    btn.hidden = true;
+    status.textContent = "Permission already granted in this browser.";
+  } else if (Notification.permission === "denied") {
+    btn.hidden = true;
+    status.textContent = "Notifications are blocked for this site in this browser's own settings.";
+  } else {
+    status.textContent = "";
+  }
+}
+
+async function requestBrowserNotificationPermission() {
+  const permission = await Notification.requestPermission();
+  updateBrowserPermissionButton(true);
+  if (permission === "granted") {
+    new Notification("Checkarr", { body: "Browser notifications are working." });
+  }
+}
+
+// Live delivery path for the Browser channel type (see notifiers/browser.py
+// for the server side of this). Connects once, for the lifetime of the
+// admin tab, regardless of whether a Browser channel actually exists yet -
+// idle otherwise, the server only ever sends something down this if an
+// enabled Browser channel matches the alert's severity tier.
+function initBrowserNotificationStream() {
+  const source = new EventSource("/api/notification-channels/stream");
+  source.onmessage = (ev) => {
+    let payload;
+    try {
+      payload = JSON.parse(ev.data);
+    } catch {
+      return;
+    }
+    toast(payload.subject);
+    if ("Notification" in window && Notification.permission === "granted") {
+      new Notification(payload.subject, { body: payload.body });
+    }
+  };
+  // EventSource retries on its own after a drop (server restart, network
+  // blip) - nothing to do here beyond letting that happen.
 }
 
 async function submitChannelForm(ev) {
@@ -2201,6 +2271,7 @@ async function init() {
   $("#channel-cancel").addEventListener("click", closeChannelModal);
   $("#channel-form").addEventListener("submit", submitChannelForm);
   $("#chn-test").addEventListener("click", testChannelFromModal);
+  $("#chn-browser-permission-btn").addEventListener("click", requestBrowserNotificationPermission);
   $("#add-group-btn").addEventListener("click", () => openGroupModal());
   $("#group-cancel").addEventListener("click", closeGroupModal);
   $("#group-form").addEventListener("submit", submitGroupForm);
@@ -2249,6 +2320,7 @@ async function init() {
   setTimeout(() => { if (state.tab === "dashboard" && !layoutEditMode) loadDashboardAdmin(); }, 1000);
   setInterval(() => { if (state.tab === "dashboard" && !layoutEditMode) loadDashboardAdmin(); }, 30000);
   setInterval(() => { if (state.tab === "notifications") loadNotifications(); }, 30000);
+  initBrowserNotificationStream();
 }
 
 document.addEventListener("DOMContentLoaded", init);

@@ -1,9 +1,8 @@
 """Dispatches outbound alerts (Settings > Push Notifications) to every
 enabled channel opted into the given severity tier. Adding a new channel
-type later (Discord, Pushbullet, ...) means one new function in
-app/notifiers/ and one branch in send_via_channel below - see
-NOTIFICATION_CHANNEL_TYPE_META in routers/meta.py for the matching
-frontend-config side of that.
+type later means one new function in app/notifiers/ and one entry in
+_SENDERS below - see NOTIFICATION_CHANNEL_TYPE_META in routers/meta.py for
+the matching frontend-config side of that.
 
 Nothing calls dispatch_alert directly anymore except queue_alert's own
 flush - everyone else (poller.py, housekeeping.py) goes through
@@ -21,7 +20,25 @@ import threading
 
 from . import models
 from .database import SessionLocal
+from .notifiers.browser import send_browser_notification
+from .notifiers.discord import send_discord
 from .notifiers.email import send_email
+from .notifiers.pushbullet import send_pushbullet
+from .notifiers.pushover import send_pushover
+from .notifiers.slack import send_slack
+from .notifiers.telegram import send_telegram
+from .notifiers.webhook import send_webhook
+
+_SENDERS = {
+    "email": send_email,
+    "discord": send_discord,
+    "slack": send_slack,
+    "telegram": send_telegram,
+    "pushbullet": send_pushbullet,
+    "pushover": send_pushover,
+    "webhook": send_webhook,
+    "browser": send_browser_notification,
+}
 
 logger = logging.getLogger("checkarr.alerting")
 
@@ -48,10 +65,10 @@ def pop_failed_channels() -> set[int]:
 
 
 def send_via_channel(channel: models.NotificationChannel, subject: str, body: str) -> None:
-    if channel.type == "email":
-        send_email(channel, subject, body)
-    else:
+    sender = _SENDERS.get(channel.type)
+    if not sender:
         raise ValueError(f"Unknown notification channel type '{channel.type}'")
+    sender(channel, subject, body)
 
 
 def dispatch_alert(tier: str, subject: str, body: str) -> None:

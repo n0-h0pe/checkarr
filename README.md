@@ -20,9 +20,10 @@ watch the watchers.
   externally, with an optional compact mode.
 - Historic results in a filterable, resizable, exportable History table,
   and a per-service uptime strip on the dashboard.
-- Outbound alerting (currently email) that batches rapid-fire alerts into
-  one message instead of flooding your inbox, plus its own self-monitoring
-  for low disk space and failing alert channels.
+- Outbound alerting via Email, Discord, Slack, Telegram, Pushbullet,
+  Pushover, a generic webhook, or a native browser notification, batching
+  rapid-fire alerts into one message instead of flooding your inbox, plus
+  its own self-monitoring for low disk space and failing alert channels.
 - Scheduled Down Time to suppress alerts (not checks) during planned
   maintenance, recurring or a one-off instant window, permanently recorded
   against the History rows it applied to.
