@@ -735,7 +735,7 @@ const SERVICE_TYPE_CATEGORIES = [
   { label: "Arr Stack", types: ["chaptarr", "lidarr", "prowlarr", "radarr", "sonarr", "sportarr", "whisparr"] },
   { label: "Downloaders", types: ["cleanuparr", "deluge", "qbittorrent", "rtorrent", "rutorrent"] },
   { label: "Media Servers", types: ["immich", "jellyfin", "plex"] },
-  { label: "Other", types: ["dispatcharr", "generic", "jellyseerr", "overseerr"] },
+  { label: "Other", types: ["dispatcharr", "generic", "iplayarr", "iplayerarr", "jellyseerr", "overseerr"] },
 ];
 
 function serviceTypeLabel(type) {

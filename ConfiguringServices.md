@@ -63,11 +63,12 @@ type's own logo again.
 The credential field(s) shown change based on the service type:
 
 - **Radarr / Sonarr / Lidarr / Whisparr / Prowlarr / Chaptarr / Sportarr /
-  Seerr / Jellyseerr / Dispatcharr / Cleanuparr / Generic**: a single API
-  key field (Settings > General > API Key in the app itself, where that
-  app has one). Only needed for authenticated checks - Dispatcharr,
-  Sportarr, and Cleanuparr don't have any yet (see "Supported services"
-  below), so it's unused for them for now.
+  Seerr / Jellyseerr / Dispatcharr / Cleanuparr / iPlayarr / iPlayer-Arr /
+  Generic**: a single API key field (Settings > General > API Key in the
+  app itself, where that app has one). Only needed for authenticated
+  checks - Dispatcharr, Sportarr, Cleanuparr, iPlayarr, and iPlayer-Arr
+  don't have any yet (see "Supported services" below), so it's unused for
+  them for now.
 - **Immich**: a single API key field, created under your account menu (top
   right) > Account Settings > API Keys > New API Key. Immich lets a key be
   scoped to specific permissions instead of granted full access - for least
@@ -117,10 +118,29 @@ see [DeployingDocker.md](DeployingDocker.md).
 | Seerr, Jellyseerr | Web UI, API status, and a check that TMDB is reachable through the app. Jellyseerr is an API-compatible fork of Seerr, so both get identical checks. |
 | Immich | Web UI, API status (library counts), free disk space, background job queue failures |
 | Dispatcharr | Web UI only for now, its API hasn't been integrated yet. Add `http_200`/`keyword_match` checks as needed. |
+| iPlayarr, iPlayer-Arr | Web UI only for now, neither's API has been integrated yet. Add `http_200`/`keyword_match` checks as needed - see "BBC iPlayer downloaders" below. |
 | Generic | Web UI checks only, for anything else |
 
 Any service, regardless of type, can also have `filesystem_path`,
 `keyword_match`, or `ftp_path` checks added manually.
+
+### BBC iPlayer downloaders
+
+**iPlayarr** and **iPlayer-Arr** are two separate, independently-maintained
+projects that do the same job - each downloads BBC iPlayer content and
+presents itself to Sonarr/Radarr as a Newznab indexer plus a
+SABnzbd-compatible download client, so it's not a typo seeing both in the
+type dropdown. Add whichever one you actually run as its own service here
+the same as anything else; this only gets you a dashboard card and uptime
+history for it, it doesn't change how Sonarr/Radarr are configured to talk
+to it as an indexer/download client, that's still done in their own
+Settings the normal way.
+
+iPlayer-Arr additionally exposes an unauthenticated `/api/healthz`
+endpoint (its own geo/disk/ffmpeg status check) - worth pointing an
+`http_200` check's Path field at directly instead of relying on the
+default root-path check, if you'd rather monitor that than just "the web
+server is up".
 
 ## Detecting unmounted/failed drives
 
