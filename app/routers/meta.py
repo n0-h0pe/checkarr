@@ -283,6 +283,15 @@ CHECK_TYPE_META = [
         ],
     },
     {
+        "type": "external_port_open",
+        "label": "External port open (raw TCP check against a static IP/hostname)",
+        "applies_to": SERVICE_TYPES,
+        "fields": [
+            {"key": "host", "label": "Static IP or hostname", "kind": "text", "default": ""},
+            {"key": "port", "label": "External port", "kind": "number", "default": ""},
+        ],
+    },
+    {
         "type": "overseerr_status",
         "label": "API reachable (Status)",
         "applies_to": ["overseerr", "jellyseerr"],

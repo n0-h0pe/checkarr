@@ -1249,6 +1249,14 @@ function renderDynamicFields(svc, checkType, existingConfig = {}) {
       el("div", { class: "field hint", text: "Connects to its own FTP host/port/credentials above, independent of this service's local/remote address - for a NAS or share exposed over FTP rather than one bind-mounted into this container. Same existence/population check as the filesystem path check, just reached over FTP." })
     );
   }
+  if (checkType === "external_port_open") {
+    container.appendChild(
+      el("div", {
+        class: "field hint",
+        text: "A plain TCP connect to its own IP/port above, independent of this service's local/remote address - for confirming a port-forwarded address (e.g. Plex's forwarded port on your router) actually has something listening. Important: if Checkarr runs on the same network as the service, many home routers don't support \"NAT hairpin\" (reaching your own public IP from inside your own LAN), so a FAIL here doesn't necessarily mean the port is closed to the outside world - it may just mean your router can't loop back to itself. Treat a FAIL as \"worth checking from an actual outside network too\", not as certain proof.",
+      })
+    );
+  }
   if (checkType === "overseerr_tmdb_status") {
     container.appendChild(
       el("div", { class: "field hint", text: "There's no dedicated \"test TMDB\" endpoint, so this hits the same trending-movies call the app's own homepage makes on every load - a failure here usually means a TMDB-side or connectivity problem, not the app itself (that's what the Status check above is for)." })

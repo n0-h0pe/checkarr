@@ -206,6 +206,7 @@ path that already has a check.
 | `deluge_disk_space` | Deluge | Free space at a path via its API |
 | `rtorrent_rpc_status` | rTorrent, ruTorrent | Confirms rTorrent's XML-RPC interface is reachable, see below |
 | `ftp_path` | any | Checks a path exists and has a minimum number of entries, over FTP/FTPS |
+| `external_port_open` | any | Plain TCP connect to a static IP/hostname and port you provide, independent of the service's own address - see "Checking a port-forwarded address" below |
 | `overseerr_status` | Seerr, Jellyseerr | Confirms the API is reachable and the API key is valid |
 | `overseerr_tmdb_status` | Seerr, Jellyseerr | Confirms TMDB is reachable through it, see below |
 | `ssl_certificate` | any | Validates the actual TLS certificate for an `https://` address, see below |
@@ -285,6 +286,32 @@ This is deliberately decoupled from ordinary checks: `http_200`, the *arr
 API checks, and everything else no longer verify certificates at all, so a
 self-signed certificate on a local reverse proxy never breaks them. Cert
 health is the SSL check's job alone.
+
+### Checking a port-forwarded address
+
+`external_port_open` is a plain TCP connect (open the connection, confirm
+it accepted, close it again) to a Static IP or hostname and External port
+you type in - not the service's own Local/Remote address above, and not
+specific to Plex, though checking Plex's forwarded port (the one set in
+Plex's own Settings > Remote Access) is the obvious use for it. Add it to
+any service the same way as `filesystem_path` or `ftp_path`.
+
+**Important caveat**: if Checkarr runs on the same network as the service
+you're pointing this at (the common case - this container sitting on your
+LAN alongside Plex), a FAIL here isn't reliable proof the port is actually
+closed to the outside world. Most consumer routers don't support "NAT
+hairpin/loopback" - reaching your own public IP from inside your own LAN -
+so the connection can fail purely because of that, even though the port is
+genuinely open to real outside traffic. A PASS is a much stronger signal
+(it means something really is listening on that IP:port from wherever this
+container's traffic actually routed through); treat a FAIL as "worth
+double-checking from an actual external network or a site like
+canyouseeme.org", not as certain. Plex's own `plex_remote_access` check
+above doesn't have this problem, since it's plex.tv itself doing the
+probing from outside - prefer that one for Plex specifically when you can,
+and reach for this one when you want a direct check independent of
+plex.tv, or need it for a service that has no such external validator of
+its own.
 
 ### Per-check poll interval
 

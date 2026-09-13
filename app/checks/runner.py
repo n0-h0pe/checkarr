@@ -22,6 +22,7 @@ from .media_server_check import (
     check_plex_remote_access,
 )
 from .overseerr_check import check_overseerr_status, check_overseerr_tmdb_status
+from .port_check import check_external_port_open
 from .ssl_check import check_ssl_certificate
 from .torrent_client_check import (
     check_deluge_disk_space,
@@ -64,7 +65,7 @@ TARGET_SCOPED_TYPES = {
 
 # Checks that don't care which URL is configured - the poller runs these
 # exactly once per poll regardless of how many targets are set.
-SERVICE_SCOPED_TYPES = {"filesystem_path", "plex_remote_access", "ftp_path"}
+SERVICE_SCOPED_TYPES = {"filesystem_path", "plex_remote_access", "ftp_path", "external_port_open"}
 
 # When a service has both a local and a remote address but hasn't opted into
 # "run all checks against both", these target-scoped types still run against
@@ -99,6 +100,8 @@ async def run_check(
             return await check_filesystem_path(config)
         if ctype == "ftp_path":
             return await check_ftp_path(config)
+        if ctype == "external_port_open":
+            return await check_external_port_open(config)
         if ctype == "arr_system_status":
             return await check_system_status(client, base_url, api_key, service.type, config)
         if ctype == "arr_root_folder":
