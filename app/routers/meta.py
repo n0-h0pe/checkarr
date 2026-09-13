@@ -327,12 +327,17 @@ CHECK_TYPE_META = [
 
 # Meta for Settings > Push Notifications channel types - same shape as
 # CHECK_TYPE_META, and deliberately so: adding a new alerting service later
-# (Discord, Pushbullet, ...) means one more entry here plus one new sender
-# in app/notifiers/ and one dispatch branch in alerting.py, no schema or UI
+# (Ntfy, Gotify, ...) means one more entry here plus one new sender in
+# app/notifiers/ and one entry in alerting.py's _SENDERS, no schema or UI
 # redesign. A field flagged "secret": True is stored encrypted and never
 # echoed back in plaintext - see NotificationChannel.secret_encrypted and
 # the has_secret/"leave blank to keep existing" pattern already used for
-# service API keys.
+# service API keys. NotificationChannel has exactly one such secret slot per
+# channel, so every type below puts whichever field is the actual bearer
+# credential (a webhook URL, a bot/app token) there, and any other,
+# non-secret identifier (a chat ID, a user key) as a plain field instead.
+# "info" is not a real input, just a rendered note with nothing to save -
+# see renderChannelDynamicFields in app.js.
 NOTIFICATION_CHANNEL_TYPE_META = [
     {
         "type": "email",
@@ -345,6 +350,102 @@ NOTIFICATION_CHANNEL_TYPE_META = [
             {"key": "use_tls", "label": "Use STARTTLS (port 465 always uses implicit TLS instead)", "kind": "checkbox", "default": True},
             {"key": "from_address", "label": "From address", "kind": "text", "default": ""},
             {"key": "to_addresses", "label": "To address(es) (comma separated)", "kind": "text", "default": ""},
+        ],
+    },
+    {
+        "type": "discord",
+        "label": "Discord",
+        "fields": [
+            {
+                "key": "webhook_url",
+                "label": "Webhook URL (Server Settings > Integrations > Webhooks)",
+                "kind": "password",
+                "default": "",
+                "secret": True,
+            },
+        ],
+    },
+    {
+        "type": "slack",
+        "label": "Slack",
+        "fields": [
+            {
+                "key": "webhook_url",
+                "label": "Incoming webhook URL",
+                "kind": "password",
+                "default": "",
+                "secret": True,
+            },
+        ],
+    },
+    {
+        "type": "telegram",
+        "label": "Telegram",
+        "fields": [
+            {
+                "key": "bot_token",
+                "label": "Bot token (from @BotFather)",
+                "kind": "password",
+                "default": "",
+                "secret": True,
+            },
+            {"key": "chat_id", "label": "Chat ID", "kind": "text", "default": ""},
+        ],
+    },
+    {
+        "type": "pushbullet",
+        "label": "Pushbullet",
+        "fields": [
+            {
+                "key": "access_token",
+                "label": "Access token (Settings > Account > Create Access Token)",
+                "kind": "password",
+                "default": "",
+                "secret": True,
+            },
+        ],
+    },
+    {
+        "type": "pushover",
+        "label": "Pushover",
+        "fields": [
+            {
+                "key": "app_token",
+                "label": "Application API token",
+                "kind": "password",
+                "default": "",
+                "secret": True,
+            },
+            {"key": "user_key", "label": "User key", "kind": "text", "default": ""},
+        ],
+    },
+    {
+        "type": "webhook",
+        "label": "Webhook (generic)",
+        "fields": [
+            {
+                "key": "url",
+                "label": 'URL to POST {"subject", "message"} to as JSON',
+                "kind": "password",
+                "default": "",
+                "secret": True,
+            },
+        ],
+    },
+    {
+        "type": "browser",
+        "label": "Browser (notification in an open admin tab)",
+        "fields": [
+            {
+                "key": "_info",
+                "label": (
+                    "Shows a native OS notification in any browser tab that has this "
+                    "dashboard open and connected - no address or account to enter, "
+                    "just this browser. Grant it permission below once you've saved "
+                    "this channel; a closed tab never receives one."
+                ),
+                "kind": "info",
+            },
         ],
     },
 ]
