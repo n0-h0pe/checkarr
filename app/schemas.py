@@ -22,6 +22,8 @@ SERVICE_TYPES = [
     "dispatcharr",
     "sportarr",
     "cleanuparr",
+    "iplayarr",
+    "iplayerarr",
     "generic",
 ]
 CHECK_TYPES = [

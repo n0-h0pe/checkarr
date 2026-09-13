@@ -3,11 +3,11 @@
 A self-hosted dashboard that periodically polls your media stack (Radarr,
 Sonarr, Lidarr, Whisparr, Chaptarr, Prowlarr, Plex, Jellyfin, Immich,
 qBittorrent, Deluge, rTorrent, ruTorrent, Seerr, Jellyseerr, Dispatcharr,
-Sportarr, Cleanuparr, or any other HTTP service) and shows one consolidated
-view of what's healthy, what's degraded, and why. Think of it as a health
-check for the health checkers you already trust to tell you when
-something's wrong, on the theory that eventually something has to actually
-watch the watchers.
+Sportarr, Cleanuparr, iPlayarr, iPlayer-Arr, or any other HTTP service) and
+shows one consolidated view of what's healthy, what's degraded, and why.
+Think of it as a health check for the health checkers you already trust to
+tell you when something's wrong, on the theory that eventually something
+has to actually watch the watchers.
 
 ## Features
 

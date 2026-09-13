@@ -58,6 +58,8 @@ SERVICE_TYPE_DEFAULTS = {
     "dispatcharr": {"name": "Dispatcharr", "port": 9191},
     "sportarr": {"name": "Sportarr", "port": None},
     "cleanuparr": {"name": "Cleanuparr", "port": None},
+    "iplayarr": {"name": "iPlayarr", "port": 4404},
+    "iplayerarr": {"name": "iPlayer-Arr", "port": 62001},
     "generic": {"name": "", "port": None},
 }
 
