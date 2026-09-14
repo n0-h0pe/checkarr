@@ -60,7 +60,14 @@ const UPTIME_RANGES = [
   { value: "10080", minutes: 10080, label: "Last 1 week" },
 ];
 const DEFAULT_UPTIME_RANGE = "2880";
-const UPTIME_BAR_COUNT = 20;
+// Settings > Dashboard Settings > "Uptime bars per card" (DashboardSettings.
+// uptime_bar_count, 1-200) - fetched once via /api/meta, same as every other
+// app-wide config both apps share (see loadMeta). This fallback only ever
+// matters for the brief window before that first fetch resolves.
+const DEFAULT_UPTIME_BAR_COUNT = 20;
+function uptimeBarCount() {
+  return (state.meta && state.meta.uptime_bar_count) || DEFAULT_UPTIME_BAR_COUNT;
+}
 
 function loadUptimeRange() {
   const saved = getCookie("hc_uptime_range");
@@ -907,20 +914,21 @@ async function loadUptimeStrip(serviceId) {
     if (!worst || order[r.status] > order[worst]) byTs.set(r.timestamp, r.status);
   }
 
+  const barCount = uptimeBarCount();
   const now = Date.now();
   const rangeMs = range.minutes * 60000;
   const rangeStart = now - rangeMs;
-  const bucketMs = rangeMs / UPTIME_BAR_COUNT;
-  const buckets = new Array(UPTIME_BAR_COUNT).fill(null);
+  const bucketMs = rangeMs / barCount;
+  const buckets = new Array(barCount).fill(null);
 
   for (const [ts, status] of byTs) {
     const t = parseTs(ts);
     if (t < rangeStart || t > now) continue;
-    const idx = Math.min(UPTIME_BAR_COUNT - 1, Math.floor((t - rangeStart) / bucketMs));
+    const idx = Math.min(barCount - 1, Math.floor((t - rangeStart) / bucketMs));
     if (buckets[idx] === null || order[status] > order[buckets[idx]]) buckets[idx] = status;
   }
 
-  for (let i = 0; i < UPTIME_BAR_COUNT; i++) {
+  for (let i = 0; i < barCount; i++) {
     const bucketStart = new Date(rangeStart + i * bucketMs);
     const status = buckets[i];
     strip.appendChild(

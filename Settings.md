@@ -110,6 +110,15 @@ what a housemate or a status page pointed at port 8090 sees. Whether a pin
 renders compact simply follows whether the layout you picked for it is one
 of your compact ones - there's nothing separate to configure for that.
 
+**Uptime bars per card** (1-200, default 20) is the one setting on this
+page that isn't about the public port specifically - it's how many bars
+each card's uptime strip is divided into, admin and public alike, for
+every ranged option in the uptime/History picker ("Last 5 minutes" through
+"Last 1 week"). Doesn't touch "Just the last poll", which always shows
+exactly one bar (the live status already in hand) no matter what this is
+set to - there's nothing to divide a single poll into. Takes effect on
+every card already on screen as soon as you save, no reload needed.
+
 ## History
 
 The History tab (admin) and page (public) loads incrementally as you

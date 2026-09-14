@@ -184,6 +184,10 @@
               <label>Dashboard to show on Mobile <span class="hint">(port 8090, phone-width visitors)</span></label>
               <select id="dashboard-settings-layout-mobile" style="max-width:280px;"></select>
             </div>
+            <div class="field">
+              <label>Uptime bars per card <span class="hint">(1-200, applies everywhere except "Just the last poll", which is always 1 bar)</span></label>
+              <input type="number" id="dashboard-settings-uptime-bar-count" min="1" max="200" style="max-width:100px;">
+            </div>
             <div class="modal-actions" style="justify-content:flex-start;">
               <button type="submit" class="primary">Save</button>
             </div>
