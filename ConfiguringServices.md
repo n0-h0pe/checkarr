@@ -331,7 +331,15 @@ thresholds already decide this.
 
 Click the Checks (N) button - its own column in the services table, right
 next to Type - to collapse or expand just that service's checks table,
-remembered per service in a browser cookie.
+remembered per service in a browser cookie. Add check and, for Plex/
+Jellyfin, Scan libraries sit on the service's own row, after Edit/Delete -
+they act immediately (no Save Changes needed), same as always.
+
+The Status column is a real toggle, not just a readout - click it to
+enable/disable the whole service. Like Enable/Alert level/Delete above,
+this doesn't save immediately either: it joins the same unsaved-changes
+banner, Save Changes/Discard Changes apply or drop it together with
+whatever else is pending.
 
 ### Reordering checks
 

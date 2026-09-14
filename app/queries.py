@@ -212,7 +212,9 @@ def get_or_create_active_layout(db: Session) -> models.DashboardLayout:
 
     layout = db.query(models.DashboardLayout).order_by(models.DashboardLayout.id).first()
     if not layout:
-        layout = models.DashboardLayout(name=DEFAULT_LAYOUT_NAME, sizes={}, is_active=True, is_default=True, card_service_ids=[])
+        layout = models.DashboardLayout(
+            name=DEFAULT_LAYOUT_NAME, sizes={}, is_active=True, is_default=True, card_service_ids=[], theme="dark"
+        )
         db.add(layout)
     else:
         layout.is_active = True
@@ -290,14 +292,14 @@ def resolve_public_theme(db: Session, mobile: bool | None = None) -> str:
     """The theme the public dashboard (all three pages - dashboard/history/
     notifications, for one consistent look across the public site, not just
     the dashboard page itself) actually renders: whichever layout Dashboard
-    Settings currently has pinned for this viewport (see get_public_layout)
-    if IT has its own theme override, else the admin-wide one from Settings
-    > Customizations. Unlike the admin app, there's no separate chrome to
-    keep stable here - see DashboardLayout.theme's docstring."""
-    layout = get_public_layout(db, mobile)
-    if layout.theme:
-        return layout.theme
-    return get_or_create_ui_settings(db).theme
+    Settings currently has pinned for this viewport's (see get_public_layout)
+    own theme - every layout always has one (see DashboardLayout.theme's
+    docstring; "dark" for a legacy row that predates that column existing,
+    same as the fallback everywhere else this is read). Unlike the admin
+    app, there's no separate chrome to keep stable here, and no admin-wide
+    default to fall back to either - Settings > Customizations only ever
+    controls the admin app's own header/nav."""
+    return get_public_layout(db, mobile).theme or "dark"
 
 
 def get_or_create_self_monitoring_state(db: Session) -> models.SelfMonitoringState:

@@ -212,15 +212,22 @@ class DashboardLayout(Base):
     actually shows.
 
     `theme` (one of schemas.THEMES, e.g. "oled"/"coder") is this layout's
-    own override of Settings > Customizations' admin-wide theme
-    (UiSettings.theme below) - None means "just use that". Editable from
-    the Dashboard tab's own theme picker (edit mode), not Settings, since
-    it's a property of the layout being viewed/edited, not a global. Scoped
-    narrowly on the admin side - only #tab-dashboard's background and cards
-    switch, the header/nav stay on the admin-wide theme regardless (see the
-    data-layout-theme attribute in app.js) - but on the public dashboard
-    (which has no separate admin chrome of its own to keep stable) this is
-    effectively the whole page's theme, see queries.resolve_public_theme."""
+    own theme - always an explicit choice, "dark" by default for a newly
+    created layout (and treated as "dark" for a legacy row from before this
+    column existed, where it's still genuinely NULL - see
+    queries.resolve_public_theme and app.js's renderLayoutThemeSelect, both
+    of which fall back to "dark" the same way rather than offering any kind
+    of separate "inherit" option). Editable from the Dashboard tab's own
+    Theme dropdown (top bar, next to Rename/Delete), not Settings, since
+    it's a property of the layout being viewed/edited, not the admin-wide
+    default (Settings > Customizations' UiSettings.theme below, a
+    completely separate setting with no relationship to this one). Scoped
+    narrowly on the admin side - only #tab-dashboard's background/text and
+    cards switch, the header/nav stay on the admin-wide theme regardless
+    (see applyActiveLayoutTheme in common.js) - but on the public dashboard
+    (which has no separate admin chrome of its own to keep stable, and
+    doesn't consult UiSettings at all) this is effectively the whole page's
+    theme, see queries.resolve_public_theme."""
 
     __tablename__ = "dashboard_layouts"
 
@@ -441,11 +448,12 @@ class DashboardSettings(Base):
 class UiSettings(Base):
     """Singleton row (see queries.get_or_create_ui_settings) for Settings >
     Customizations - currently just the admin-wide UI theme (one of
-    schemas.THEMES), applied to the whole admin app (header included) and
-    used as the fallback on the public dashboard wherever the layout being
-    shown doesn't have its own override (see DashboardLayout.theme). A
-    separate table rather than another DashboardSettings column since this
-    is genuinely a different concern (overall UI appearance, not what the
+    schemas.THEMES), applied to the whole admin app, header included. Has
+    no bearing on the public dashboard at all - that always follows
+    whichever layout it's showing (DashboardLayout.theme, see its
+    docstring and queries.resolve_public_theme), never this. A separate
+    table rather than another DashboardSettings column since this is
+    genuinely a different concern (overall UI appearance, not what the
     public port shows) - Customizations is its own Settings sub-tab, not a
     section of Dashboard Settings."""
 

@@ -120,19 +120,18 @@ the moment you let go.
 
 The **Theme** dropdown in the top bar (next to Rename/Delete - not gated
 behind Edit layout, since it's a property of the layout itself rather than
-something that needs drag mode on to change) lets this specific layout
-override Settings > Customizations' admin-wide theme, just for its own
-cards and background. "Default (admin)" means exactly that - no override,
-just follow whatever Customizations is set to.
+something that needs drag mode on to change) sets this specific layout's
+own theme - Dark by default, or any of the other three. There's no
+"inherit the admin theme" option: every layout always has one of the four
+picked explicitly, Dark being what a newly created layout starts with.
 
 On the admin app this is deliberately narrow: only the dashboard tab's own
-background/cards switch, the header and nav bar stay on the admin-wide
-theme no matter which layout (or its theme) you're currently looking at.
-The public dashboard (port 8090) has no separate chrome to protect that
-way, so there this setting effectively becomes the whole page's look -
-Settings > Customizations is only ever the fallback there, for a layout
-that doesn't set its own. See Customizations below for the four themes
-themselves.
+background, text, and cards switch, the header and nav bar stay on
+whatever Settings > Customizations is set to, regardless of which layout
+(or its theme) you're currently looking at. The public dashboard (port
+8090) has no separate chrome to protect that way and doesn't consult
+Customizations at all - there, a layout's theme simply is the whole page's
+look. See Customizations below for the four themes themselves.
 
 ### Dashboard Settings (what the public port shows)
 
@@ -174,12 +173,12 @@ app, header included - from four:
   from the status-OK green, so the two don't read as the same color next
   to each other.
 
-Takes effect immediately on save, no reload needed. Any dashboard layout
-can override this for its own cards/background only - see "Layout theme"
-above; the header stays on whichever of these four is picked here
-regardless of what any individual layout is set to. The public dashboard
-(port 8090) has no separate chrome, so this is also simply its default
-look, for whichever layout it's showing that doesn't set its own theme.
+Takes effect immediately on save, no reload needed. This only ever
+controls the admin app's own header/nav - each dashboard layout has its
+own separate theme for its cards/background (see "Layout theme" above,
+Dark by default there too), and the public dashboard (port 8090), which
+has no separate chrome, follows whichever layout it's showing regardless
+of what's picked here.
 
 ## History
 
