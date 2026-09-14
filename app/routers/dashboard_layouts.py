@@ -28,6 +28,8 @@ def get_active_layout(mobile: bool | None = Query(None), db: Session = Depends(g
 
 @router.post("", response_model=schemas.DashboardLayoutOut, status_code=201)
 def create_layout(payload: schemas.DashboardLayoutCreate, db: Session = Depends(get_db)):
+    if payload.theme is not None and payload.theme not in schemas.THEMES:
+        raise HTTPException(400, f"Unknown theme '{payload.theme}'")
     db.query(models.DashboardLayout).filter_by(is_active=True).update({"is_active": False})
     card_service_ids = payload.card_service_ids
     if card_service_ids is None:
@@ -40,6 +42,7 @@ def create_layout(payload: schemas.DashboardLayoutCreate, db: Session = Depends(
         is_active=True,
         is_compact=payload.is_compact,
         is_mobile=payload.is_mobile,
+        theme=payload.theme,
     )
     db.add(layout)
     db.commit()
@@ -62,6 +65,8 @@ def update_layout(layout_id: int, payload: schemas.DashboardLayoutUpdate, db: Se
         raise HTTPException(404, "Layout not found")
     if payload.card_service_ids is not None and layout.is_default:
         raise HTTPException(400, "The All Services layout always shows every service and can't be trimmed")
+    if payload.theme is not None and payload.theme not in schemas.THEMES:
+        raise HTTPException(400, f"Unknown theme '{payload.theme}'")
     if payload.name is not None:
         layout.name = payload.name
     if payload.sizes is not None:
@@ -70,6 +75,10 @@ def update_layout(layout_id: int, payload: schemas.DashboardLayoutUpdate, db: Se
         layout.columns = payload.columns
     if payload.card_service_ids is not None:
         layout.card_service_ids = payload.card_service_ids
+    if payload.clear_theme:
+        layout.theme = None
+    elif payload.theme is not None:
+        layout.theme = payload.theme
     db.commit()
     db.refresh(layout)
     return layout

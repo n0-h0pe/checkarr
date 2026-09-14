@@ -1,5 +1,8 @@
 from fastapi import APIRouter, Depends
+from sqlalchemy.orm import Session
 
+from ..database import get_db
+from ..queries import get_or_create_ui_settings
 from ..schemas import SERVICE_TYPES
 from ..security import require_auth
 from ..version import BUILD_DATE, VERSION
@@ -463,12 +466,20 @@ NOTIFICATION_CHANNEL_TYPE_META = [
 
 
 @router.get("")
-def get_meta():
+def get_meta(db: Session = Depends(get_db)):
+    # ui_theme (Settings > Customizations' admin-wide theme) is genuinely
+    # needed on the public app too - it's the fallback whenever the layout
+    # being shown there has no theme override of its own (see
+    # queries.resolve_public_theme/applyActiveLayoutTheme in common.js) -
+    # unlike most of this endpoint, which public only reads for its own
+    # service/check-type icons and labels.
+    ui_theme = get_or_create_ui_settings(db).theme
     return {
         "service_types": SERVICE_TYPES,
         "check_types": CHECK_TYPE_META,
         "service_type_icons": SERVICE_TYPE_ICONS,
         "service_type_defaults": SERVICE_TYPE_DEFAULTS,
         "notification_channel_types": NOTIFICATION_CHANNEL_TYPE_META,
+        "ui_theme": ui_theme,
         "build": {"version": VERSION, "build_date": BUILD_DATE},
     }

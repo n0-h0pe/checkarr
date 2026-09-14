@@ -1094,9 +1094,34 @@ function layoutVisibleStatuses(statuses, layout) {
   return statuses.filter((s) => visible.has(s.service.id));
 }
 
+// The active layout's own theme override (Dashboard tab's theme picker,
+// edit mode), if it has one - see DashboardLayout.theme's docstring for
+// why admin and public apply this differently. Distinguishes the two by
+// whether #tab-dashboard exists at all rather than a public/admin flag -
+// it's simply not part of public.html's markup.
+function applyActiveLayoutTheme(layout) {
+  const theme = layout && layout.theme;
+  const dashboardTab = document.getElementById("tab-dashboard");
+  if (dashboardTab) {
+    // Admin: scoped to the dashboard tab's own background/cards - the
+    // header/nav stay on whatever Settings > Customizations set globally,
+    // see html[data-theme] vs #tab-dashboard[data-layout-theme] in style.css.
+    if (theme) dashboardTab.dataset.layoutTheme = theme;
+    else delete dashboardTab.dataset.layoutTheme;
+  } else {
+    // Public: no separate chrome to protect, so this effectively is the
+    // whole page's theme - falls back to the admin-wide default
+    // (state.meta.ui_theme) exactly like resolve_public_theme does
+    // server-side, just re-resolved here against whatever viewport-correct
+    // layout ensureActiveLayout just settled on.
+    document.documentElement.dataset.theme = theme || (state.meta && state.meta.ui_theme) || "dark";
+  }
+}
+
 async function loadDashboard(cardOpts = {}) {
   const statuses = await ensureStatuses(true);
   const layout = await ensureActiveLayout();
+  applyActiveLayoutTheme(layout);
   const grid = $("#dashboard-grid");
   if (!grid) return;
   grid.innerHTML = "";

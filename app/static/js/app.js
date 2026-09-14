@@ -27,6 +27,7 @@ function switchSettingsSubTab(subtab) {
   if (subtab === "downtime") loadServiceGroups().then(loadSchedules);
   if (subtab === "pruning") loadLogPruningSettings();
   if (subtab === "dashboard-settings") loadDashboardSettings();
+  if (subtab === "customizations") loadUiSettings();
 }
 
 function switchTab(tab) {
@@ -69,6 +70,7 @@ async function loadDashboardAdmin() {
   loadLayoutList();
   renderAddCardControl();
   updateCompactBtn();
+  renderLayoutThemeSelect();
 }
 
 // Compact is fixed on a layout at creation, not a flag flippable on an
@@ -466,8 +468,21 @@ function discardChanges() {
 function renderServiceRow(svc) {
   const tr = el("tr", { class: "service-row" });
 
+  // The expand/collapse toggle for the checks list below sits in its own
+  // column here, right next to Type - the same control it always was
+  // (collapsedServiceIds, same chevron), just moved up out of the detail
+  // panel so it reads as part of the row's own at-a-glance info instead of
+  // one more thing inside an already-busy sub-panel. renderChecksPanel
+  // below still owns wiring its click behavior, since that's where the
+  // checks-grid it actually shows/hides gets built.
+  const isCollapsed = collapsedServiceIds.has(svc.id);
+  const chevron = el("span", { class: "checks-toggle-chevron" + (isCollapsed ? " collapsed" : "") });
+  chevron.innerHTML = CHEVRON_DOWN_ICON;
+  const toggleBtn = el("button", { class: "checks-toggle" }, [chevron, el("span", { text: `Checks (${svc.checks.length})` })]);
+
   tr.appendChild(el("td", { "data-label": "Name", text: svc.name }));
   tr.appendChild(el("td", { "data-label": "Type" }, el("span", {}, [typeIcon(svc), " " + svc.type])));
+  tr.appendChild(el("td", { "data-label": "Checks" }, toggleBtn));
   tr.appendChild(el("td", { "data-label": "Local", text: svc.local_url || "-" }));
   tr.appendChild(el("td", { "data-label": "Remote", text: svc.remote_url || "-" }));
   tr.appendChild(el("td", { "data-label": "Interval", text: svc.poll_interval_seconds ? `${svc.poll_interval_seconds}s` : "default" }));
@@ -479,7 +494,7 @@ function renderServiceRow(svc) {
   ]);
   tr.appendChild(el("td", {}, actions));
 
-  const detailRow = el("tr", { class: "service-detail-row" }, el("td", { colspan: "7" }, renderChecksPanel(svc)));
+  const detailRow = el("tr", { class: "service-detail-row" }, el("td", { colspan: "8" }, renderChecksPanel(svc, toggleBtn, chevron)));
 
   const wrapper = document.createDocumentFragment();
   wrapper.appendChild(tr);
@@ -487,7 +502,7 @@ function renderServiceRow(svc) {
   return wrapper;
 }
 
-function renderChecksPanel(svc) {
+function renderChecksPanel(svc, toggleBtn, chevron) {
   const isCollapsed = collapsedServiceIds.has(svc.id);
   const panel = el("div", { class: "checks-subpanel" });
   const actions = [el("button", { class: "small primary", onclick: () => openCheckModal(svc) }, "+ Add check")];
@@ -504,20 +519,7 @@ function renderChecksPanel(svc) {
       )
     );
   }
-  // The expand/collapse toggle lives right above the list it controls
-  // (rather than off at the top of the whole service row, far from what it
-  // actually does) and only hides the checks-grid itself - Add check/Scan
-  // libraries above it stay usable either way.
-  const toggleBtn = el("button", { class: "checks-toggle" });
-  const chevron = el("span", { class: "checks-toggle-chevron" + (isCollapsed ? " collapsed" : "") });
-  chevron.innerHTML = CHEVRON_DOWN_ICON;
-  toggleBtn.append(chevron, el("span", { text: `Checks (${svc.checks.length})` }));
-  panel.appendChild(
-    el("div", { style: "display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;" }, [
-      toggleBtn,
-      el("div", { style: "display:flex; gap:6px;" }, actions),
-    ])
-  );
+  panel.appendChild(el("div", { style: "display:flex; justify-content:flex-end; margin-bottom:6px;" }, actions));
   if (svc.checks.length === 0) {
     panel.appendChild(el("div", { class: "text-dim", text: "No checks configured" }));
     return panel;
@@ -2201,6 +2203,95 @@ async function submitDashboardSettingsForm(ev) {
   }
 }
 
+// ---------- settings: customizations (UI theme) ----------
+
+// Preview colors match style.css's theme blocks exactly - kept here too
+// (rather than reading them out of computed CSS somehow) since a swatch
+// needs to show every theme's colors at once, not just whichever one is
+// currently applied to the page.
+const THEME_META = [
+  { value: "dark", label: "Dark", bg: "#0f1419", accent: "#4f8cff" },
+  { value: "white", label: "White", bg: "#f4f6f9", accent: "#2f6fe4" },
+  { value: "oled", label: "OLED", bg: "#000000", accent: "#4f8cff" },
+  { value: "coder", label: "Coder", bg: "#000000", accent: "#a6e22e" },
+];
+
+async function loadUiSettings() {
+  let s;
+  try {
+    s = await api("/api/ui-settings");
+  } catch (e) {
+    toast("Failed to load Customizations: " + e.message, true);
+    return;
+  }
+  renderThemePicker(s.theme);
+}
+
+function renderThemePicker(selected) {
+  const container = $("#ui-theme-picker");
+  container.innerHTML = "";
+  for (const t of THEME_META) {
+    container.appendChild(
+      el(
+        "button",
+        { type: "button", class: "theme-swatch" + (t.value === selected ? " selected" : ""), onclick: () => selectUiTheme(t.value) },
+        [
+          el("span", { class: "theme-swatch-preview", style: `background:${t.bg};` }, el("span", { class: "theme-swatch-dot", style: `background:${t.accent};` })),
+          el("span", { text: t.label }),
+        ]
+      )
+    );
+  }
+}
+
+async function selectUiTheme(theme) {
+  try {
+    const updated = await api("/api/ui-settings", { method: "PUT", body: JSON.stringify({ theme }) });
+    // Applies immediately - Settings > Customizations is otherwise just
+    // another form you'd have to reload the page to see take effect.
+    if (state.meta) state.meta.ui_theme = updated.theme;
+    document.documentElement.dataset.theme = updated.theme;
+    renderThemePicker(updated.theme);
+    toast("Theme saved");
+  } catch (e) {
+    toast("Save failed: " + e.message, true);
+  }
+}
+
+// The active layout's own theme override - lives in the top bar next to
+// Rename/Delete (not gated behind Edit layout, same as those) since it's a
+// property of the layout itself, not something that needs drag mode on to
+// change. Re-rendered by loadDashboardAdmin every time the active layout
+// does, so switching layouts always shows that layout's own saved value.
+function renderLayoutThemeSelect() {
+  const select = $("#layout-theme-select");
+  if (!select) return;
+  const current = (state.activeLayout && state.activeLayout.theme) || "";
+  select.innerHTML = "";
+  select.appendChild(el("option", { value: "", text: "Theme: Default (admin)" }));
+  for (const t of THEME_META) {
+    select.appendChild(el("option", { value: t.value, text: `Theme: ${t.label}` }));
+  }
+  select.value = current;
+}
+
+async function onLayoutThemeSelectChange() {
+  if (!state.activeLayout || !state.activeLayout.id) return;
+  const value = $("#layout-theme-select").value;
+  try {
+    state.activeLayout = await api(`/api/dashboard-layouts/${state.activeLayout.id}`, {
+      method: "PUT",
+      body: JSON.stringify(value ? { theme: value } : { clear_theme: true }),
+    });
+  } catch (e) {
+    toast("Could not save layout theme: " + e.message, true);
+    renderLayoutThemeSelect(); // revert the dropdown back to the actually-stored value
+    return;
+  }
+  applyActiveLayoutTheme(state.activeLayout);
+  toast("Layout theme saved");
+}
+
 async function pruneNow() {
   if (!confirm("Delete check history older than the configured retention right now?")) return;
   const btn = $("#prune-now-btn");
@@ -2271,6 +2362,7 @@ async function init() {
   $("#layout-new-btn").addEventListener("click", newLayoutFromCurrent);
   $("#layout-rename-btn").addEventListener("click", renameActiveLayout);
   $("#layout-delete-btn").addEventListener("click", deleteActiveLayout);
+  $("#layout-theme-select").addEventListener("change", onLayoutThemeSelectChange);
   $("#layout-add-card-select").addEventListener("change", (e) => {
     const id = Number(e.target.value);
     if (id) addCardToLayout(id);

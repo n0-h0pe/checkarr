@@ -31,6 +31,7 @@ def init_db() -> None:
         get_or_create_dashboard_settings,
         get_or_create_log_pruning_settings,
         get_or_create_self_monitoring_state,
+        get_or_create_ui_settings,
     )
 
     db = SessionLocal()
@@ -39,6 +40,7 @@ def init_db() -> None:
         get_or_create_log_pruning_settings(db)
         get_or_create_dashboard_settings(db)
         get_or_create_self_monitoring_state(db)
+        get_or_create_ui_settings(db)
     finally:
         db.close()
 
@@ -130,6 +132,8 @@ def _run_migrations() -> None:
             conn.exec_driver_sql("ALTER TABLE dashboard_layouts ADD COLUMN is_compact BOOLEAN DEFAULT 0")
         if "is_mobile" not in layout_cols:
             conn.exec_driver_sql("ALTER TABLE dashboard_layouts ADD COLUMN is_mobile BOOLEAN DEFAULT 0")
+        if "theme" not in layout_cols:
+            conn.exec_driver_sql("ALTER TABLE dashboard_layouts ADD COLUMN theme VARCHAR(20)")
 
         downtime_cols = _table_columns(conn, "downtime_schedules")
         if "is_instant" not in downtime_cols:

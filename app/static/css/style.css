@@ -1,3 +1,15 @@
+/* Settings > Customizations (admin-wide, UiSettings.theme) and each
+   dashboard layout's own optional override (DashboardLayout.theme) share
+   these same four palettes - see the data-theme attribute on <html>
+   (index.html/public.html, server-rendered from whichever is current, see
+   main.py's index route/public.py) and the data-layout-theme attribute
+   app.js applies to #tab-dashboard alone when the active layout overrides
+   it (never the header/nav - see updateThemeAttributes in app.js). "dark"
+   is both the bare :root default below AND has its own explicit
+   [data-theme="dark"]/[data-layout-theme="dark"] block, so a layout
+   override can always name it explicitly to revert to the default even
+   when some other theme is active globally - unlike :root, which nothing
+   ever attribute-selects directly. */
 :root {
   color-scheme: dark;
   --bg: #0f1419;
@@ -14,6 +26,37 @@
   --disabled: #4a5560;
   --radius: 8px;
 }
+
+html[data-theme="dark"], #tab-dashboard[data-layout-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0f1419; --bg-panel: #161c24; --bg-panel-alt: #1c2430; --border: #2a3441;
+  --text: #e6edf3; --text-dim: #8b98a5; --accent: #4f8cff;
+  --ok: #2ecc71; --warn: #f5a623; --fail: #e5484d; --unknown: #6b7785; --disabled: #4a5560;
+}
+
+html[data-theme="white"], #tab-dashboard[data-layout-theme="white"] {
+  color-scheme: light;
+  --bg: #f4f6f9; --bg-panel: #ffffff; --bg-panel-alt: #eef1f6; --border: #d7dde4;
+  --text: #1a222c; --text-dim: #5b6673; --accent: #2f6fe4;
+  --ok: #1e9e56; --warn: #b9720a; --fail: #d13438; --unknown: #8a94a0; --disabled: #b7bfc7;
+}
+
+/* OLED and Coder share the same true-black palette (the point of both -
+   genuinely off pixels on an OLED panel, not just "very dark navy" like
+   the default) and differ only in --accent, set separately below. */
+html[data-theme="oled"], #tab-dashboard[data-layout-theme="oled"],
+html[data-theme="coder"], #tab-dashboard[data-layout-theme="coder"] {
+  color-scheme: dark;
+  --bg: #000000; --bg-panel: #0a0a0a; --bg-panel-alt: #131313; --border: #262626;
+  --text: #e6edf3; --text-dim: #8b98a5;
+  --ok: #2ecc71; --warn: #f5a623; --fail: #e5484d; --unknown: #6b7785; --disabled: #4a5560;
+}
+html[data-theme="oled"], #tab-dashboard[data-layout-theme="oled"] { --accent: #4f8cff; }
+/* A deliberately different green from --ok above (terminal/Monokai-green,
+   not flat-UI-green) - the two sit right next to each other constantly
+   (status dots against accent-colored buttons/links) and needed to read as
+   clearly different colors, not near-duplicates. */
+html[data-theme="coder"], #tab-dashboard[data-layout-theme="coder"] { --accent: #a6e22e; }
 
 * { box-sizing: border-box; }
 
@@ -452,6 +495,24 @@ table th { color: var(--text-dim); font-weight: 600; font-size: 12px; text-trans
 .field textarea { resize: vertical; min-height: 60px; }
 .field.checkbox { display: flex; align-items: center; gap: 8px; }
 .field.checkbox label { margin: 0; text-transform: none; font-size: 13px; color: var(--text); }
+
+/* Settings > Customizations theme picker (renderThemePicker in app.js) -
+   each swatch previews that theme's own background/accent regardless of
+   which theme is currently applied to the page, so picking one doesn't
+   require seeing it live first. */
+.theme-picker { display: flex; gap: 10px; flex-wrap: wrap; }
+.theme-swatch {
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  background: var(--bg-panel-alt); border: 2px solid var(--border); border-radius: var(--radius);
+  padding: 8px; cursor: pointer; color: var(--text); font-size: 12px; width: 84px;
+}
+.theme-swatch:hover { border-color: var(--text-dim); }
+.theme-swatch.selected { border-color: var(--accent); }
+.theme-swatch-preview {
+  width: 100%; height: 40px; border-radius: 6px; border: 1px solid rgba(255,255,255,.08);
+  display: flex; align-items: flex-end; justify-content: flex-end; padding: 6px;
+}
+.theme-swatch-dot { width: 10px; height: 10px; border-radius: 50%; }
 .info-icon {
   display: inline-flex; align-items: center; justify-content: center;
   color: var(--text-dim); font-size: 14px; cursor: help; line-height: 1;

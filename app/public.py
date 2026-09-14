@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 from . import schemas
 from .config import settings
 from .database import get_db
-from .queries import get_active_issues, get_history, get_public_layout, get_service_statuses, resolve_layout_for_viewport
+from .queries import get_active_issues, get_history, get_public_layout, get_service_statuses, resolve_layout_for_viewport, resolve_public_theme
 from .routers.meta import get_meta
 from .version import VERSION
 
@@ -50,8 +50,8 @@ def notifications(db: Session = Depends(get_db)):
 
 
 @public_app.get("/api/meta")
-def meta():
-    return get_meta()
+def meta(db: Session = Depends(get_db)):
+    return get_meta(db)
 
 
 @public_app.get("/api/dashboard-layouts/active", response_model=schemas.DashboardLayoutOut)
@@ -68,18 +68,27 @@ def active_layout(mobile: bool | None = Query(None), db: Session = Depends(get_d
 
 
 @public_app.get("/", response_class=HTMLResponse)
-def dashboard_page(request: Request):
-    return templates.TemplateResponse(request, "public.html", {"page": "dashboard", "version": VERSION})
+def dashboard_page(request: Request, db: Session = Depends(get_db)):
+    # Best-effort at server-render time (no viewport info to give
+    # resolve_public_theme here, same tradeoff as active_layout's own
+    # `mobile` query param not existing yet at this point) - corrected
+    # client-side once /api/dashboard-layouts/active resolves the actual
+    # viewport-correct layout, same pattern the layout/card rendering
+    # itself already uses (see ensureActiveLayout in common.js).
+    theme = resolve_public_theme(db)
+    return templates.TemplateResponse(request, "public.html", {"page": "dashboard", "version": VERSION, "theme": theme})
 
 
 @public_app.get("/history", response_class=HTMLResponse)
-def history_page(request: Request):
-    return templates.TemplateResponse(request, "public.html", {"page": "history", "version": VERSION})
+def history_page(request: Request, db: Session = Depends(get_db)):
+    theme = resolve_public_theme(db)
+    return templates.TemplateResponse(request, "public.html", {"page": "history", "version": VERSION, "theme": theme})
 
 
 @public_app.get("/notifications", response_class=HTMLResponse)
-def notifications_page(request: Request):
-    return templates.TemplateResponse(request, "public.html", {"page": "notifications", "version": VERSION})
+def notifications_page(request: Request, db: Session = Depends(get_db)):
+    theme = resolve_public_theme(db)
+    return templates.TemplateResponse(request, "public.html", {"page": "notifications", "version": VERSION, "theme": theme})
 
 
 @public_app.get("/healthz")
