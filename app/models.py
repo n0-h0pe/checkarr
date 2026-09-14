@@ -401,20 +401,20 @@ class DashboardSettings(Base):
     above), not a separate flag - both dropdowns simply offer every layout
     in their own device pool, compact or not.
 
-    `public_require_compact` is retired - the public dashboard used to
-    support restricting its pin to compact layouts only, before Mobile
-    layouts existed as their own pool; picking a Desktop vs a Mobile
-    layout now happens automatically by viewport instead, which made that
-    restriction redundant. Left in place unused rather than dropped, same
-    as every other retired column in database.py.
-
-    `uptime_bar_count` is how many bars each card's uptime strip is divided
-    into for every ranged option ("Last 5 minutes" through "Last 1 week") -
-    read by both apps off /api/meta (see routers/meta.py) since it affects
-    rendering, not just the public pin above. Deliberately has nothing to do
-    with "Just the last poll", which always renders exactly one bar (the
-    live status already in hand) regardless of this setting - see
-    loadUptimeStrip in common.js."""
+    `public_require_compact` and `uptime_bar_count` are both retired.
+    `public_require_compact` - the public dashboard used to support
+    restricting its pin to compact layouts only, before Mobile layouts
+    existed as their own pool; picking a Desktop vs a Mobile layout now
+    happens automatically by viewport instead, which made that restriction
+    redundant. `uptime_bar_count` was a brief attempt at a single global bar
+    count for every card's uptime strip - replaced by a per-card count
+    instead (DashboardLayout.sizes[id].bars, see common.js's
+    effectiveUptimeBarCount/renderUptimeBarControl) once it turned out a
+    count that looked fine on a wide card just broke (bars rendering at
+    0-width and disappearing) on a narrower one, with no way to have both
+    sizes on one dashboard under a single global number. Both left in place
+    unused rather than dropped, same as every other retired column in
+    database.py."""
 
     __tablename__ = "dashboard_settings"
 

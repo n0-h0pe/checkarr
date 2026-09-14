@@ -2,7 +2,7 @@
 // dashboard (public.js). Keeps their read-only rendering identical without
 // the public surface ever importing anything that can mutate state.
 
-const state = { meta: null, services: [], statuses: [], channels: [], groups: [], schedules: [], tab: "dashboard", activeLayout: null, lastGridColumns: null };
+const state = { meta: null, services: [], statuses: [], channels: [], groups: [], schedules: [], tab: "dashboard", activeLayout: null, lastGridColumns: null, lastCardPositions: null };
 
 // Dashboard tile grid: each track is one unit (px). A card's position/size
 // is stored as {x, y, w, h} in 1-based grid-line units and applied as
@@ -60,13 +60,102 @@ const UPTIME_RANGES = [
   { value: "10080", minutes: 10080, label: "Last 1 week" },
 ];
 const DEFAULT_UPTIME_RANGE = "2880";
-// Settings > Dashboard Settings > "Uptime bars per card" (DashboardSettings.
-// uptime_bar_count, 1-200) - fetched once via /api/meta, same as every other
-// app-wide config both apps share (see loadMeta). This fallback only ever
-// matters for the brief window before that first fetch resolves.
-const DEFAULT_UPTIME_BAR_COUNT = 20;
-function uptimeBarCount() {
-  return (state.meta && state.meta.uptime_bar_count) || DEFAULT_UPTIME_BAR_COUNT;
+
+// Per-card uptime bar count (Dashboard > Edit layout > the "Bars" field
+// above each card's strip, admin only) - stored as DashboardLayout.sizes[id].bars
+// alongside that card's w/h/x/y, so different cards on the same layout can
+// genuinely have different counts (unlike the single global setting this
+// replaced - a fixed count that looked fine on a wide card just broke on a
+// narrow one, and there was no way to have both on one dashboard).
+//
+// A card's own current width caps how high this can be set at all: past a
+// certain point, `.uptime-strip`'s `gap: 2px` between an ever-growing number
+// of `flex: 1` bars eats more of the available width than the bars
+// themselves have left, and they start rendering at 0/negative width -
+// invisible or visually corrupted, not just "thin". maxUptimeBarsForGridWidth
+// below is a straight-line ramp between two empirically-picked anchors: the
+// narrowest any card can ever be (MIN_CARD_W_COMPACT, 8 grid units/160px)
+// caps at UPTIME_BAR_MIN_LIMIT, and anything from 400px/20 units up gets the
+// full UPTIME_BAR_MAX_LIMIT - deliberately in grid units (the same number
+// dragged/persisted as w, and shown by the resize-debug badge in
+// attachResizeHandle below) rather than a measured pixel width, so what you
+// see while dragging, what gets saved, and what this ramp is keyed to are
+// all the same number.
+const DEFAULT_CARD_UPTIME_BARS = 20;
+const UPTIME_BAR_MIN_LIMIT = 50;
+const UPTIME_BAR_MAX_LIMIT = 200;
+const UPTIME_BAR_MIN_WIDTH_UNITS = MIN_CARD_W_COMPACT; // 8 units = 160px
+const UPTIME_BAR_MAX_WIDTH_UNITS = 400 / GRID_UNIT; // 20 units = 400px
+
+function maxUptimeBarsForGridWidth(w) {
+  if (w <= UPTIME_BAR_MIN_WIDTH_UNITS) return UPTIME_BAR_MIN_LIMIT;
+  if (w >= UPTIME_BAR_MAX_WIDTH_UNITS) return UPTIME_BAR_MAX_LIMIT;
+  const t = (w - UPTIME_BAR_MIN_WIDTH_UNITS) / (UPTIME_BAR_MAX_WIDTH_UNITS - UPTIME_BAR_MIN_WIDTH_UNITS);
+  return Math.round(UPTIME_BAR_MIN_LIMIT + t * (UPTIME_BAR_MAX_LIMIT - UPTIME_BAR_MIN_LIMIT));
+}
+
+// Falls back to this pool's own default card width when a card hasn't been
+// individually placed/resized yet (no positions entry, or none computed at
+// all outside a dashboard render, e.g. before the very first one) - an
+// approximation (computeCardLayout's own auto-pack might land it somewhere
+// slightly different), but only ever feeds a bar-count ceiling, not
+// anything persisted, so exactness doesn't matter here.
+function resolveCardGridWidth(serviceId, compact) {
+  const pos = state.lastCardPositions && state.lastCardPositions.get(serviceId);
+  if (pos && Number.isFinite(pos.w)) return pos.w;
+  return compact ? DEFAULT_CARD_W_COMPACT : DEFAULT_CARD_W;
+}
+
+// Single source of truth for "how many bars does this card actually draw
+// right now" - shared by loadUptimeStrip (which draws them) and the Bars
+// control (which needs the same number to initialize its input) so they
+// can never disagree with each other.
+function effectiveUptimeBarCount(serviceId, compact) {
+  const layout = state.activeLayout;
+  const saved = layout && layout.sizes && layout.sizes[String(serviceId)];
+  const stored = saved && Number.isFinite(saved.bars) ? saved.bars : DEFAULT_CARD_UPTIME_BARS;
+  const w = resolveCardGridWidth(serviceId, compact);
+  return Math.max(1, Math.min(stored, maxUptimeBarsForGridWidth(w)));
+}
+
+// The "Bars" control rendered above a card's uptime strip in edit mode -
+// see renderServiceCard. min/max on the <input> itself do the actual
+// clamping on manual entry (a browser number input already refuses to leave
+// a value past those via its up/down arrows, and reports validity on
+// out-of-range typed values); the change handler below still re-clamps
+// defensively, since a typed value bypasses the arrows entirely.
+function renderUptimeBarControl(svc, pos, compact, onLayoutChange) {
+  const w = pos ? pos.w : resolveCardGridWidth(svc.id, compact);
+  const maxBars = maxUptimeBarsForGridWidth(w);
+  const value = effectiveUptimeBarCount(svc.id, compact);
+
+  const input = el("input", {
+    type: "number",
+    class: "uptime-bar-count-input",
+    min: "1",
+    max: String(maxBars),
+    value: String(value),
+    title: `Uptime bars shown on this card (1-${maxBars} at its current width)`,
+  });
+  input.addEventListener("change", async () => {
+    const max = Number(input.max) || UPTIME_BAR_MAX_LIMIT;
+    let next = Math.round(Number(input.value));
+    if (!Number.isFinite(next) || next < 1) next = 1;
+    if (next > max) next = max;
+    input.value = String(next);
+    // Must actually finish before redrawing - persistCardLayout updates
+    // state.activeLayout.sizes[id].bars asynchronously, and
+    // effectiveUptimeBarCount reads straight off that same state, so
+    // calling loadUptimeStrip before this resolves would just redraw with
+    // whatever was there before the change.
+    if (onLayoutChange) await onLayoutChange([{ id: svc.id, patch: { bars: next } }]);
+    loadUptimeStrip(svc.id);
+  });
+
+  return el("div", { class: "uptime-bar-control" }, [
+    el("span", { class: "text-dim", text: "Bars" }),
+    input,
+  ]);
 }
 
 function loadUptimeRange() {
@@ -579,6 +668,16 @@ function renderServiceCard(s, opts = {}, pos, positions) {
     );
   }
 
+  // "Over the top of every card's bar" per-card control - edit mode only,
+  // since it mutates layout state (DashboardLayout.sizes[id].bars) the same
+  // way drag/resize does. Its max is this card's *current* width-derived
+  // ceiling (maxUptimeBarsForGridWidth), so two cards on the same dashboard
+  // can genuinely carry different counts, and a card that's since been made
+  // narrower can't keep offering a count that would glitch at its new size.
+  if (opts.editable) {
+    body.appendChild(renderUptimeBarControl(svc, pos, opts.compact, opts.onLayoutChange));
+  }
+
   const strip = el("div", { class: "uptime-strip", id: `strip-${svc.id}` });
   body.appendChild(strip);
 
@@ -781,6 +880,33 @@ function attachResizeHandle(card, serviceId, pos, onLayoutChange, mobilePosition
   const handle = el("div", { class: "resize-handle", title: heightOnly ? "Drag to change height" : "Drag to resize" });
   card.appendChild(handle);
 
+  // Troubleshooting aid: this card's own internal grid width/height (the
+  // same w/h persisted to DashboardLayout.sizes, in GRID_UNIT-px units) and
+  // the uptime bar-count ceiling that width currently implies
+  // (maxUptimeBarsForGridWidth), shown live while actively dragging - so a
+  // "why are my bars glitching/invisible at this size" question has a
+  // direct, on-screen answer instead of needing to guess pixel math by eye.
+  const debugBadge = el("div", { class: "resize-debug-badge", hidden: true });
+  card.appendChild(debugBadge);
+
+  function updateDebugBadge() {
+    debugBadge.textContent = `${pos.w} × ${pos.h} grid · max ${maxUptimeBarsForGridWidth(pos.w)} bars`;
+  }
+
+  // Keeps the Bars input (renderUptimeBarControl) honest live during the
+  // drag, not just after it ends - both its max attribute (so the browser's
+  // own up/down arrows and typed-value validation reflect the card's
+  // current width) and its displayed value if that's now above the new
+  // ceiling. Purely visual until pointerup actually persists a bars change
+  // of its own or a resize of this card's w/h - this never writes anything.
+  function updateBarControlMax() {
+    const input = card.querySelector(".uptime-bar-count-input");
+    if (!input) return;
+    const max = maxUptimeBarsForGridWidth(pos.w);
+    input.max = String(max);
+    if (Number(input.value) > max) input.value = String(max);
+  }
+
   let start = null;
 
   function onPointerMove(e) {
@@ -792,11 +918,14 @@ function attachResizeHandle(card, serviceId, pos, onLayoutChange, mobilePosition
     pos.h = Math.max(minH, start.h + Math.round(dy / GRID_UNIT));
     card.style.gridColumn = `${pos.x} / span ${pos.w}`;
     card.style.gridRow = `${pos.y} / span ${pos.h}`;
+    updateDebugBadge();
+    if (!heightOnly) updateBarControlMax();
   }
 
-  function onPointerUp() {
+  async function onPointerUp() {
     document.removeEventListener("pointermove", onPointerMove);
     document.removeEventListener("pointerup", onPointerUp);
+    debugBadge.hidden = true;
     if (!onLayoutChange || (pos.h === start.h && pos.w === start.w)) return;
 
     if (heightOnly) {
@@ -808,16 +937,22 @@ function attachResizeHandle(card, serviceId, pos, onLayoutChange, mobilePosition
       // included separately, since a card is never "moved" by its own
       // resize, only everything after it.
       const heightPatch = { id: serviceId, patch: { h: pos.h } };
-      onLayoutChange([heightPatch, ...renumberMobileList(orderedIds, mobilePositions, mobileTotalCols())]);
+      await onLayoutChange([heightPatch, ...renumberMobileList(orderedIds, mobilePositions, mobileTotalCols())]);
     } else {
-      onLayoutChange([{ id: serviceId, patch: { w: pos.w, h: pos.h } }]);
+      await onLayoutChange([{ id: serviceId, patch: { w: pos.w, h: pos.h } }]);
     }
+    // Width just changed - redraw the strip so it's actually drawing at
+    // whatever count this new width now caps out at, not still showing
+    // however many bars fit the size it was before this drag.
+    loadUptimeStrip(serviceId);
   }
 
   handle.addEventListener("pointerdown", (e) => {
     e.preventDefault();
     e.stopPropagation();
     start = { px: e.clientX, py: e.clientY, w: pos.w, h: pos.h };
+    debugBadge.hidden = false;
+    updateDebugBadge();
     document.addEventListener("pointermove", onPointerMove);
     document.addEventListener("pointerup", onPointerUp);
   });
@@ -914,7 +1049,7 @@ async function loadUptimeStrip(serviceId) {
     if (!worst || order[r.status] > order[worst]) byTs.set(r.timestamp, r.status);
   }
 
-  const barCount = uptimeBarCount();
+  const barCount = effectiveUptimeBarCount(serviceId, !!(state.activeLayout && state.activeLayout.is_compact));
   const now = Date.now();
   const rangeMs = range.minutes * 60000;
   const rangeStart = now - rangeMs;
@@ -991,6 +1126,12 @@ async function loadDashboard(cardOpts = {}) {
   if (refresh) refresh.textContent = "Updated " + new Date().toLocaleTimeString();
 
   const positions = computeCardLayout(visible, opts.compact, opts.mobile);
+  // Cached for effectiveUptimeBarCount/resolveCardGridWidth - the same
+  // position objects stay live-mutated in place during a resize drag (see
+  // attachResizeHandle), so reading pos.w back out through this later still
+  // reflects an in-progress drag, not just whatever was true when this
+  // render pass started.
+  state.lastCardPositions = positions;
   for (const s of visible) {
     grid.appendChild(renderServiceCard(s, opts, positions.get(s.service.id), positions));
   }

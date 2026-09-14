@@ -485,7 +485,6 @@ class DashboardSettingsOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     public_layout_id: int | None
     public_layout_id_mobile: int | None
-    uptime_bar_count: int
     updated_at: datetime
 
 
@@ -494,4 +493,3 @@ class DashboardSettingsUpdate(BaseModel):
     clear_public_layout: bool = False
     public_layout_id_mobile: int | None = None
     clear_public_layout_mobile: bool = False
-    uptime_bar_count: int | None = Field(default=None, ge=1, le=200)
