@@ -118,12 +118,11 @@ the moment you let go.
 
 ### Layout theme
 
-The **Theme** dropdown in the top bar (next to Rename/Delete - not gated
-behind Edit layout, since it's a property of the layout itself rather than
-something that needs drag mode on to change) sets this specific layout's
-own theme - Dark by default, or any of the other three. There's no
-"inherit the admin theme" option: every layout always has one of the four
-picked explicitly, Dark being what a newly created layout starts with.
+The **Theme** dropdown in the top bar (next to Rename/Delete, edit mode
+only) sets this specific layout's own theme - Dark by default, or any of
+the other three. There's no "inherit the admin theme" option: every layout
+always has one of the four picked explicitly, Dark being what a newly
+created layout starts with.
 
 On the admin app this is deliberately narrow: only the dashboard tab's own
 background, text, and cards switch, the header and nav bar stay on
@@ -131,7 +130,9 @@ whatever Settings > Customizations is set to, regardless of which layout
 (or its theme) you're currently looking at. The public dashboard (port
 8090) has no separate chrome to protect that way and doesn't consult
 Customizations at all - there, a layout's theme simply is the whole page's
-look. See Customizations below for the four themes themselves.
+look, unless Dashboard Settings' "Public port theme override" is set (see
+below), which wins outright over any layout's own theme. See
+Customizations below for the four themes themselves.
 
 ### Dashboard Settings (what the public port shows)
 
@@ -156,6 +157,15 @@ has switched to, so you can rearrange your own view without disturbing
 what a housemate or a status page pointed at port 8090 sees. Whether a pin
 renders compact simply follows whether the layout you picked for it is one
 of your compact ones - there's nothing separate to configure for that.
+
+**Public port theme override**: forces port 8090 to always render this
+theme, full stop - overriding whichever layout is actually pinned above
+and that layout's own theme entirely. Leave it at "No override" for the
+normal behavior (follow the pinned layout's own theme, see "Layout theme"
+above); pick one of the four to lock the public dashboard to a specific
+look regardless of anything else, e.g. keeping a wall-mounted or
+externally-shared view on Dark even while you experiment with layout
+themes elsewhere.
 
 ## Customizations
 
@@ -214,6 +224,12 @@ ended and been cleaned up (Settings > Scheduled Down Time deletes those
 once they're over, to keep that list from growing forever; the History
 rows that happened during one keep their icon regardless).
 
+A separate small repeat-arrows icon appears the same way whenever a
+warn/fail row's own check has an "Alert after" count above 1 (see
+ConfiguringServices.md) and this particular result hadn't reached that
+count yet, so no alert went out for it either - a different reason from
+SDT, and a row can show both icons together if both happen to apply.
+
 **Columns** opens a small dialog listing every available column (Time,
 Service, Check, Type, Status, Response, Message) with a checkbox and a drag
 handle, check to show, drag to reorder, at least one has to stay visible.
@@ -225,23 +241,24 @@ renders History instead.
 
 **Export CSV** downloads every row matching the current service/severity
 selection and time range, not just whatever happened to be scrolled into
-view, using whichever columns are currently shown, in that order, plus an
-"In SDT" TRUE/FALSE column at the end - always included regardless of
-which columns are currently shown, since it's audit data rather than a
-display preference.
+view, using whichever columns are currently shown, in that order, plus
+"In SDT" and "Alert Threshold Suppressed" TRUE/FALSE columns at the end -
+always included regardless of which columns are currently shown, since
+they're audit data rather than a display preference.
 
 ### On a phone
 
 The column layout above gives way to one compact line per event instead:
 a short date/time (`YY-MM-DD HH:MM`), the service's icon alone (no name -
 it doesn't fit, and the icon is enough once you know your own services), a
-short OK/WARN/FAIL badge, the same Scheduled Down Time icon described
-above when it applies, and the same abbreviated result summary the mobile
-dashboard cards use (`200 OK`, `Files OK`, and so on). Tap the "›" at the
-end of a row to expand it into everything left out - full service and
-check name, check type, exact time, response time, an explicit "In SDT"
-line when it applies, and the complete message - the same detail the row
-would show outright on a wider screen.
+short OK/WARN/FAIL badge, the same Scheduled Down Time/Alert-threshold
+icons described above when either applies, and the same abbreviated result
+summary the mobile dashboard cards use (`200 OK`, `Files OK`, and so on).
+Tap the "›" at the end of a row to expand it into everything left out -
+full service and check name, check type, exact time, response time,
+explicit "In SDT"/"Alert threshold" lines when they apply, and the
+complete message - the same detail the row would show outright on a wider
+screen.
 
 ## Notifications tab
 

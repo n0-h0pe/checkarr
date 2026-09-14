@@ -54,6 +54,18 @@ def meta():
     return get_meta()
 
 
+@public_app.get("/api/theme")
+def theme_route(mobile: bool | None = Query(None), db: Session = Depends(get_db)):
+    """The actually-effective theme (Dashboard Settings' override if set,
+    else whichever layout is pinned for this viewport) - see
+    queries.resolve_public_theme, the same function the initial page render
+    uses. common.js's applyActiveLayoutTheme calls this once it knows the
+    real viewport (see ensureActiveLayout) rather than deriving the theme
+    from the layout object alone, since the override can make the actual
+    theme differ from that specific layout's own stored one."""
+    return {"theme": resolve_public_theme(db, mobile)}
+
+
 @public_app.get("/api/dashboard-layouts/active", response_model=schemas.DashboardLayoutOut)
 def active_layout(mobile: bool | None = Query(None), db: Session = Depends(get_db)):
     """Whichever layout is pinned in Dashboard Settings for this viewport -

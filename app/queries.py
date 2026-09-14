@@ -291,14 +291,22 @@ def get_or_create_ui_settings(db: Session) -> models.UiSettings:
 def resolve_public_theme(db: Session, mobile: bool | None = None) -> str:
     """The theme the public dashboard (all three pages - dashboard/history/
     notifications, for one consistent look across the public site, not just
-    the dashboard page itself) actually renders: whichever layout Dashboard
-    Settings currently has pinned for this viewport's (see get_public_layout)
-    own theme - every layout always has one (see DashboardLayout.theme's
-    docstring; "dark" for a legacy row that predates that column existing,
-    same as the fallback everywhere else this is read). Unlike the admin
-    app, there's no separate chrome to keep stable here, and no admin-wide
-    default to fall back to either - Settings > Customizations only ever
-    controls the admin app's own header/nav."""
+    the dashboard page itself) actually renders.
+
+    Dashboard Settings' "Public port theme override" (public_theme_override)
+    wins outright when set - the public port always shows that theme no
+    matter which layout is pinned or what that layout's own theme is, full
+    stop. Only when it's unset (the default) does this fall back to
+    whichever layout Dashboard Settings currently has pinned for this
+    viewport's (see get_public_layout) own theme - every layout always has
+    one (see DashboardLayout.theme's docstring; "dark" for a legacy row
+    that predates that column existing). Unlike the admin app, there's no
+    separate chrome to keep stable here, and Settings > Customizations
+    never factors in either way - that only ever controls the admin app's
+    own header/nav."""
+    settings_row = get_or_create_dashboard_settings(db)
+    if settings_row.public_theme_override:
+        return settings_row.public_theme_override
     return get_public_layout(db, mobile).theme or "dark"
 
 

@@ -120,6 +120,8 @@ def _run_migrations() -> None:
         result_cols = _table_columns(conn, "check_results")
         if "in_sdt" not in result_cols:
             conn.exec_driver_sql("ALTER TABLE check_results ADD COLUMN in_sdt BOOLEAN DEFAULT 0")
+        if "suppressed_by_threshold" not in result_cols:
+            conn.exec_driver_sql("ALTER TABLE check_results ADD COLUMN suppressed_by_threshold BOOLEAN DEFAULT 0")
 
         layout_cols = _table_columns(conn, "dashboard_layouts")
         if "columns" not in layout_cols:
@@ -160,6 +162,8 @@ def _run_migrations() -> None:
             conn.exec_driver_sql("ALTER TABLE dashboard_settings ADD COLUMN public_layout_id_mobile INTEGER")
         if "uptime_bar_count" not in settings_cols:
             conn.exec_driver_sql("ALTER TABLE dashboard_settings ADD COLUMN uptime_bar_count INTEGER DEFAULT 20")
+        if "public_theme_override" not in settings_cols:
+            conn.exec_driver_sql("ALTER TABLE dashboard_settings ADD COLUMN public_theme_override VARCHAR(20)")
 
 
 def _migrate_dashboard_layout_cards() -> None:

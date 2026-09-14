@@ -4,7 +4,7 @@ models.DashboardSettings and queries.get_or_create_dashboard_settings/
 get_public_layout.
 """
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from .. import schemas
@@ -22,6 +22,9 @@ def get_dashboard_settings(db: Session = Depends(get_db)):
 
 @router.put("", response_model=schemas.DashboardSettingsOut)
 def update_dashboard_settings(payload: schemas.DashboardSettingsUpdate, db: Session = Depends(get_db)):
+    if payload.public_theme_override is not None and payload.public_theme_override not in schemas.THEMES:
+        raise HTTPException(400, f"Unknown theme '{payload.public_theme_override}'")
+
     settings_row = get_or_create_dashboard_settings(db)
 
     if payload.clear_public_layout:
@@ -33,6 +36,11 @@ def update_dashboard_settings(payload: schemas.DashboardSettingsUpdate, db: Sess
         settings_row.public_layout_id_mobile = None
     elif payload.public_layout_id_mobile is not None:
         settings_row.public_layout_id_mobile = payload.public_layout_id_mobile
+
+    if payload.clear_public_theme_override:
+        settings_row.public_theme_override = None
+    elif payload.public_theme_override is not None:
+        settings_row.public_theme_override = payload.public_theme_override
 
     db.commit()
     db.refresh(settings_row)

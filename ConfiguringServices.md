@@ -319,6 +319,27 @@ Every check has an optional interval override in seconds. Leave it blank to
 run on every poll of the service, set it higher (e.g. 600) to run that one
 check less often than its siblings.
 
+### Alert after (consecutive failures/warns before paging)
+
+Every check also has an "Alert after" count, default 1 (today's behavior:
+alert the moment it enters warn/fail). Set it higher to require that many
+consecutive polls at the same warn/fail status before a Push Notification
+actually goes out - useful for a flaky check that clears itself up within a
+poll or two and isn't worth waking anyone up over, without turning the
+check off or downgrading its alert level entirely.
+
+This only ever affects the outbound alert. The dashboard, History, and
+Notifications tab all still show every result exactly as it happened,
+warn/fail badge and all, the moment it happens - nothing about *detecting*
+or *displaying* a problem is delayed, only whether Checkarr pages you about
+it. A result that didn't yet meet the count gets a small icon next to its
+Status badge in History (see Settings.md), the same way an SDT-suppressed
+one does, so you can always tell why a given bad result didn't alert.
+
+The count resets whenever the status itself changes - three consecutive
+Fails needed to alert, then a Warn in between, means the Fail streak starts
+over from zero the next time it fails again, not from wherever it left off.
+
 ### Quick-editing checks
 
 Each service's checks are laid out as a table: Enable, Check Type, Name,
