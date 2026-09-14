@@ -22,6 +22,23 @@ def _job_id(service_id: int) -> str:
 
 
 def schedule_service(service: Service) -> None:
+    """One APScheduler job per enabled service, re-created (not just
+    updated) on every call - the simplest way to pick up a changed interval
+    or name after an edit, since there's no cheap partial-update API for an
+    existing job's trigger. Called after every service create/update
+    (including disabling one, which routes here and hits the early return
+    below) and once per service at startup (see reschedule_all).
+
+    `max_instances=1` + `coalesce=True`: if a poll ever runs long enough to
+    still be going when the next one's due (a slow/hanging check), skip
+    queuing a pileup of overlapping runs - just wait for the current one
+    and then run once, not once-per-missed-tick. `misfire_grace_time=60`
+    forgives the scheduler itself being briefly blocked (e.g. by another
+    service's poll) without treating a tick that starts a few seconds late
+    as missed entirely. `next_run_time=datetime.now()` fires an immediate
+    first poll on creation, rather than waiting a full interval to find out
+    whether a newly added service is even reachable.
+    """
     job_id = _job_id(service.id)
     scheduler.remove_job(job_id) if scheduler.get_job(job_id) else None
 
@@ -50,6 +67,10 @@ def unschedule_service(service_id: int) -> None:
 
 
 def reschedule_all() -> None:
+    """Rebuilds every service's job from scratch - called once at startup
+    (see start() below), since APScheduler's own job store isn't persisted
+    across restarts here (an in-memory scheduler, not one of the
+    SQLAlchemy/Redis-backed job stores APScheduler also supports)."""
     db = SessionLocal()
     try:
         for service in db.query(Service).all():
