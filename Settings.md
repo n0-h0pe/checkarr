@@ -86,6 +86,35 @@ Useful for a wall-mounted display or anywhere you want "is it up" at a
 glance rather than a full breakdown, or just to keep a leaner view of your
 services alongside your normal detailed one.
 
+### Uptime bars per card
+
+In edit mode, a small **Bars** field sits directly above every card's
+uptime strip - how many bars that specific card's strip is divided into,
+for every ranged option in the uptime/History picker ("Last 5 minutes"
+through "Last 1 week"). It's per card, not a single dashboard-wide number,
+so a wide card and a narrow one on the same layout can genuinely show
+different counts, each tuned to what actually looks good at that card's
+own size. Doesn't touch "Just the last poll", which always shows exactly
+one bar (the live status already in hand) regardless - there's nothing to
+divide a single poll into.
+
+A card's own current width caps how high this can be set - narrower cards
+top out lower (as low as 50, at the narrowest a card can be), widening up
+to 200 once a card is 400px or wider. This isn't arbitrary: past a certain
+point, the gap between bars eats more of a narrow card's width than the
+bars themselves have left, and they start rendering as slivers or
+disappearing outright rather than just looking a little thin. Resizing a
+card narrower than its current Bars value clamps what's actually drawn
+down to the new limit automatically (without discarding the higher number
+you'd set - widen the card back out and it returns); typing a value above
+the field's own max simply gets capped to it on save.
+
+While actively dragging a card's resize handle, a small badge appears in
+its top-right corner showing that card's current internal grid size and
+the bar-count ceiling that size implies (e.g. "18 × 12 grid · max 187
+bars") - a troubleshooting aid for exactly this relationship, gone again
+the moment you let go.
+
 ### Dashboard Settings (what the public port shows)
 
 Settings > Dashboard Settings controls which layout the public dashboard
@@ -109,15 +138,6 @@ has switched to, so you can rearrange your own view without disturbing
 what a housemate or a status page pointed at port 8090 sees. Whether a pin
 renders compact simply follows whether the layout you picked for it is one
 of your compact ones - there's nothing separate to configure for that.
-
-**Uptime bars per card** (1-200, default 20) is the one setting on this
-page that isn't about the public port specifically - it's how many bars
-each card's uptime strip is divided into, admin and public alike, for
-every ranged option in the uptime/History picker ("Last 5 minutes" through
-"Last 1 week"). Doesn't touch "Just the last poll", which always shows
-exactly one bar (the live status already in hand) no matter what this is
-set to - there's nothing to divide a single poll into. Takes effect on
-every card already on screen as soon as you save, no reload needed.
 
 ## History
 

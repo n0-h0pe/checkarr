@@ -34,9 +34,6 @@ def update_dashboard_settings(payload: schemas.DashboardSettingsUpdate, db: Sess
     elif payload.public_layout_id_mobile is not None:
         settings_row.public_layout_id_mobile = payload.public_layout_id_mobile
 
-    if payload.uptime_bar_count is not None:
-        settings_row.uptime_bar_count = payload.uptime_bar_count
-
     db.commit()
     db.refresh(settings_row)
     return settings_row

@@ -1,8 +1,5 @@
 from fastapi import APIRouter, Depends
-from sqlalchemy.orm import Session
 
-from ..database import get_db
-from ..queries import get_or_create_dashboard_settings
 from ..schemas import SERVICE_TYPES
 from ..security import require_auth
 from ..version import BUILD_DATE, VERSION
@@ -466,18 +463,12 @@ NOTIFICATION_CHANNEL_TYPE_META = [
 
 
 @router.get("")
-def get_meta(db: Session = Depends(get_db)):
-    # uptime_bar_count lives on DashboardSettings (Settings > Dashboard
-    # Settings), not anything else here - bundled into /api/meta anyway
-    # since both apps already fetch this once at load and it affects
-    # rendering (common.js's loadUptimeStrip), not just the public pin.
-    dashboard_settings = get_or_create_dashboard_settings(db)
+def get_meta():
     return {
         "service_types": SERVICE_TYPES,
         "check_types": CHECK_TYPE_META,
         "service_type_icons": SERVICE_TYPE_ICONS,
         "service_type_defaults": SERVICE_TYPE_DEFAULTS,
         "notification_channel_types": NOTIFICATION_CHANNEL_TYPE_META,
-        "uptime_bar_count": dashboard_settings.uptime_bar_count,
         "build": {"version": VERSION, "build_date": BUILD_DATE},
     }

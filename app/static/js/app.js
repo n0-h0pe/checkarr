@@ -2179,34 +2179,22 @@ async function loadDashboardSettings() {
   dashboardSettingsPublicLayoutIdMobile = s.public_layout_id_mobile;
   renderDashboardSettingsLayoutSelect("#dashboard-settings-layout-desktop", false, dashboardSettingsPublicLayoutId);
   renderDashboardSettingsLayoutSelect("#dashboard-settings-layout-mobile", true, dashboardSettingsPublicLayoutIdMobile);
-  $("#dashboard-settings-uptime-bar-count").value = s.uptime_bar_count;
 }
 
 async function submitDashboardSettingsForm(ev) {
   ev.preventDefault();
   const desktopId = $("#dashboard-settings-layout-desktop").value;
   const mobileId = $("#dashboard-settings-layout-mobile").value;
-  const uptimeBarCountVal = parseInt($("#dashboard-settings-uptime-bar-count").value, 10);
-  if (!uptimeBarCountVal || uptimeBarCountVal < 1 || uptimeBarCountVal > 200) {
-    toast("Uptime bars per card must be between 1 and 200", true);
-    return;
-  }
   try {
-    const s = await api("/api/dashboard-settings", {
+    await api("/api/dashboard-settings", {
       method: "PUT",
       body: JSON.stringify({
         public_layout_id: desktopId ? parseInt(desktopId, 10) : null,
         clear_public_layout: !desktopId,
         public_layout_id_mobile: mobileId ? parseInt(mobileId, 10) : null,
         clear_public_layout_mobile: !mobileId,
-        uptime_bar_count: uptimeBarCountVal,
       }),
     });
-    // Cards already on screen were built with whatever count /api/meta
-    // handed back at page load - refresh that and every visible strip now
-    // rather than making the change wait for a reload.
-    if (state.meta) state.meta.uptime_bar_count = s.uptime_bar_count;
-    for (const st of state.statuses) loadUptimeStrip(st.service.id);
     toast("Dashboard settings saved");
   } catch (e) {
     toast("Save failed: " + e.message, true);
