@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="{{ theme }}">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -17,6 +17,7 @@
         <button type="button" class="small" id="layout-new-btn" title="Save current card sizes as a new layout">+ New</button>
         <button type="button" class="small" id="layout-rename-btn" title="Rename this layout">Rename</button>
         <button type="button" class="small danger" id="layout-delete-btn" title="Delete this layout">Delete</button>
+        <select id="layout-theme-select" title="This layout's own theme - overrides Settings > Customizations for its cards/background only, not the header"></select>
         <span id="layout-add-card-wrap" hidden>
           <select id="layout-add-card-select" title="Add a card to this layout"></select>
         </span>
@@ -78,6 +79,7 @@
         <button class="sub-tab-btn" data-subtab="downtime">Scheduled Down Time</button>
         <button class="sub-tab-btn" data-subtab="pruning">Log &amp; History Pruning</button>
         <button class="sub-tab-btn" data-subtab="dashboard-settings">Dashboard Settings</button>
+        <button class="sub-tab-btn" data-subtab="customizations">Customizations</button>
       </div>
 
       <div class="subtab-panel active" id="subtab-services">
@@ -95,7 +97,7 @@
           </div>
           <table>
             <thead>
-              <tr><th>Name</th><th>Type</th><th>Local</th><th>Remote</th><th>Interval</th><th>Status</th><th></th></tr>
+              <tr><th>Name</th><th>Type</th><th>Checks</th><th>Local</th><th>Remote</th><th>Interval</th><th>Status</th><th></th></tr>
             </thead>
             <tbody id="services-body"></tbody>
           </table>
@@ -188,6 +190,18 @@
               <button type="submit" class="primary">Save</button>
             </div>
           </form>
+        </div>
+      </div>
+
+      <div class="subtab-panel" id="subtab-customizations">
+        <div class="panel">
+          <div class="panel-header">
+            <h2>Customizations</h2>
+          </div>
+          <div class="field">
+            <label>Theme <span class="hint">(the whole admin app, header included - a dashboard layout can override this for its own cards/background, see Edit layout in the top bar)</span></label>
+            <div class="theme-picker" id="ui-theme-picker"></div>
+          </div>
         </div>
       </div>
     </section>

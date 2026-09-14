@@ -209,7 +209,18 @@ class DashboardLayout(Base):
     whose card set can't be trimmed, unlike ordinary custom layouts. See
     Dashboard Settings (DashboardSettings.public_layout_id/
     public_layout_id_mobile below) for which layout the public dashboard
-    actually shows."""
+    actually shows.
+
+    `theme` (one of schemas.THEMES, e.g. "oled"/"coder") is this layout's
+    own override of Settings > Customizations' admin-wide theme
+    (UiSettings.theme below) - None means "just use that". Editable from
+    the Dashboard tab's own theme picker (edit mode), not Settings, since
+    it's a property of the layout being viewed/edited, not a global. Scoped
+    narrowly on the admin side - only #tab-dashboard's background and cards
+    switch, the header/nav stay on the admin-wide theme regardless (see the
+    data-layout-theme attribute in app.js) - but on the public dashboard
+    (which has no separate admin chrome of its own to keep stable) this is
+    effectively the whole page's theme, see queries.resolve_public_theme."""
 
     __tablename__ = "dashboard_layouts"
 
@@ -222,6 +233,7 @@ class DashboardLayout(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=False)
     is_compact: Mapped[bool] = mapped_column(Boolean, default=False)
     is_mobile: Mapped[bool] = mapped_column(Boolean, default=False)
+    theme: Mapped[str | None] = mapped_column(String(20), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
 
@@ -423,4 +435,22 @@ class DashboardSettings(Base):
     public_layout_id_mobile: Mapped[int | None] = mapped_column(Integer, nullable=True)
     public_require_compact: Mapped[bool] = mapped_column(Boolean, default=False)
     uptime_bar_count: Mapped[int] = mapped_column(Integer, default=20)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
+
+
+class UiSettings(Base):
+    """Singleton row (see queries.get_or_create_ui_settings) for Settings >
+    Customizations - currently just the admin-wide UI theme (one of
+    schemas.THEMES), applied to the whole admin app (header included) and
+    used as the fallback on the public dashboard wherever the layout being
+    shown doesn't have its own override (see DashboardLayout.theme). A
+    separate table rather than another DashboardSettings column since this
+    is genuinely a different concern (overall UI appearance, not what the
+    public port shows) - Customizations is its own Settings sub-tab, not a
+    section of Dashboard Settings."""
+
+    __tablename__ = "ui_settings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    theme: Mapped[str] = mapped_column(String(20), default="dark")
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)

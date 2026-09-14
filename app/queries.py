@@ -270,6 +270,36 @@ def get_or_create_dashboard_settings(db: Session) -> models.DashboardSettings:
     return settings_row
 
 
+def get_or_create_ui_settings(db: Session) -> models.UiSettings:
+    """Seeds the singleton Settings > Customizations row (default theme:
+    "dark", today's look, unchanged from before Customizations existed) -
+    idempotent, called once at startup (see database.init_db) and by
+    routers/ui_settings.py/main.py's index route/queries.resolve_public_theme
+    whenever the current admin-wide theme is needed."""
+    settings_row = db.query(models.UiSettings).first()
+    if settings_row:
+        return settings_row
+    settings_row = models.UiSettings()
+    db.add(settings_row)
+    db.commit()
+    db.refresh(settings_row)
+    return settings_row
+
+
+def resolve_public_theme(db: Session, mobile: bool | None = None) -> str:
+    """The theme the public dashboard (all three pages - dashboard/history/
+    notifications, for one consistent look across the public site, not just
+    the dashboard page itself) actually renders: whichever layout Dashboard
+    Settings currently has pinned for this viewport (see get_public_layout)
+    if IT has its own theme override, else the admin-wide one from Settings
+    > Customizations. Unlike the admin app, there's no separate chrome to
+    keep stable here - see DashboardLayout.theme's docstring."""
+    layout = get_public_layout(db, mobile)
+    if layout.theme:
+        return layout.theme
+    return get_or_create_ui_settings(db).theme
+
+
 def get_or_create_self_monitoring_state(db: Session) -> models.SelfMonitoringState:
     """Seeds the singleton row housekeeping.check_disk_space uses to only
     alert on a tier transition rather than every 30-minute cycle."""

@@ -329,9 +329,9 @@ necessarily page you the same way a dead mount should). It applies to every
 check type except the torrent client disk-space checks, whose own warn/fail
 thresholds already decide this.
 
-Click the Checks (N) button directly above a service's checks table to
-collapse or expand just that table, remembered per service in a browser
-cookie.
+Click the Checks (N) button - its own column in the services table, right
+next to Type - to collapse or expand just that service's checks table,
+remembered per service in a browser cookie.
 
 ### Reordering checks
 

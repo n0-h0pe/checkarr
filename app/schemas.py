@@ -55,6 +55,8 @@ CHECK_TYPES = [
     "immich_jobs",
 ]
 
+THEMES = ["dark", "white", "oled", "coder"]
+
 NOTIFICATION_CHANNEL_TYPES = [
     "email",
     "discord",
@@ -314,6 +316,7 @@ class DashboardLayoutOut(BaseModel):
     is_active: bool
     is_compact: bool
     is_mobile: bool
+    theme: str | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -337,6 +340,7 @@ class DashboardLayoutCreate(BaseModel):
     card_service_ids: list[int] | None = None
     is_compact: bool = False
     is_mobile: bool = False
+    theme: str | None = None
 
 
 class DashboardLayoutUpdate(BaseModel):
@@ -348,6 +352,8 @@ class DashboardLayoutUpdate(BaseModel):
     sizes: dict[str, Any] | None = None
     columns: int | None = None
     card_service_ids: list[int] | None = None
+    theme: str | None = None
+    clear_theme: bool = False
 
 
 class NotificationChannelBase(BaseModel):
@@ -493,3 +499,13 @@ class DashboardSettingsUpdate(BaseModel):
     clear_public_layout: bool = False
     public_layout_id_mobile: int | None = None
     clear_public_layout_mobile: bool = False
+
+
+class UiSettingsOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    theme: str
+    updated_at: datetime
+
+
+class UiSettingsUpdate(BaseModel):
+    theme: str

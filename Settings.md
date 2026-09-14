@@ -116,6 +116,24 @@ the bar-count ceiling that size implies (e.g. "32 × 12 grid · max 100
 bars") - a troubleshooting aid for exactly this relationship, gone again
 the moment you let go.
 
+### Layout theme
+
+The **Theme** dropdown in the top bar (next to Rename/Delete - not gated
+behind Edit layout, since it's a property of the layout itself rather than
+something that needs drag mode on to change) lets this specific layout
+override Settings > Customizations' admin-wide theme, just for its own
+cards and background. "Default (admin)" means exactly that - no override,
+just follow whatever Customizations is set to.
+
+On the admin app this is deliberately narrow: only the dashboard tab's own
+background/cards switch, the header and nav bar stay on the admin-wide
+theme no matter which layout (or its theme) you're currently looking at.
+The public dashboard (port 8090) has no separate chrome to protect that
+way, so there this setting effectively becomes the whole page's look -
+Settings > Customizations is only ever the fallback there, for a layout
+that doesn't set its own. See Customizations below for the four themes
+themselves.
+
 ### Dashboard Settings (what the public port shows)
 
 Settings > Dashboard Settings controls which layout the public dashboard
@@ -139,6 +157,29 @@ has switched to, so you can rearrange your own view without disturbing
 what a housemate or a status page pointed at port 8090 sees. Whether a pin
 renders compact simply follows whether the layout you picked for it is one
 of your compact ones - there's nothing separate to configure for that.
+
+## Customizations
+
+Settings > Customizations picks the admin app's overall theme - the whole
+app, header included - from four:
+
+- **Dark**: the original look, dark navy background, blue accent.
+- **White**: a light background instead, same blue accent, deeper-toned
+  status colors for contrast against white.
+- **OLED**: true black background/panels (not just a darker navy - the
+  point is genuinely-off pixels on an OLED screen), same blue accent as
+  Dark.
+- **Coder**: the same true black as OLED, but a terminal/Monokai-style
+  green accent instead of blue - deliberately a different shade of green
+  from the status-OK green, so the two don't read as the same color next
+  to each other.
+
+Takes effect immediately on save, no reload needed. Any dashboard layout
+can override this for its own cards/background only - see "Layout theme"
+above; the header stays on whichever of these four is picked here
+regardless of what any individual layout is set to. The public dashboard
+(port 8090) has no separate chrome, so this is also simply its default
+look, for whichever layout it's showing that doesn't set its own theme.
 
 ## History
 
