@@ -134,6 +134,16 @@ class CheckResult(Base):
     # gone. Always False for an "ok" result (no alert tier to suppress in
     # the first place) and for anything predating this column.
     in_sdt: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Same idea as in_sdt above (permanent, poll-time, not reconstructed) -
+    # True when this warn/fail result's own check has an "Alert after N
+    # consecutive" set above 1 (CheckDefinition.config.alert_after_count)
+    # and this particular result's own consecutive streak hadn't reached N
+    # yet, so no alert was sent for it. False once the streak does reach N
+    # (whether this is the exact result that crossed it or a later one in
+    # the same ongoing streak) - this only ever flags "no alert because the
+    # count wasn't there yet", not every result that happens not to trigger
+    # a fresh alert. Always False for an "ok" result, same as in_sdt.
+    suppressed_by_threshold: Mapped[bool] = mapped_column(Boolean, default=False)
 
     service: Mapped["Service"] = relationship(back_populates="results")
 
@@ -433,7 +443,14 @@ class DashboardSettings(Base):
     0-width and disappearing) on a narrower one, with no way to have both
     sizes on one dashboard under a single global number. Both left in place
     unused rather than dropped, same as every other retired column in
-    database.py."""
+    database.py.
+
+    `public_theme_override` (one of schemas.THEMES, or None) forces the
+    public dashboard to always render this theme, regardless of which
+    layout is actually pinned/shown or that layout's own theme - see
+    queries.resolve_public_theme, which checks this before ever looking at
+    the layout at all. None (the default) leaves the previous behavior
+    alone: public just follows whichever layout it's showing."""
 
     __tablename__ = "dashboard_settings"
 
@@ -442,6 +459,7 @@ class DashboardSettings(Base):
     public_layout_id_mobile: Mapped[int | None] = mapped_column(Integer, nullable=True)
     public_require_compact: Mapped[bool] = mapped_column(Boolean, default=False)
     uptime_bar_count: Mapped[int] = mapped_column(Integer, default=20)
+    public_theme_override: Mapped[str | None] = mapped_column(String(20), nullable=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
 
 

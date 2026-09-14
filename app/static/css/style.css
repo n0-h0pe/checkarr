@@ -39,7 +39,7 @@ html[data-theme="white"], #tab-dashboard[data-layout-theme="white"] {
   color-scheme: light;
   --bg: #f4f6f9; --bg-panel: #ffffff; --bg-panel-alt: #eef1f6; --border: #d7dde4;
   --text: #1a222c; --text-dim: #5b6673; --accent: #2f6fe4;
-  --ok: #1e9e56; --warn: #b9720a; --fail: #d13438; --unknown: #8a94a0; --disabled: #b7bfc7;
+  --ok: #1e9e56; --warn: #d4a017; --fail: #d13438; --unknown: #8a94a0; --disabled: #b7bfc7;
 }
 
 /* OLED and Coder share the same true-black palette (the point of both -
@@ -487,6 +487,10 @@ table th { color: var(--text-dim); font-weight: 600; font-size: 12px; text-trans
    inline in the mobile compact row (see .history-row-compact below). */
 .history-status-cell { display: inline-flex; align-items: center; gap: 6px; }
 .sdt-icon { display: inline-flex; color: var(--warn); flex-shrink: 0; cursor: help; }
+/* A different color from .sdt-icon above (--unknown, not --warn) - the two
+   can appear side by side on the same row, and needed to read as two
+   distinct reasons rather than duplicates of the same icon. */
+.threshold-icon { display: inline-flex; color: var(--unknown); flex-shrink: 0; cursor: help; }
 
 /* Settings' own inner tab strip (Services / Push Notifications) - same
    show/hide pattern as the top-level nav.tabs/.tab-panel, just smaller and
@@ -905,7 +909,7 @@ table th { color: var(--text-dim); font-weight: 600; font-size: 12px; text-trans
   .history-row-mobile td { padding: 6px 0; }
   .history-row-compact { display: flex; align-items: center; gap: 6px; font-size: 12px; }
   .history-compact-time { color: var(--text-dim); font-variant-numeric: tabular-nums; flex-shrink: 0; white-space: nowrap; }
-  .history-row-compact .type-icon, .history-row-compact .type-icon-fallback, .history-row-compact .type-icon-emoji, .history-row-compact .sdt-icon { flex-shrink: 0; }
+  .history-row-compact .type-icon, .history-row-compact .type-icon-fallback, .history-row-compact .type-icon-emoji, .history-row-compact .sdt-icon, .history-row-compact .threshold-icon { flex-shrink: 0; }
   .history-compact-msg { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-dim); }
   .badge-sm { padding: 2px 6px; font-size: 10px; }
   .history-expand-btn {

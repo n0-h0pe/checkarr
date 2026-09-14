@@ -209,6 +209,11 @@ class CheckResultOut(BaseModel):
     # recomputed here. Always False for an "ok" result, since there's no
     # alert tier to suppress in the first place.
     in_sdt: bool = False
+    # Whether this result's own check has "Alert after N consecutive" set
+    # above 1 and this result's consecutive streak hadn't reached N yet -
+    # see CheckResult.suppressed_by_threshold's docstring. Also always
+    # False for an "ok" result.
+    suppressed_by_threshold: bool = False
 
 
 class NotificationOut(BaseModel):
@@ -497,6 +502,7 @@ class DashboardSettingsOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     public_layout_id: int | None
     public_layout_id_mobile: int | None
+    public_theme_override: str | None
     updated_at: datetime
 
 
@@ -505,6 +511,8 @@ class DashboardSettingsUpdate(BaseModel):
     clear_public_layout: bool = False
     public_layout_id_mobile: int | None = None
     clear_public_layout_mobile: bool = False
+    public_theme_override: str | None = None
+    clear_public_theme_override: bool = False
 
 
 class UiSettingsOut(BaseModel):

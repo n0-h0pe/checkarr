@@ -1099,33 +1099,38 @@ function layoutVisibleStatuses(statuses, layout) {
 // why admin and public apply this differently. Distinguishes the two by
 // whether #tab-dashboard exists at all rather than a public/admin flag -
 // it's simply not part of public.html's markup.
-function applyActiveLayoutTheme(layout) {
-  // "dark" for a legacy layout saved before this column existed (still
-  // genuinely NULL) - same fallback queries.resolve_public_theme uses
-  // server-side, and the only state this ever is: every layout going
-  // forward always has one of the four concrete themes, no separate
-  // "inherit" value to distinguish from an explicit choice.
-  const theme = (layout && layout.theme) || "dark";
+async function applyActiveLayoutTheme(layout) {
   const dashboardTab = document.getElementById("tab-dashboard");
   if (dashboardTab) {
     // Admin: scoped to the dashboard tab's own background/text/cards - the
     // header/nav stay on whatever Settings > Customizations set globally,
     // see html[data-theme] vs #tab-dashboard[data-layout-theme] in style.css.
-    dashboardTab.dataset.layoutTheme = theme;
-  } else {
-    // Public: no separate chrome to protect, so this effectively is the
-    // whole page's theme - re-resolved here (matching resolve_public_theme's
-    // own logic) against whatever viewport-correct layout ensureActiveLayout
-    // just settled on, since the server-rendered guess had no viewport to
-    // go on yet.
+    // "dark" for a legacy layout saved before this column existed (still
+    // genuinely NULL) - every layout going forward always has one of the
+    // four concrete themes.
+    dashboardTab.dataset.layoutTheme = (layout && layout.theme) || "dark";
+    return;
+  }
+  // Public: no separate chrome to protect, so this effectively is the
+  // whole page's theme. Asks the server for the actually-effective one
+  // (queries.resolve_public_theme) rather than just reading layout.theme -
+  // Dashboard Settings' "Public port theme override" can make the real
+  // theme differ from this specific layout's own stored value, and only
+  // the server knows whether that's set. layout.is_mobile (the pool the
+  // *resolved* layout actually belongs to, not just a guess) is the
+  // correct viewport hint to send here, same as get_public_layout uses.
+  try {
+    const { theme } = await api(`/api/theme?mobile=${!!(layout && layout.is_mobile)}`);
     document.documentElement.dataset.theme = theme;
+  } catch (_) {
+    document.documentElement.dataset.theme = (layout && layout.theme) || "dark";
   }
 }
 
 async function loadDashboard(cardOpts = {}) {
   const statuses = await ensureStatuses(true);
   const layout = await ensureActiveLayout();
-  applyActiveLayoutTheme(layout);
+  await applyActiveLayoutTheme(layout);
   const grid = $("#dashboard-grid");
   if (!grid) return;
   grid.innerHTML = "";
@@ -1287,6 +1292,24 @@ function sdtIcon() {
   return span;
 }
 
+// "repeat" (Feather-style, same stroke language as SDT_ICON above) - shown
+// next to a warn/fail row whenever that result's own suppressed_by_threshold
+// (see schemas.CheckResultOut) says its check's "Alert after N consecutive"
+// hadn't been reached yet at the time, so no alert went out for it either -
+// a separate reason from SDT, and a row can show both icons at once if both
+// happen to apply.
+const THRESHOLD_ICON =
+  '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>';
+
+function thresholdIcon() {
+  const span = el("span", {
+    class: "threshold-icon",
+    title: "This check's \"Alert after\" consecutive count hadn't been reached yet - no alert was sent for this result.",
+  });
+  span.innerHTML = THRESHOLD_ICON;
+  return span;
+}
+
 const HISTORY_COLUMNS = {
   time: { label: "Time", value: (r) => fmtTime(r.timestamp), nowrap: true },
   service: { label: "Service", value: (r) => serviceNameById(r.service_id) },
@@ -1299,6 +1322,7 @@ const HISTORY_COLUMNS = {
       el("span", { class: "history-status-cell" }, [
         el("span", { class: `badge ${r.status}`, text: r.status }),
         r.in_sdt ? sdtIcon() : null,
+        r.suppressed_by_threshold ? thresholdIcon() : null,
       ]),
   },
   response: { label: "Response", value: (r) => (r.response_time_ms ? `${Math.round(r.response_time_ms)} ms` : "-") },
@@ -1471,6 +1495,9 @@ function historyRowElementMobile(r) {
       ? el("div", {}, [el("span", { class: "text-dim" }, "Response: "), `${Math.round(r.response_time_ms)} ms`])
       : null,
     r.in_sdt ? el("div", {}, [el("span", { class: "text-dim" }, "In SDT: "), "Yes - alert was suppressed"]) : null,
+    r.suppressed_by_threshold
+      ? el("div", {}, [el("span", { class: "text-dim" }, "Alert threshold: "), "Not yet reached - no alert was sent"])
+      : null,
     el("div", {}, [el("span", { class: "text-dim" }, "Message: "), r.message || "(none)"]),
   ]);
   const expandBtn = el(
@@ -1487,6 +1514,7 @@ function historyRowElementMobile(r) {
     svc ? typeIcon(svc) : null,
     el("span", { class: `badge ${r.status} badge-sm`, text: HISTORY_SEVERITY_SHORT_LABEL[r.status] || r.status }),
     r.in_sdt ? sdtIcon() : null,
+    r.suppressed_by_threshold ? thresholdIcon() : null,
     el("span", { class: "history-compact-msg", text: shortCheckSummary(r.check_type, r.status, r.message) }),
     expandBtn,
   ]);
@@ -1756,15 +1784,16 @@ async function exportHistoryCsv() {
     return;
   }
 
-  // "In SDT" always exports regardless of which columns are currently
-  // shown/hidden on screen - it's audit data (was this row's alert
-  // suppressed by Scheduled Down Time), not really a display preference
-  // the Columns dialog's show/hide is meant to cover, unlike the rest.
+  // "In SDT"/"Alert Threshold Suppressed" always export regardless of
+  // which columns are currently shown/hidden on screen - both are audit
+  // data (was this row's alert suppressed, and why), not really a display
+  // preference the Columns dialog's show/hide is meant to cover, unlike
+  // the rest.
   const cols = state.historyColumns.map((k) => HISTORY_COLUMNS[k]);
-  const header = [...cols.map((c) => c.label), "In SDT"];
+  const header = [...cols.map((c) => c.label), "In SDT", "Alert Threshold Suppressed"];
   const lines = [header.map(csvEscape).join(",")];
   for (const r of allRows) {
-    const values = [...cols.map((c) => c.value(r)), r.in_sdt ? "TRUE" : "FALSE"];
+    const values = [...cols.map((c) => c.value(r)), r.in_sdt ? "TRUE" : "FALSE", r.suppressed_by_threshold ? "TRUE" : "FALSE"];
     lines.push(values.map(csvEscape).join(","));
   }
 

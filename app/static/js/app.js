@@ -1185,6 +1185,7 @@ function openCheckModal(svc, check = null) {
   $("#chk-enabled").checked = check ? check.enabled : true;
   $("#chk-interval").value = check && check.interval_seconds ? check.interval_seconds : "";
   $("#chk-alert-level").value = check && check.config && check.config.alert_level === "warn" ? "warn" : "fail";
+  $("#chk-alert-after").value = (check && check.config && check.config.alert_after_count) || 1;
 
   const typeSelect = $("#chk-type");
   typeSelect.innerHTML = "";
@@ -1343,6 +1344,8 @@ async function submitCheckForm(ev) {
     }
   }
   if (!NO_ALERT_LEVEL_TYPES.has(checkType)) config.alert_level = $("#chk-alert-level").value;
+  const alertAfter = parseInt($("#chk-alert-after").value, 10);
+  config.alert_after_count = Number.isFinite(alertAfter) && alertAfter > 0 ? alertAfter : 1;
 
   const intervalVal = $("#chk-interval").value;
   const payload = {
@@ -2230,12 +2233,21 @@ async function loadDashboardSettings() {
   dashboardSettingsPublicLayoutIdMobile = s.public_layout_id_mobile;
   renderDashboardSettingsLayoutSelect("#dashboard-settings-layout-desktop", false, dashboardSettingsPublicLayoutId);
   renderDashboardSettingsLayoutSelect("#dashboard-settings-layout-mobile", true, dashboardSettingsPublicLayoutIdMobile);
+
+  const overrideSelect = $("#dashboard-settings-theme-override");
+  overrideSelect.innerHTML = "";
+  overrideSelect.appendChild(el("option", { value: "", text: "No override - follow the pinned layout" }));
+  for (const t of THEME_META) {
+    overrideSelect.appendChild(el("option", { value: t.value, text: t.label }));
+  }
+  overrideSelect.value = s.public_theme_override || "";
 }
 
 async function submitDashboardSettingsForm(ev) {
   ev.preventDefault();
   const desktopId = $("#dashboard-settings-layout-desktop").value;
   const mobileId = $("#dashboard-settings-layout-mobile").value;
+  const themeOverride = $("#dashboard-settings-theme-override").value;
   try {
     await api("/api/dashboard-settings", {
       method: "PUT",
@@ -2244,6 +2256,8 @@ async function submitDashboardSettingsForm(ev) {
         clear_public_layout: !desktopId,
         public_layout_id_mobile: mobileId ? parseInt(mobileId, 10) : null,
         clear_public_layout_mobile: !mobileId,
+        public_theme_override: themeOverride || null,
+        clear_public_theme_override: !themeOverride,
       }),
     });
     toast("Dashboard settings saved");
@@ -2319,6 +2333,10 @@ async function selectUiTheme(theme) {
 function renderLayoutThemeSelect() {
   const select = $("#layout-theme-select");
   if (!select) return;
+  // Edit mode only - like drag/resize, changing what a layout looks like
+  // is an editing action, not something to expose during normal viewing.
+  select.hidden = !layoutEditMode;
+  if (!layoutEditMode) return;
   const current = (state.activeLayout && state.activeLayout.theme) || "dark";
   select.innerHTML = "";
   for (const t of THEME_META) {

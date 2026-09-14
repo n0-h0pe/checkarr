@@ -138,20 +138,44 @@ async def poll_service(service_id: int) -> None:
             # alert below - an ongoing, already-alerted issue still needs an
             # accurate in_sdt on every poll while it continues.
             in_sdt = False
+            suppressed_by_threshold = False
             if status in (STATUS_WARN, STATUS_FAIL):
                 tier = "warn" if status == STATUS_WARN else "fail"
                 in_sdt = is_suppressed(db, service.id, tier, now)
 
-                previous = (
-                    db.query(CheckResult)
-                    .filter(CheckResult.check_id == check.id)
-                    .order_by(CheckResult.timestamp.desc())
-                    .first()
-                )
-                # Only alert on the transition into warn/fail, not on every
-                # poll while it stays that way - matches how Notification
-                # dedup below only fires once per ongoing issue too.
-                if not previous or previous.status != status:
+                # "Alert after" (config.alert_after_count, default 1) - how
+                # many consecutive results of this exact status (this one
+                # included) are needed before it's worth alerting on at all.
+                # Fetching exactly `threshold` prior results (not more) is
+                # deliberate: it's just enough to tell "the streak, including
+                # this result, is exactly `threshold` long" (fire once) apart
+                # from "already longer than that" (already fired earlier,
+                # stay quiet) without needing to know the streak's full
+                # length beyond that point.
+                threshold = max(1, int((check.config or {}).get("alert_after_count") or 1))
+                streak = 1
+                if threshold > 1:
+                    prior_results = (
+                        db.query(CheckResult)
+                        .filter(CheckResult.check_id == check.id)
+                        .order_by(CheckResult.timestamp.desc())
+                        .limit(threshold)
+                        .all()
+                    )
+                    for prior in prior_results:
+                        if prior.status == status:
+                            streak += 1
+                        else:
+                            break
+
+                suppressed_by_threshold = streak < threshold
+                # Alerts exactly once, the moment the streak first reaches
+                # the threshold - streak == threshold rather than >= is what
+                # keeps this from re-alerting on every later poll while the
+                # same status continues (same "only on transition" idea the
+                # old previous.status != status check used, generalized from
+                # "streak of 1" to "streak of N").
+                if streak == threshold:
                     alerts_to_send.append(
                         (tier, f"[Checkarr] {service.name} - {check_name}: {status.upper()}", outcome.message)
                     )
@@ -167,6 +191,7 @@ async def poll_service(service_id: int) -> None:
                     response_time_ms=outcome.response_time_ms,
                     timestamp=now,
                     in_sdt=in_sdt,
+                    suppressed_by_threshold=suppressed_by_threshold,
                 )
             )
             if check.type == "arr_health":

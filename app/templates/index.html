@@ -186,6 +186,10 @@
               <label>Dashboard to show on Mobile <span class="hint">(port 8090, phone-width visitors)</span></label>
               <select id="dashboard-settings-layout-mobile" style="max-width:280px;"></select>
             </div>
+            <div class="field">
+              <label>Public port theme override <span class="hint">(port 8090 always uses this theme, regardless of which layout is pinned or that layout's own theme)</span></label>
+              <select id="dashboard-settings-theme-override" style="max-width:280px;"></select>
+            </div>
             <div class="modal-actions" style="justify-content:flex-start;">
               <button type="submit" class="primary">Save</button>
             </div>
@@ -345,6 +349,10 @@
             <option value="fail">Fail</option>
             <option value="warn">Warn</option>
           </select>
+        </div>
+        <div class="field">
+          <label>Alert after <span class="hint">(consecutive warn/fail results before sending a Push Notification - the dashboard, History, and Notifications tab all show every result regardless)</span></label>
+          <input type="number" id="chk-alert-after" min="1" value="1">
         </div>
         <div class="field">
           <label>Poll interval override (seconds, optional)</label>
