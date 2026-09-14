@@ -50,8 +50,8 @@ def notifications(db: Session = Depends(get_db)):
 
 
 @public_app.get("/api/meta")
-def meta():
-    return get_meta()
+def meta(db: Session = Depends(get_db)):
+    return get_meta(db)
 
 
 @public_app.get("/api/dashboard-layouts/active", response_model=schemas.DashboardLayoutOut)

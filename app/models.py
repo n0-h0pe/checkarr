@@ -406,7 +406,15 @@ class DashboardSettings(Base):
     layouts existed as their own pool; picking a Desktop vs a Mobile
     layout now happens automatically by viewport instead, which made that
     restriction redundant. Left in place unused rather than dropped, same
-    as every other retired column in database.py."""
+    as every other retired column in database.py.
+
+    `uptime_bar_count` is how many bars each card's uptime strip is divided
+    into for every ranged option ("Last 5 minutes" through "Last 1 week") -
+    read by both apps off /api/meta (see routers/meta.py) since it affects
+    rendering, not just the public pin above. Deliberately has nothing to do
+    with "Just the last poll", which always renders exactly one bar (the
+    live status already in hand) regardless of this setting - see
+    loadUptimeStrip in common.js."""
 
     __tablename__ = "dashboard_settings"
 
@@ -414,4 +422,5 @@ class DashboardSettings(Base):
     public_layout_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     public_layout_id_mobile: Mapped[int | None] = mapped_column(Integer, nullable=True)
     public_require_compact: Mapped[bool] = mapped_column(Boolean, default=False)
+    uptime_bar_count: Mapped[int] = mapped_column(Integer, default=20)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)

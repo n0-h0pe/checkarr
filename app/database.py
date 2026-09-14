@@ -154,6 +154,8 @@ def _run_migrations() -> None:
             conn.exec_driver_sql("ALTER TABLE dashboard_settings ADD COLUMN public_require_compact BOOLEAN DEFAULT 0")
         if "public_layout_id_mobile" not in settings_cols:
             conn.exec_driver_sql("ALTER TABLE dashboard_settings ADD COLUMN public_layout_id_mobile INTEGER")
+        if "uptime_bar_count" not in settings_cols:
+            conn.exec_driver_sql("ALTER TABLE dashboard_settings ADD COLUMN uptime_bar_count INTEGER DEFAULT 20")
 
 
 def _migrate_dashboard_layout_cards() -> None:
