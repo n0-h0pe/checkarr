@@ -1100,21 +1100,25 @@ function layoutVisibleStatuses(statuses, layout) {
 // whether #tab-dashboard exists at all rather than a public/admin flag -
 // it's simply not part of public.html's markup.
 function applyActiveLayoutTheme(layout) {
-  const theme = layout && layout.theme;
+  // "dark" for a legacy layout saved before this column existed (still
+  // genuinely NULL) - same fallback queries.resolve_public_theme uses
+  // server-side, and the only state this ever is: every layout going
+  // forward always has one of the four concrete themes, no separate
+  // "inherit" value to distinguish from an explicit choice.
+  const theme = (layout && layout.theme) || "dark";
   const dashboardTab = document.getElementById("tab-dashboard");
   if (dashboardTab) {
-    // Admin: scoped to the dashboard tab's own background/cards - the
+    // Admin: scoped to the dashboard tab's own background/text/cards - the
     // header/nav stay on whatever Settings > Customizations set globally,
     // see html[data-theme] vs #tab-dashboard[data-layout-theme] in style.css.
-    if (theme) dashboardTab.dataset.layoutTheme = theme;
-    else delete dashboardTab.dataset.layoutTheme;
+    dashboardTab.dataset.layoutTheme = theme;
   } else {
     // Public: no separate chrome to protect, so this effectively is the
-    // whole page's theme - falls back to the admin-wide default
-    // (state.meta.ui_theme) exactly like resolve_public_theme does
-    // server-side, just re-resolved here against whatever viewport-correct
-    // layout ensureActiveLayout just settled on.
-    document.documentElement.dataset.theme = theme || (state.meta && state.meta.ui_theme) || "dark";
+    // whole page's theme - re-resolved here (matching resolve_public_theme's
+    // own logic) against whatever viewport-correct layout ensureActiveLayout
+    // just settled on, since the server-rendered guess had no viewport to
+    // go on yet.
+    document.documentElement.dataset.theme = theme;
   }
 }
 

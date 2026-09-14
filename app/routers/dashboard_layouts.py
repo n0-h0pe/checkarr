@@ -42,7 +42,7 @@ def create_layout(payload: schemas.DashboardLayoutCreate, db: Session = Depends(
         is_active=True,
         is_compact=payload.is_compact,
         is_mobile=payload.is_mobile,
-        theme=payload.theme,
+        theme=payload.theme or "dark",
     )
     db.add(layout)
     db.commit()
@@ -75,9 +75,7 @@ def update_layout(layout_id: int, payload: schemas.DashboardLayoutUpdate, db: Se
         layout.columns = payload.columns
     if payload.card_service_ids is not None:
         layout.card_service_ids = payload.card_service_ids
-    if payload.clear_theme:
-        layout.theme = None
-    elif payload.theme is not None:
+    if payload.theme is not None:
         layout.theme = payload.theme
     db.commit()
     db.refresh(layout)

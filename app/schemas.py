@@ -340,6 +340,9 @@ class DashboardLayoutCreate(BaseModel):
     card_service_ids: list[int] | None = None
     is_compact: bool = False
     is_mobile: bool = False
+    # None -> the router defaults it to "dark", same as every other layout
+    # that doesn't explicitly pick one - there's no separate "inherit the
+    # admin theme" state, see DashboardLayout.theme's docstring.
     theme: str | None = None
 
 
@@ -352,8 +355,11 @@ class DashboardLayoutUpdate(BaseModel):
     sizes: dict[str, Any] | None = None
     columns: int | None = None
     card_service_ids: list[int] | None = None
+    # None here means "leave it as it is" (same convention as every other
+    # field on this model) - there's no separate "clear it back to
+    # inherit" state to distinguish from an explicit value, since every
+    # layout always has one of the four concrete themes.
     theme: str | None = None
-    clear_theme: bool = False
 
 
 class NotificationChannelBase(BaseModel):

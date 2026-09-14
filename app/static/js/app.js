@@ -344,6 +344,11 @@ async function deleteActiveLayout() {
 // explicit Save/Discard ever loses a pending quick-edit or a pending delete.
 let pendingCheckChanges = new Map();
 let pendingCheckDeletions = new Set();
+// service_id -> { enabled? } staged but not yet saved - the service-level
+// equivalent of pendingCheckChanges above, for the Enabled toggle in the
+// services table (same "not applied until Save Changes" convention as
+// every other quick-edit on this page).
+let pendingServiceChanges = new Map();
 
 function loadCollapsedServiceIds() {
   const raw = getCookie("hc_collapsed_services");
@@ -369,6 +374,8 @@ async function loadSettings() {
 
 function applyPendingChangesToState() {
   for (const svc of state.services) {
+    const svcPatch = pendingServiceChanges.get(svc.id);
+    if (svcPatch && svcPatch.enabled !== undefined) svc.enabled = svcPatch.enabled;
     for (const c of svc.checks) {
       const patch = pendingCheckChanges.get(c.id);
       if (!patch) continue;
@@ -376,6 +383,14 @@ function applyPendingChangesToState() {
       if (patch.config !== undefined) c.config = patch.config;
     }
   }
+}
+
+function stageServiceChange(svc, patch) {
+  const existing = pendingServiceChanges.get(svc.id) || {};
+  pendingServiceChanges.set(svc.id, { ...existing, ...patch });
+  if (patch.enabled !== undefined) svc.enabled = patch.enabled;
+  renderServicesFromState();
+  updateUnsavedBanner();
 }
 
 function renderServicesFromState() {
@@ -413,7 +428,7 @@ function undoCheckDeletion(check) {
 }
 
 function pendingChangeCount() {
-  return pendingCheckChanges.size + pendingCheckDeletions.size;
+  return pendingCheckChanges.size + pendingCheckDeletions.size + pendingServiceChanges.size;
 }
 
 function updateUnsavedBanner() {
@@ -426,8 +441,9 @@ async function saveChanges() {
   const deleteIds = Array.from(pendingCheckDeletions);
   const updates = Array.from(pendingCheckChanges, ([check_id, patch]) => ({ check_id: Number(check_id), ...patch }))
     .filter((u) => !pendingCheckDeletions.has(u.check_id));
+  const serviceUpdates = Array.from(pendingServiceChanges, ([service_id, patch]) => ({ service_id: Number(service_id), patch }));
 
-  if (deleteIds.length === 0 && updates.length === 0) return;
+  if (deleteIds.length === 0 && updates.length === 0 && serviceUpdates.length === 0) return;
 
   const deleteResults = await Promise.allSettled(
     deleteIds.map((id) => api(`/api/checks/${id}`, { method: "DELETE" }))
@@ -444,15 +460,29 @@ async function saveChanges() {
     }
   }
 
+  // No bulk endpoint for services (unlike checks above) - there's only
+  // ever the Enabled toggle staged here at a time, so one PUT per changed
+  // service is a handful of requests at most, not worth a dedicated route.
+  const serviceResults = await Promise.allSettled(
+    serviceUpdates.map((u) => api(`/api/services/${u.service_id}`, { method: "PUT", body: JSON.stringify(u.patch) }))
+  );
+  const failedServiceUpdates = serviceResults.filter((r) => r.status === "rejected").length;
+
   if (failedDeletes > 0) {
     toast(`${failedDeletes} deletion(s) failed`, true);
+  }
+  if (failedServiceUpdates > 0) {
+    toast(`${failedServiceUpdates} service update(s) failed`, true);
   }
   if (!updateFailed) {
     // Only drop the changes that actually made it - keep anything that
     // failed staged so the user doesn't lose it silently.
     for (const id of deleteIds) pendingCheckDeletions.delete(id);
     for (const u of updates) pendingCheckChanges.delete(u.check_id);
-    if (failedDeletes === 0 && !updateFailed) toast("Changes saved");
+    serviceUpdates.forEach((u, i) => {
+      if (serviceResults[i].status === "fulfilled") pendingServiceChanges.delete(u.service_id);
+    });
+    if (failedDeletes === 0 && failedServiceUpdates === 0) toast("Changes saved");
   }
   updateUnsavedBanner();
   loadSettings();
@@ -461,6 +491,7 @@ async function saveChanges() {
 function discardChanges() {
   pendingCheckChanges.clear();
   pendingCheckDeletions.clear();
+  pendingServiceChanges.clear();
   updateUnsavedBanner();
   loadSettings();
 }
@@ -486,13 +517,46 @@ function renderServiceRow(svc) {
   tr.appendChild(el("td", { "data-label": "Local", text: svc.local_url || "-" }));
   tr.appendChild(el("td", { "data-label": "Remote", text: svc.remote_url || "-" }));
   tr.appendChild(el("td", { "data-label": "Interval", text: svc.poll_interval_seconds ? `${svc.poll_interval_seconds}s` : "default" }));
-  tr.appendChild(el("td", { "data-label": "Status" }, el("span", { class: `badge ${svc.enabled ? "ok" : "disabled"}`, text: svc.enabled ? "enabled" : "disabled" })));
 
-  const actions = el("div", { style: "display:flex; gap:6px;" }, [
+  // Clickable, not just a read-only badge - wrapping <label> makes the
+  // whole thing a click target the same way a checkbox+its label always
+  // is, no separate handler needed to route a badge click to the input.
+  // Stages into the same unsaved-changes flow as everything else on this
+  // page (pendingServiceChanges) rather than saving immediately - flipping
+  // this by accident should be just as recoverable as any other edit here.
+  const enabledInput = el("input", {
+    type: "checkbox",
+    checked: svc.enabled ? "checked" : null,
+    onchange: (e) => stageServiceChange(svc, { enabled: e.target.checked }),
+  });
+  tr.appendChild(
+    el("td", { "data-label": "Status" }, [
+      el("label", { class: "status-toggle", title: "Click to enable/disable this service" }, [
+        enabledInput,
+        el("span", { class: `badge ${svc.enabled ? "ok" : "disabled"}`, text: svc.enabled ? "enabled" : "disabled" }),
+      ]),
+    ])
+  );
+
+  const actions = [
     el("button", { class: "small", onclick: () => openServiceModal(svc) }, "Edit"),
     el("button", { class: "small danger", onclick: () => deleteService(svc) }, "Delete"),
-  ]);
-  tr.appendChild(el("td", {}, actions));
+  ];
+  if (svc.type === "plex" || svc.type === "jellyfin") {
+    actions.push(
+      el(
+        "button",
+        {
+          class: "small",
+          title: "Fetches this service's configured library folders and adds a filesystem check for each",
+          onclick: () => scanLibraries(svc),
+        },
+        "Scan libraries"
+      )
+    );
+  }
+  actions.push(el("button", { class: "small primary", onclick: () => openCheckModal(svc) }, "+ Add check"));
+  tr.appendChild(el("td", {}, el("div", { style: "display:flex; gap:6px; flex-wrap:wrap;" }, actions)));
 
   const detailRow = el("tr", { class: "service-detail-row" }, el("td", { colspan: "8" }, renderChecksPanel(svc, toggleBtn, chevron)));
 
@@ -505,21 +569,6 @@ function renderServiceRow(svc) {
 function renderChecksPanel(svc, toggleBtn, chevron) {
   const isCollapsed = collapsedServiceIds.has(svc.id);
   const panel = el("div", { class: "checks-subpanel" });
-  const actions = [el("button", { class: "small primary", onclick: () => openCheckModal(svc) }, "+ Add check")];
-  if (svc.type === "plex" || svc.type === "jellyfin") {
-    actions.unshift(
-      el(
-        "button",
-        {
-          class: "small",
-          title: "Fetches this service's configured library folders and adds a filesystem check for each",
-          onclick: () => scanLibraries(svc),
-        },
-        "Scan libraries"
-      )
-    );
-  }
-  panel.appendChild(el("div", { style: "display:flex; justify-content:flex-end; margin-bottom:6px;" }, actions));
   if (svc.checks.length === 0) {
     panel.appendChild(el("div", { class: "text-dim", text: "No checks configured" }));
     return panel;
@@ -2249,7 +2298,6 @@ async function selectUiTheme(theme) {
     const updated = await api("/api/ui-settings", { method: "PUT", body: JSON.stringify({ theme }) });
     // Applies immediately - Settings > Customizations is otherwise just
     // another form you'd have to reload the page to see take effect.
-    if (state.meta) state.meta.ui_theme = updated.theme;
     document.documentElement.dataset.theme = updated.theme;
     renderThemePicker(updated.theme);
     toast("Theme saved");
@@ -2263,12 +2311,16 @@ async function selectUiTheme(theme) {
 // property of the layout itself, not something that needs drag mode on to
 // change. Re-rendered by loadDashboardAdmin every time the active layout
 // does, so switching layouts always shows that layout's own saved value.
+// No "Default (admin)" option - every layout always has one of the four
+// concrete themes (Dark included), so the dropdown is just those four, no
+// separate "inherit" state to offer alongside Dark (they'd be identical
+// exactly whenever Customizations is also set to Dark, and confusingly not
+// otherwise - see DashboardLayout.theme's docstring).
 function renderLayoutThemeSelect() {
   const select = $("#layout-theme-select");
   if (!select) return;
-  const current = (state.activeLayout && state.activeLayout.theme) || "";
+  const current = (state.activeLayout && state.activeLayout.theme) || "dark";
   select.innerHTML = "";
-  select.appendChild(el("option", { value: "", text: "Theme: Default (admin)" }));
   for (const t of THEME_META) {
     select.appendChild(el("option", { value: t.value, text: `Theme: ${t.label}` }));
   }
@@ -2281,7 +2333,7 @@ async function onLayoutThemeSelectChange() {
   try {
     state.activeLayout = await api(`/api/dashboard-layouts/${state.activeLayout.id}`, {
       method: "PUT",
-      body: JSON.stringify(value ? { theme: value } : { clear_theme: true }),
+      body: JSON.stringify({ theme: value }),
     });
   } catch (e) {
     toast("Could not save layout theme: " + e.message, true);

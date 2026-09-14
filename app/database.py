@@ -230,6 +230,7 @@ def _ensure_default_layouts() -> None:
                         is_default=True,
                         is_compact=is_compact,
                         is_mobile=is_mobile,
+                        theme="dark",
                     )
                 )
                 changed = True

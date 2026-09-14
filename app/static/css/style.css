@@ -1,15 +1,16 @@
 /* Settings > Customizations (admin-wide, UiSettings.theme) and each
-   dashboard layout's own optional override (DashboardLayout.theme) share
-   these same four palettes - see the data-theme attribute on <html>
-   (index.html/public.html, server-rendered from whichever is current, see
-   main.py's index route/public.py) and the data-layout-theme attribute
-   app.js applies to #tab-dashboard alone when the active layout overrides
-   it (never the header/nav - see updateThemeAttributes in app.js). "dark"
-   is both the bare :root default below AND has its own explicit
-   [data-theme="dark"]/[data-layout-theme="dark"] block, so a layout
-   override can always name it explicitly to revert to the default even
-   when some other theme is active globally - unlike :root, which nothing
-   ever attribute-selects directly. */
+   dashboard layout's own theme (DashboardLayout.theme - always one of
+   these four, "dark" by default, no separate "inherit the admin theme"
+   state) share these same four palettes - see the data-theme attribute on
+   <html> (index.html/public.html, server-rendered from whichever is
+   current, see main.py's index route/public.py) and the data-layout-theme
+   attribute common.js's applyActiveLayoutTheme applies to #tab-dashboard
+   alone on the admin app (never the header/nav). "dark" is both the bare
+   :root default below AND has its own explicit
+   [data-theme="dark"]/[data-layout-theme="dark"] block, since a layout
+   set to Dark while some other theme is active globally still needs an
+   explicit rule of its own to actually apply that - unlike :root, which
+   nothing ever attribute-selects directly. */
 :root {
   color-scheme: dark;
   --bg: #0f1419;
@@ -153,7 +154,13 @@ nav.tabs button.active {
 }
 nav.tabs button:hover { color: var(--text); }
 
-main { padding: 20px 24px 60px; max-width: 1300px; margin: 0 auto; }
+/* 1300px was cramped for the services table once it grew a Checks column
+   and a wider Actions cell (Edit/Delete/Scan libraries/+ Add check all on
+   one line) - 1600px gives desktop room to breathe without clipping,
+   Settings/History/Notifications all benefit equally since none of them
+   have a reason to stay narrower. The dashboard tab ignores this cap
+   entirely regardless (body.wide-main below). */
+main { padding: 20px 24px 60px; max-width: 1600px; margin: 0 auto; }
 /* The dashboard (admin tab or public page) drops main's width cap so the
    card grid has the full viewport to work with - three cards at the
    default size is all 1300px fits, and the point of the grid is letting
@@ -167,6 +174,30 @@ body.wide-main main { max-width: none; }
 
 .tab-panel { display: none; }
 .tab-panel.active { display: block; }
+
+/* A layout's own theme override (#tab-dashboard[data-layout-theme], see
+   applyActiveLayoutTheme in common.js) only actually reaches elements that
+   *explicitly* reference a var(--x) custom property somewhere inside this
+   scope - .card's `background: var(--bg-panel)` picks it up fine since
+   .card sits inside #tab-dashboard, but `color` was only ever explicitly
+   set once, all the way up on <body> - every descendant just inherits that
+   already-computed value rather than re-evaluating var(--text) itself, so
+   without restating both here, only the cards' own backgrounds would
+   change and both the surrounding background *and* every bit of inherited
+   text color (card titles included) would silently keep whatever the
+   admin-wide theme resolved to. Negative margin/matching padding bleeds
+   this to fill main's own padding too (only relevant here since .wide-main
+   already drops main's width cap for the dashboard tab, see body.wide-main
+   above) so the color actually reaches the edges instead of leaving a
+   thin admin-themed border around it; min-height keeps a short dashboard
+   (few cards) from having it cut off partway down the page. */
+#tab-dashboard {
+  background: var(--bg);
+  color: var(--text);
+  margin: -20px -24px -60px;
+  padding: 20px 24px 60px;
+  min-height: calc(100vh - 116px);
+}
 
 .dot {
   width: 10px; height: 10px; border-radius: 50%; display: inline-block; flex-shrink: 0;
@@ -190,6 +221,15 @@ body.wide-main main { max-width: none; }
 .badge.notice { background: rgba(79,140,255,.15); color: var(--accent); }
 .badge.error { background: rgba(229,72,77,.15); color: var(--fail); }
 .badge.warning { background: rgba(245,166,35,.15); color: var(--warn); }
+
+/* Services table's Enabled toggle (renderServiceRow in app.js) - looks
+   exactly like the read-only badge it replaced, but the whole thing is a
+   <label> wrapping a real (visually hidden, not display:none - still
+   focusable/tabbable) checkbox, so clicking anywhere on it toggles the
+   same way clicking any other checkbox's label does, no separate handler
+   needed to route a badge click to the input underneath. */
+.status-toggle { display: inline-flex; cursor: pointer; }
+.status-toggle input { position: absolute; opacity: 0; width: 1px; height: 1px; }
 
 /* Fine-grained tile grid: each track is one GRID_UNIT (20px, see app.js/
    common.js) with no gap - cards get visual spacing from their own margin
@@ -413,7 +453,8 @@ button, .btn {
 }
 button:hover { border-color: var(--accent); }
 button.primary { background: var(--accent); border-color: var(--accent); color: white; font-weight: 600; }
-button.danger:hover { border-color: var(--fail); color: var(--fail); }
+button.danger { border-color: var(--fail); color: var(--fail); }
+button.danger:hover { background: var(--fail); border-color: var(--fail); color: white; }
 button.small { padding: 4px 8px; font-size: 12px; }
 button:disabled { opacity: .5; cursor: default; }
 
