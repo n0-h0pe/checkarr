@@ -73,19 +73,20 @@ const DEFAULT_UPTIME_RANGE = "2880";
 // of `flex: 1` bars eats more of the available width than the bars
 // themselves have left, and they start rendering at 0/negative width -
 // invisible or visually corrupted, not just "thin". maxUptimeBarsForGridWidth
-// below is a straight-line ramp between two empirically-picked anchors: the
-// narrowest any card can ever be (MIN_CARD_W_COMPACT, 8 grid units/160px)
-// caps at UPTIME_BAR_MIN_LIMIT, and anything from 400px/20 units up gets the
-// full UPTIME_BAR_MAX_LIMIT - deliberately in grid units (the same number
-// dragged/persisted as w, and shown by the resize-debug badge in
-// attachResizeHandle below) rather than a measured pixel width, so what you
-// see while dragging, what gets saved, and what this ramp is keyed to are
-// all the same number.
+// below is a straight-line ramp between two anchors picked by eye against
+// what actually still looks right at each size: 16 grid units (a card's
+// practical minimum width day to day) caps at UPTIME_BAR_MIN_LIMIT, 64
+// units caps at the full UPTIME_BAR_MAX_LIMIT, and anything narrower than
+// 16 still floors at UPTIME_BAR_MIN_LIMIT rather than extrapolating lower -
+// deliberately in grid units (the same number dragged/persisted as w, and
+// shown by the resize-debug badge in attachResizeHandle below) rather than
+// a measured pixel width, so what you see while dragging, what gets saved,
+// and what this ramp is keyed to are all the same number.
 const DEFAULT_CARD_UPTIME_BARS = 20;
 const UPTIME_BAR_MIN_LIMIT = 50;
 const UPTIME_BAR_MAX_LIMIT = 200;
-const UPTIME_BAR_MIN_WIDTH_UNITS = MIN_CARD_W_COMPACT; // 8 units = 160px
-const UPTIME_BAR_MAX_WIDTH_UNITS = 400 / GRID_UNIT; // 20 units = 400px
+const UPTIME_BAR_MIN_WIDTH_UNITS = 16;
+const UPTIME_BAR_MAX_WIDTH_UNITS = 64;
 
 function maxUptimeBarsForGridWidth(w) {
   if (w <= UPTIME_BAR_MIN_WIDTH_UNITS) return UPTIME_BAR_MIN_LIMIT;
@@ -998,7 +999,13 @@ function attachMoveHandle(card, serviceId, pos, positions, onLayoutChange) {
   }
 
   card.addEventListener("pointerdown", (e) => {
-    if (e.target.closest(".resize-handle, button")) return;
+    // input - the Bars field (renderUptimeBarControl) - without this, this
+    // handler's own preventDefault() below fires on every pointerdown
+    // anywhere on the card, including that field, before the browser ever
+    // gets to focus it or register a click on its up/down spinner arrows,
+    // so it looked "broken" (stuck, unclickable) when it was actually just
+    // never receiving the click at all.
+    if (e.target.closest(".resize-handle, button, input")) return;
     e.preventDefault();
     start = { px: e.clientX, py: e.clientY, x: pos.x, y: pos.y };
     card.classList.add("dragging");

@@ -98,20 +98,21 @@ own size. Doesn't touch "Just the last poll", which always shows exactly
 one bar (the live status already in hand) regardless - there's nothing to
 divide a single poll into.
 
-A card's own current width caps how high this can be set - narrower cards
-top out lower (as low as 50, at the narrowest a card can be), widening up
-to 200 once a card is 400px or wider. This isn't arbitrary: past a certain
-point, the gap between bars eats more of a narrow card's width than the
-bars themselves have left, and they start rendering as slivers or
-disappearing outright rather than just looking a little thin. Resizing a
-card narrower than its current Bars value clamps what's actually drawn
-down to the new limit automatically (without discarding the higher number
-you'd set - widen the card back out and it returns); typing a value above
-the field's own max simply gets capped to it on save.
+A card's own current width caps how high this can be set - 50 at 16 grid
+units wide or narrower, rising in a straight line to the full 200 at 64
+grid units and beyond (32 units, for reference, tops out at 100). This
+isn't arbitrary: past a certain point, the gap between bars eats more of a
+narrow card's width than the bars themselves have left, and they start
+rendering as slivers or disappearing outright rather than just looking a
+little thin. Resizing a card narrower than its current Bars value clamps
+what's actually drawn down to the new limit automatically (without
+discarding the higher number you'd set - widen the card back out and it
+returns); typing a value above the field's own max simply gets capped to
+it on save.
 
 While actively dragging a card's resize handle, a small badge appears in
 its top-right corner showing that card's current internal grid size and
-the bar-count ceiling that size implies (e.g. "18 × 12 grid · max 187
+the bar-count ceiling that size implies (e.g. "32 × 12 grid · max 100
 bars") - a troubleshooting aid for exactly this relationship, gone again
 the moment you let go.
 
