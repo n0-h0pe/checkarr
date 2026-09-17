@@ -22,6 +22,57 @@ The `./config` volume in `docker-compose.yml` maps to a folder next to the
 compose file. On Windows that folder lives wherever you cloned the repo, no
 special path translation needed.
 
+## Editing docker-compose.yml and .env
+
+Both files are plain text and live in the project folder (wherever you
+cloned or downloaded the repo). `docker-compose.yml` controls port
+mappings, volume mounts, and container settings; `.env` (copied from
+`.env.example`) holds the environment variables listed further down.
+There's nothing Docker-specific about editing either one - any plain text
+editor works.
+
+**Windows**
+
+- Easiest: open the project folder in File Explorer, right-click the file
+  (`.env` or `docker-compose.yml`), and "Open with" Notepad, VS Code,
+  Notepad++, or whatever you have installed.
+- From PowerShell, in the project folder: `notepad .env`
+- If `.env` doesn't show up in File Explorer, turn on "Show hidden
+  files" (or "Show file name extensions") - dotfiles are hidden by
+  default on Windows. It's not actually hidden, just named that way.
+- Save as plain text (Notepad does this by default). Don't open it with
+  Word or another word processor, which would save it with formatting
+  Docker can't parse.
+
+**macOS**
+
+- From Terminal, in the project folder: `nano .env` (Ctrl+O, Enter to
+  save, Ctrl+X to exit), or `open -a TextEdit .env`.
+- If using TextEdit, switch it to plain-text mode first (Format > Make
+  Plain Text) before saving, for the same reason as Notepad above.
+- `.env` is a dotfile, so it won't show in a Finder "Open" dialog unless
+  you press Cmd+Shift+. to reveal hidden files.
+
+**Linux**
+
+- Same idea: `nano .env` or `nano docker-compose.yml` from a shell in
+  the project folder, or `vim`/`gedit`/`kate` if you prefer. Any GUI
+  text editor on a desktop environment works too.
+
+**Unraid**
+
+The Windows/macOS/Linux instructions above assume you're running
+`docker compose` yourself, where `docker-compose.yml` and `.env` are the
+real source of truth. The Unraid section below instead uses the Docker
+tab's own "Add Container" form, which stores its settings in Unraid's
+container template rather than reading `.env` at all - so on Unraid you
+generally don't hand-edit these files, you fill in the equivalent fields
+in the GUI (covered in detail below). If you'd rather run Checkarr from
+an actual compose file on Unraid anyway (for example via the community
+"Compose Manager" plugin), the same edits apply: open a shell via the
+webGUI's Terminal icon or SSH, then `nano /mnt/user/appdata/checkarr-src/.env`,
+same as the Linux instructions above.
+
 ## Linux
 
 Same steps as Windows, run from a shell instead of PowerShell:
@@ -39,28 +90,106 @@ bind-mounts described below.
 ## Unraid
 
 Checkarr doesn't (yet) have a Community Applications template, so it's a
-manual container for now:
+manual container for now: pull the source onto Unraid, build the image
+locally, then point the Docker tab's GUI at it. No compose file needed
+for this path - Unraid's own "Add Container" form replaces it.
 
-1. Build the image once (SSH into Unraid, or build it elsewhere and load
-   the image): from the project folder,
+### 1. Get the source onto Unraid
 
-   ```bash
-   docker build -t checkarr:latest .
-   ```
-2. In the Unraid Docker tab, add a new container by hand (or edit an
-   existing one), pointing it at the `checkarr:latest` image you just built.
-3. Add the ports (`8080` and, if you want the public dashboard, `8090`),
-   and a path mapping for `/config` to an appdata folder, e.g.
-   `/mnt/user/appdata/checkarr` on the host mapped to `/config` in the
-   container.
-4. Add whatever environment variables you need from the reference below
-   (or none, the defaults are fine).
-5. Apply, then open `http://<unraid-ip>:8080`.
+Open a shell on Unraid - the Terminal icon in the top-right of the
+webGUI, or SSH in from another machine (`ssh root@<unraid-ip>`). Then
+clone the repo into a dedicated source folder under appdata:
 
-To pick up a new version later: rebuild the image with the same command
-above, then Edit the container in the Unraid GUI and hit Apply again to
-recreate it from the new image. Your data stays put, since it lives in the
-bind-mounted `/config` folder, not inside the container.
+```bash
+mkdir -p /mnt/user/appdata/checkarr-src
+cd /mnt/user/appdata/checkarr-src
+git clone https://github.com/n0-h0pe/checkarr.git .
+```
+
+Unraid doesn't ship `git` by default. If the clone command isn't found,
+either install it via the "NerdPack"/"NerdTools" plugin (Apps tab, if
+you have Community Applications installed) and re-run the command
+above, or skip git entirely and grab a zip instead:
+
+```bash
+cd /mnt/user/appdata/checkarr-src
+curl -L -o checkarr.zip https://github.com/n0-h0pe/checkarr/archive/refs/heads/master.zip
+unzip checkarr.zip
+mv checkarr-master/* checkarr-master/.* . 2>/dev/null
+rmdir checkarr-master && rm checkarr.zip
+```
+
+`checkarr-src` is only the build source. It's intentionally a separate
+folder from `/mnt/user/appdata/checkarr` (used below for `/config`),
+which holds the live database and settings - so you can safely delete
+and re-clone `checkarr-src` at any time without touching your data.
+
+### 2. Build the image
+
+From that same folder:
+
+```bash
+cd /mnt/user/appdata/checkarr-src
+docker build -t checkarr:latest .
+```
+
+The first build takes a few minutes (installing Python dependencies
+into the image); later rebuilds after a `git pull` are faster since
+Docker reuses unchanged layers. When it finishes, confirm it's there:
+
+```bash
+docker images | grep checkarr
+```
+
+### 3. Add the container via the Unraid Docker GUI
+
+Go to the **Docker** tab and click **Add Container**. Fill in:
+
+- **Name**: `checkarr` (or anything you like).
+- **Repository**: `checkarr:latest` - the image you just built. Leave
+  it exactly as that; don't let Unraid try to pull it from Docker Hub,
+  there's nothing published there.
+- **Network Type**: `Bridge` works for most setups.
+- **Port mappings**: click "Add another Path, Port, Variable, Label or
+  Device" once per port and add:
+  - Container Port `8080` -> Host Port `8080` (the admin GUI).
+  - Container Port `8090` -> Host Port `8090` (the read-only public
+    dashboard - skip this one if you don't want it exposed at all, and
+    also set `HC_PUBLIC_DASHBOARD_ENABLED=false` as a variable below).
+- **Path mapping**: add one more entry -
+  - Container Path `/config` -> Host Path `/mnt/user/appdata/checkarr`.
+  - This is deliberately a *different* folder than `checkarr-src` from
+    step 1 - this one holds the running database, not the source code.
+- **Variables** (optional): add one "Variable" entry per environment
+  variable you want to override, using a name from the reference table
+  below as both the Key and Name, e.g. Key `HC_LOG_LEVEL`, Value
+  `DEBUG`. There's no `.env` file in play here since the GUI form is
+  what actually launches the container - leave this section empty and
+  everything just uses its documented default.
+- Click **Apply**. Unraid creates and starts the container from the
+  image.
+
+Open `http://<unraid-ip>:8080` once it's running.
+
+### 4. Upgrading later
+
+Pull the latest source and rebuild the image:
+
+```bash
+cd /mnt/user/appdata/checkarr-src
+git pull
+docker build -t checkarr:latest .
+```
+
+(No `git`? Re-download and re-extract the zip from step 1 over the same
+folder instead.)
+
+Then, in the Docker tab, click the checkarr container's icon and choose
+**Edit**, then **Apply** without changing anything - this recreates the
+container from the freshly built `checkarr:latest` image using the same
+settings as before. Your data is untouched, since it lives in the
+bind-mounted `/config` folder (`/mnt/user/appdata/checkarr`), not inside
+the container image itself.
 
 ## Mac
 
