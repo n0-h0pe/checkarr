@@ -1,0 +1,39 @@
+<?xml version="1.0"?>
+<Container version="2">
+  <Name>checkarr</Name>
+  <Repository>checkarr:latest</Repository>
+  <Registry/>
+  <Network>bridge</Network>
+  <MyIP/>
+  <MyMAC/>
+  <Shell>sh</Shell>
+  <Privileged>false</Privileged>
+  <Support>https://github.com/n0-h0pe/checkarr/issues</Support>
+  <project>https://github.com/n0-h0pe/checkarr</project>
+  <ReadMe>https://github.com/n0-h0pe/checkarr/blob/master/README.md</ReadMe>
+  <Overview>A self-hosted dashboard that periodically polls your media stack (Radarr, Sonarr, Lidarr, Whisparr, Chaptarr, Prowlarr, Plex, Jellyfin, Immich, qBittorrent, Deluge, rTorrent, ruTorrent, Seerr, Jellyseerr, Dispatcharr, Sportarr, Cleanuparr, iPlayarr, iPlayer-Arr, or any other HTTP service) and shows one consolidated view of what's healthy, what's degraded, and why.</Overview>
+  <Category/>
+  <WebUI>http://[IP]:[PORT:8080]/</WebUI>
+  <TemplateURL/>
+  <Icon>https://raw.githubusercontent.com/hernandito/unRAID-Docker-Folder-Animated-Icons---Alternate-Colors/master/Dark-Grey-Flat-Collection/darkgrey-eye.svg</Icon>
+  <ExtraParams/>
+  <PostArgs/>
+  <CPUset/>
+  <DateInstalled/>
+  <DonateText/>
+  <DonateLink/>
+  <Requires/>
+  <Config Name="Admin WebUI Port" Target="8080" Default="" Mode="tcp" Description="" Type="Port" Display="always" Required="false" Mask="false">8080</Config>
+  <Config Name="Public WebUI Port" Target="8090" Default="" Mode="tcp" Description="" Type="Port" Display="always" Required="false" Mask="false">8090</Config>
+  <Config Name="AppData" Target="/config" Default="/mnt/user/appdata/checkarr" Mode="rw" Description="" Type="Path" Display="always" Required="false" Mask="false">/mnt/user/appdata/checkarr</Config>
+  <Config Name="Secret Key" Target="HC_APP_SECRET_KEY" Default="" Mode="{3}" Description="Fixed Fernet key for encrypting stored API keys." Type="Variable" Display="always" Required="false" Mask="true"></Config>
+  <Config Name="Default poll interval" Target="HC_DEFAULT_POLL_INTERVAL_SECONDS" Default="300" Mode="{3}" Description="Default poll interval for services that don't override it." Type="Variable" Display="always" Required="false" Mask="false"></Config>
+  <Config Name="HTTP Timeout" Target="HC_HTTP_TIMEOUT_SECONDS" Default="10" Mode="{3}" Description="HTTP request timeout in seconds" Type="Variable" Display="always" Required="false" Mask="false"></Config>
+  <Config Name="HTTP Basic Auth Username" Target="HC_AUTH_USERNAME" Default="" Mode="{3}" Description="Set both to require HTTP Basic Auth on the admin app (port 8080). Unset means no auth, fine on a trusted LAN." Type="Variable" Display="always" Required="false" Mask="false"></Config>
+  <Config Name="HTTP Basic Auth Password" Target="HC_AUTH_PASSWORD" Default="" Mode="{3}" Description="Set both to require HTTP Basic Auth on the admin app (port 8080). Unset means no auth, fine on a trusted LAN." Type="Variable" Display="always" Required="false" Mask="true"></Config>
+  <Config Name="Public Dashboard Enabled" Target="HC_PUBLIC_DASHBOARD_ENABLED" Default="true" Mode="{3}" Description="Enable the public dashboard" Type="Variable" Display="always" Required="true" Mask="false">true</Config>
+  <Config Name="PUID" Target="PUID" Default="99" Mode="{3}" Description="UID for permissions. Do not change unless you know what you're doing." Type="Variable" Display="advanced-hide" Required="true" Mask="false">99</Config>
+  <Config Name="PGID" Target="PGID" Default="100" Mode="{3}" Description="GID for permissions. Do not change unless you know what you're doing." Type="Variable" Display="advanced-hide" Required="true" Mask="false">100</Config>
+  <Config Name="UMASK" Target="UMASK" Default="022" Mode="{3}" Description="UMASK for newly created files. Do not change unless you know what you're doing." Type="Variable" Display="advanced-hide" Required="false" Mask="false">022</Config>
+  <TailscaleStateDir/>
+</Container>
