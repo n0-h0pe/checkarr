@@ -10,7 +10,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from . import models, schemas
-from .checks.base import STATUS_FAIL, STATUS_WARN, worst_status
+from .checks.base import STATUS_FAIL, STATUS_SEVERITY, STATUS_WARN, worst_status
 from .serializers import serialize_service
 
 
@@ -137,6 +137,53 @@ def get_history(
     if statuses:
         q = q.filter(models.CheckResult.status.in_(statuses))
     return q.order_by(models.CheckResult.id.desc()).limit(limit).all()
+
+
+def get_uptime_buckets(db: Session, service_id: int, minutes: int, bar_count: int) -> list[str | None]:
+    """The dashboard's per-card uptime strip used to just call get_history
+    above with a flat row limit (2000) and bucket the rows client-side. That
+    silently truncated the older end of the selected range for any service
+    whose checks, combined, produce more than `limit` rows within it - e.g.
+    several checks polled every poll cycle, or a short poll interval -
+    while a service with one check on a long interval (a simple site
+    monitor) never came close. Same underlying history, same time range,
+    but some cards showed real gaps as "no data" and others didn't, purely
+    based on row volume rather than anything about the range actually being
+    covered.
+
+    Fetching only `timestamp`/`status` (not every column get_history's rows
+    carry) and bucketing here instead means the only cap on how much of the
+    range is covered is the cutoff itself, same as the History tab's export
+    already gets by paging through everything with `before_id` - there's no
+    row limit here at all, which is fine, since two narrow columns even for
+    a very chatty service over the longest offered range (1 week) is still
+    a small, fast query. Only `bar_count` values ever cross back to the
+    client either way.
+    """
+    now = datetime.now(timezone.utc)
+    cutoff = now - timedelta(minutes=minutes)
+    rows = (
+        db.query(models.CheckResult.timestamp, models.CheckResult.status)
+        .filter(models.CheckResult.service_id == service_id, models.CheckResult.timestamp >= cutoff)
+        .all()
+    )
+
+    range_ms = minutes * 60000
+    range_start_ms = cutoff.timestamp() * 1000
+    now_ms = now.timestamp() * 1000
+    bucket_ms = range_ms / bar_count
+    buckets: list[str | None] = [None] * bar_count
+
+    for ts, status in rows:
+        t = ts if ts.tzinfo else ts.replace(tzinfo=timezone.utc)
+        t_ms = t.timestamp() * 1000
+        if t_ms < range_start_ms or t_ms > now_ms:
+            continue
+        idx = min(bar_count - 1, int((t_ms - range_start_ms) // bucket_ms))
+        if buckets[idx] is None or STATUS_SEVERITY[status] > STATUS_SEVERITY[buckets[idx]]:
+            buckets[idx] = status
+
+    return buckets
 
 
 def get_notifications(

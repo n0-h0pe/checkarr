@@ -14,7 +14,15 @@ from sqlalchemy.orm import Session
 from . import schemas
 from .config import settings
 from .database import get_db
-from .queries import get_active_issues, get_history, get_public_layout, get_service_statuses, resolve_layout_for_viewport, resolve_public_theme
+from .queries import (
+    get_active_issues,
+    get_history,
+    get_public_layout,
+    get_service_statuses,
+    get_uptime_buckets,
+    resolve_layout_for_viewport,
+    resolve_public_theme,
+)
 from .routers.meta import get_meta
 from .version import VERSION
 
@@ -42,6 +50,16 @@ def history(
     db: Session = Depends(get_db),
 ):
     return get_history(db, service_ids, check_id, minutes, limit, before_id, statuses)
+
+
+@public_app.get("/api/uptime")
+def uptime(
+    service_id: int = Query(...),
+    minutes: int = Query(1440, ge=1, le=10080),
+    bars: int = Query(20, ge=1, le=200),
+    db: Session = Depends(get_db),
+):
+    return get_uptime_buckets(db, service_id, minutes, bars)
 
 
 @public_app.get("/api/notifications", response_model=list[schemas.ActiveIssueOut])

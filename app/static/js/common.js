@@ -1038,9 +1038,17 @@ async function loadUptimeStrip(serviceId) {
     return;
   }
 
-  let rows;
+  const barCount = effectiveUptimeBarCount(serviceId, !!(state.activeLayout && state.activeLayout.is_compact));
+
+  let buckets;
   try {
-    rows = await api(`/api/history?service_ids=${serviceId}&minutes=${uptimeRangeMinutes()}&limit=2000`);
+    // Bucketed server-side (queries.get_uptime_buckets) rather than
+    // fetching raw rows and reducing them here, like this used to - that
+    // relied on /api/history's row limit, which silently truncated the
+    // older end of the range for any service whose checks, combined,
+    // produce a lot of rows (several checks, a short poll interval), even
+    // though the same range's data was all there in the History export.
+    buckets = await api(`/api/uptime?service_id=${serviceId}&minutes=${uptimeRangeMinutes()}&bars=${barCount}`);
   } catch (_) {
     return;
   }
@@ -1049,26 +1057,10 @@ async function loadUptimeStrip(serviceId) {
   // particular fetch resolves if the user changed the dropdown mid-flight.
   if (state.uptimeRange !== range.value || !document.body.contains(strip)) return;
 
-  const order = { ok: 0, warn: 1, fail: 2 };
-  const byTs = new Map();
-  for (const r of rows) {
-    const worst = byTs.get(r.timestamp);
-    if (!worst || order[r.status] > order[worst]) byTs.set(r.timestamp, r.status);
-  }
-
-  const barCount = effectiveUptimeBarCount(serviceId, !!(state.activeLayout && state.activeLayout.is_compact));
   const now = Date.now();
   const rangeMs = range.minutes * 60000;
   const rangeStart = now - rangeMs;
   const bucketMs = rangeMs / barCount;
-  const buckets = new Array(barCount).fill(null);
-
-  for (const [ts, status] of byTs) {
-    const t = parseTs(ts);
-    if (t < rangeStart || t > now) continue;
-    const idx = Math.min(barCount - 1, Math.floor((t - rangeStart) / bucketMs));
-    if (buckets[idx] === null || order[status] > order[buckets[idx]]) buckets[idx] = status;
-  }
 
   for (let i = 0; i < barCount; i++) {
     const bucketStart = new Date(rangeStart + i * bucketMs);

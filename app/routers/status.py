@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 
 from .. import schemas
 from ..database import get_db
-from ..queries import get_history, get_service_statuses
+from ..queries import get_history, get_service_statuses, get_uptime_buckets
 from ..security import require_auth
 
 router = APIRouter(prefix="/api", tags=["status"], dependencies=[Depends(require_auth)])
@@ -25,3 +25,13 @@ def get_history_route(
     db: Session = Depends(get_db),
 ):
     return get_history(db, service_ids, check_id, minutes, limit, before_id, statuses)
+
+
+@router.get("/uptime")
+def get_uptime_route(
+    service_id: int = Query(...),
+    minutes: int = Query(1440, ge=1, le=10080),
+    bars: int = Query(20, ge=1, le=200),
+    db: Session = Depends(get_db),
+):
+    return get_uptime_buckets(db, service_id, minutes, bars)
