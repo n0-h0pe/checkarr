@@ -29,10 +29,8 @@ shows one consolidated view of what's healthy, what's degraded, and why.
 - Single Docker container: web GUI, API, scheduler, and database, no
   external dependencies.
 
-See [ConfiguringServices.md](ConfiguringServices.md) for adding services and
-checks, and [Settings.md](Settings.md) for everything else in the Settings
-tab (dashboard layouts, History, Push Notifications, Log & History Pruning,
-and more).
+See [Settings.md - Adding a service](https://github.com/n0-h0pe/checkarr/blob/master/docs/Settings.md#adding-a-service) for adding services and
+checks.
 
 ## Quick start
 
@@ -45,7 +43,7 @@ Then open `http://<host>:8080`.
 
 For platform-specific instructions (Windows, Linux, Unraid, Mac), the full
 environment variable reference, and how to run it without Docker at all,
-see [DeployingDocker.md](DeployingDocker.md).
+see [DeployingCheckarr.md](https://github.com/n0-h0pe/checkarr/blob/master/docs/DeployingCheckarr.md).
 
 ## Credits
 
