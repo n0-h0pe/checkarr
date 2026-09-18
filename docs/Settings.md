@@ -162,8 +162,7 @@ empty directory. Three ways to catch this:
    underlying host directory:
    - **Path in Checkarr container**: the actual path this check tests. For
      this to see anything meaningful, bind-mount the host path in question
-     into the Checkarr container, read-only is fine, see
-     [DeployingDocker.md](DeployingDocker.md).
+     into the Checkarr container, read-only is fine.
    - **Path in `<app>` container**: optional, purely a label so the check's
      message tells you which of the target app's own paths this corresponds
      to.
@@ -330,7 +329,7 @@ Notifications tab all still show every result exactly as it happened,
 warn/fail badge and all, the moment it happens - nothing about *detecting*
 or *displaying* a problem is delayed, only whether Checkarr pages you about
 it. A result that didn't yet meet the count gets a small icon next to its
-Status badge in History (see Settings.md), the same way an SDT-suppressed
+Status badge in History, the same way an SDT-suppressed
 one does, so you can always tell why a given bad result didn't alert.
 
 The count resets whenever the status itself changes - three consecutive
@@ -536,32 +535,3 @@ own theme.
 Settings > Customizations picks the admin app's overall theme - the whole
 app, header included - from four:
 Takes effect immediately.
-
-
-
-## Security notes
-
-- API keys are encrypted with Fernet before being stored in SQLite, using a
-  key from `HC_APP_SECRET_KEY` if set, otherwise a key generated on first
-  run and persisted to `/config/secret.key`. Set `HC_APP_SECRET_KEY` and
-  back it up, if the generated key file is lost, stored API keys can't be
-  decrypted and services will need their keys re-entered. This only applies
-  to secrets actually stored in the database, one sourced from an
-  environment variable never touches this encryption at all, by design.
-- The admin web UI/API (port 8080) has no authentication by default (fine
-  on a trusted LAN behind your own reverse proxy/VPN). Set `HC_AUTH_USERNAME`
-  and `HC_AUTH_PASSWORD` to require HTTP Basic Auth for it. This does not
-  apply to the public dashboard port (8090), which is unauthenticated by
-  design, see Public dashboard above.
-- Filesystem checks only ever read paths you've explicitly bind-mounted
-  read-only, the container does not need write access to your media.
-- "Sign in to Plex" never sees your Plex password, it uses Plex's standard
-  PIN-based sign-in flow: this app only ever receives the resulting token,
-  via a popup hosted on plex.tv itself.
-
-Two internal identifiers kept their old `healthchecker` naming on purpose
-rather than being renamed for the sake of it: the SQLite database filename
-and the `filesystem_path` check's internal config key. Renaming either
-would have made every existing install's database or already-configured
-filesystem checks stop working after an upgrade, which is a strange way to
-say hello to a new name.
