@@ -1,15 +1,11 @@
 # Configuring services and checks
 
 How to add each type of service Checkarr supports, what credentials each
-one needs, and how to add checks beyond the defaults. None of this requires
-touching a config file by hand, which is more than can be said for most of
-the apps you're about to monitor with it.
+one needs, and how to add checks beyond the defaults.
 
 ## Adding a service
 
-Settings tab, "Add service". The type dropdown is grouped into Arr Stack,
-Downloaders, Media Servers, and Other, alphabetical within each group, so
-you're not scanning one long flat list to find what you want. Picking a
+Settings tab, "Add service". Picking a
 type (see "Supported services" below) autofills the Name field, updates the
 Local address placeholder with that app's usual default port, and switches
 the credential field(s) to match (see "Credentials" below). Set a local
@@ -39,24 +35,9 @@ poll interval override (see "Per-check poll interval" below).
 ### Icon
 
 Every service shows the type's own logo by default (the same picture as its
-entry in the type dropdown above). "Change icon" next to it opens a picker
-with three tabs:
-
-- **App logos**: every logo Checkarr already knows, not just the one for
-  this service's own type - handy for, say, a second Radarr instance you
-  want to visually tell apart from the first by giving it a different app's
-  logo.
-- **Emoji**: a broad, categorized collection of emoji to use as a plain
-  text icon instead of an image.
-- **Upload**: your own SVG, PNG, JPEG, or WebP image (1 MB max), stored
-  locally under `/config/icons` and served back at `/custom-icons/<file>`
-  on both the admin and public ports - wherever this service's card shows
-  up. An uploaded SVG is only ever rendered as an `<img>`, never injected
-  inline, so it can't run a script embedded in it even if it had one.
-
-Picking anything replaces the default immediately (no separate confirm
-step); "Reset to default" next to "Change icon" goes back to following the
-type's own logo again.
+entry in the type dropdown above). "Change icon" next to it opens a picker.
+Picking anything replaces the default immediately; "Reset to default" next
+to "Change icon" goes back to following the service type's own logo again.
 
 ### Credentials
 
@@ -79,16 +60,16 @@ The credential field(s) shown change based on the service type:
 - **Jellyfin**: an API key field (Dashboard > API Keys), plus optional
   admin username and admin password fields. The API key alone covers the
   basic health check, but some admin-only endpoints (library scanning, the
-  filesystem path check) reject it even when it belongs to an admin, a
-  known Jellyfin inconsistency. Filling in both admin fields logs in as
-  that account instead for just those specific calls.
+  filesystem path check) reject it even when it belongs to an admin. Filling
+  in both admin fields logs in as that account instead for just those
+  specific calls.
 - **Plex**: the field is labeled X-Plex-Token. Click "Sign in to Plex" next
   to it to get one without copying it out of your browser's dev tools, it
   opens Plex's own sign-in page in a popup, and once you authorize there
   the token is filled in automatically.
-- **qBittorrent**: username and password, verified against the WebUI's real
+- **qBittorrent**: username and password, verified against the WebUI's 
   login API. Leave both blank if that instance has authentication disabled.
-- **Deluge**: password only (Deluge's WebUI has no username), same real
+- **Deluge**: password only (Deluge's WebUI has no username), same 
   login verification.
 - **rTorrent / ruTorrent**: username and password, sent as HTTP Basic Auth
   on the web UI check and the XML-RPC check alike (rTorrent itself has no
