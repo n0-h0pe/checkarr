@@ -72,6 +72,26 @@ The public dashboard theme simply is the whole page's look,
 unless Dashboard Settings' "Public port theme override" is set (see
 below), which wins outright over any layout's own theme.
 
+## Public dashboard
+
+A second, minimal web app runs on its own port (8090 inside the container)
+purpose-built to be exposed externally without the risk that comes with
+exposing the full admin app:
+
+- Just the dashboard (see Dashboard Settings above for which layout and
+  whether it's compact), no top bar, no nav, no settings.
+- Two unlinked-from-the-page-but-reachable pages at `/history` and
+  `/notifications`, tiny links in the bottom-right corner of the dashboard.
+- No mutating routes exist on this port at all, it's a separate app that
+  only ever imports read-only query code. There's no services route to
+  find here even if you go looking, and no API keys are ever sent to any
+  client on this port.
+- No login by default, if you want one, put it behind your reverse
+  proxy/VPN, same as anything else you expose.
+
+Runs by default, set `HC_PUBLIC_DASHBOARD_ENABLED=false` to turn it off
+entirely.
+
 # History
 
 The History tab (admin) and page (public) loads all poll results for the selected
@@ -90,8 +110,8 @@ its Status badge
 
 A separate small repeat-arrows icon appears the same way whenever a
 warn/fail row's own check has an "Alert after" count above 1 (see
-ConfiguringServices.md) and this particular result hadn't reached that
-count yet, so no alert went out for it.
+[Settings.md - Alert after](https://github.com/n0-h0pe/checkarr/blob/master/docs/Settings.md#alert-after-consecutive-failureswarns-before-paging)) 
+and this particular result hadn't reached that count yet, so no alert went out for it.
 
 **Export CSV** downloads every row matching the current service/severity
 selection and time range, using whichever columns are currently shown, in that order.
