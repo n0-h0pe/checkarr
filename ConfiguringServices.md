@@ -84,22 +84,18 @@ see [DeployingDocker.md](DeployingDocker.md).
 
 | Type | Integration depth |
 |---|---|
-| Radarr, Sonarr | Full: web UI, API status, root-folder accessibility and population, free disk space, health feed, ad-hoc path checks via API |
-| Lidarr, Whisparr | Same as Radarr/Sonarr, both are Servarr-family apps with the same API shape |
-| Prowlarr | Web UI, API status, health feed (no root folders to check) |
+| Radarr, Sonarr, Lidarr, Whisparr | Web UI, API status, root-folder accessibility and population, free disk space, health feed, ad-hoc path checks via API |
+| Prowlarr | Web UI, API status, health feed |
 | Plex | Web UI, identity liveness, Remote Access status, library/path checks via API |
 | Jellyfin | Web UI, health endpoint, library/path checks via API (admin-only endpoints, see Credentials above) |
-| Chaptarr | Web UI only for now, its API shape hasn't been verified as Servarr-compatible. Add `http_200`/`keyword_match` checks as needed. |
-| Sportarr | Web UI only for now, same reason as Chaptarr - it's new enough that its API shape hasn't been verified. Add `http_200`/`keyword_match` checks as needed. |
+| Chaptarr, Sportarr, Dispatcharr, iPlayarr, iPlayer-Arr | Web UI only for now. |
 | qBittorrent | Web UI, real login verification, free disk space via API |
 | Deluge | Web UI, real login verification, free disk space via API |
 | Cleanuparr | Web UI only for now, its API hasn't been integrated yet. Add `http_200`/`keyword_match` checks as needed. |
-| rTorrent | No web UI check (there's genuinely nothing to reach) - just its XML-RPC interface, see below. Use this for a bare rTorrent with no ruTorrent in front of it. |
+| rTorrent | XML-RPC interface, see below. Use this for a bare rTorrent with no ruTorrent in front of it. |
 | ruTorrent | Web UI (ruTorrent's own, at `/rutorrent/` by default) plus the XML-RPC interface, defaulted to ruTorrent's httprpc plugin path. Use this instead of rTorrent above whenever ruTorrent is actually what's fronting it - see below, they're separate types because their correct defaults differ. |
-| Seerr, Jellyseerr | Web UI, API status, and a check that TMDB is reachable through the app. Jellyseerr is an API-compatible fork of Seerr, so both get identical checks. |
+| Seerr, Jellyseerr | Web UI, API status, and a check that TMDB is reachable through the app. |
 | Immich | Web UI, API status (library counts), free disk space, background job queue failures |
-| Dispatcharr | Web UI only for now, its API hasn't been integrated yet. Add `http_200`/`keyword_match` checks as needed. |
-| iPlayarr, iPlayer-Arr | Web UI only for now, neither's API has been integrated yet. Add `http_200`/`keyword_match` checks as needed - see "BBC iPlayer downloaders" below. |
 | Generic | Web UI checks only, for anything else |
 
 Any service, regardless of type, can also have `filesystem_path`,
@@ -136,10 +132,11 @@ empty directory. Three ways to catch this:
    the Checkarr container at all. It checks both that the mount is
    reachable and that it actually lists contents, catching the
    empty-but-technically-mounted case a bare reachability check would miss.
-2. **`arr_filesystem_path` (API-based, add manually)**: same underlying API
-   as above, but for any path you give it, not just configured root
-   folders. Still no volume mount needed.
-3. **`filesystem_path` (direct, requires a bind mount)**: for services with
+2. **`arr_filesystem_path` (API-based, add manually)**: API checks any path
+   you give it exactly like the *arr's native "Browse" interface on the WebUI.
+   Looks for the number of files and folders in that directory, and returns
+   OK if that count is >0. 
+4. **`filesystem_path` (direct, requires a bind mount)**: for services with
    no such browse API. Has two path fields, since the path an app sees for
    a folder is essentially never the path Checkarr sees for that same
    underlying host directory:
@@ -160,9 +157,8 @@ empty directory. Three ways to catch this:
 For Plex and Jellyfin, instead of typing out filesystem checks by hand for
 every library, click "Scan libraries" on the service's expanded row in
 Settings. It asks the service itself what libraries and folders it has
-configured, and adds one filesystem check per folder automatically, no
-guessing paths, no bind mounts. Safe to click again later, it skips any
-path that already has a check.
+configured, and adds one filesystem check per folder automatically. Safe 
+to click again later, it skips any path that already has a check.
 
 ## Available check types
 
