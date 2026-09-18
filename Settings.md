@@ -8,9 +8,7 @@ but are configured from it.
 ## Dashboard layouts
 
 Click "Edit layout" in the top bar to rearrange the dashboard, drag and
-resize only work in this mode, so normal day-to-day viewing can't
-accidentally bump a card out of place.
-
+resize only work in this mode.
 Every saved layout belongs to one of four pools - **Desktop**,
 **Desktop-Compact**, **Mobile**, and **Mobile-Compact** - and which pool
 you're currently editing/viewing determines how editing works:
@@ -18,9 +16,8 @@ you're currently editing/viewing determines how editing works:
 - **Desktop / Desktop-Compact**: free-form. Drag a card from anywhere on it
   (except the resize handle and its own buttons) to move it anywhere on the
   grid, it snaps to an invisible grid. Drop it on or across other cards and
-  whatever's in the way gets pushed out of your way rather than refusing
-  the move. Every card has a drag handle in its bottom-right corner, drag
-  it to make the card wider or taller.
+  whatever's in the way gets pushed out of your way. Every card has a drag
+  handle in its bottom-right corner, drag it to make the card wider or taller.
 - **Mobile / Mobile-Compact**: always a single column, one card per row,
   full width, no free-form drag - each card gets Move to top/up/down/to
   bottom buttons instead, and its resize handle only changes height. This
@@ -29,236 +26,109 @@ you're currently editing/viewing determines how editing works:
   never affected by anything you do to a Desktop/Desktop-Compact one.
 
 Sizes and positions save automatically as soon as you release the drag (or
-click a reorder button), no separate Save step. Every one of the four pools
-always has an "All Services" layout (locked in the dropdown) that always
-shows every service, including ones added after the layout was created,
-and can't be deleted - every install gets all four the moment it starts up,
-nothing to set up first. Any other custom layout only shows the cards
-you've explicitly put on it: while editing a custom layout, each card gets
-a small remove button next to its status badge, and an Add card dropdown
-appears in the top bar. A newly added service only ever appears on All
-Services automatically, never inserted into a custom layout behind your
-back.
+click a reorder button). Every one of the four pools always has an
+"All Services" layout that always shows every service. Any other custom
+layout only shows the cards you've explicitly put on it: while editing a 
+custom layout, each card gets a small remove button next to its status badge, 
+and an Add card dropdown appears in the top bar.
 
 The dropdown in the top bar next to Edit layout holds your saved layouts
 **from whichever pool you're currently in** - New saves the current
 arrangement as a new layout in that same pool, Rename and Delete act on the
-one currently selected (Delete is disabled for All Services), and picking
-any layout from the dropdown switches the dashboard to it instantly.
+one currently selected, and picking any layout from the dropdown switches 
+the dashboard.
 
-Which of the two *device* pools (Desktop-ish vs Mobile-ish) you're looking
+Which of the two *device* pools (Desktop vs Mobile) you're looking
 at isn't something you pick - it follows the actual width of whatever
 you're viewing it on, automatically, every time the page loads or your
-window crosses roughly phone width. Narrow your browser window (or open
-the dashboard on a phone) and it switches itself to a Mobile/Mobile-Compact
-layout; widen it back out and it switches back - always landing on that
-pool's All Services layout unless you've specifically activated a
-different one of your own in it. This is also what fixed cards being able
-to render partway off the edge of a narrow screen with the rest of the
-page scrolling sideways to reach them: a Mobile-pool layout only ever
-stores each card's up/down position, never a desktop-shaped horizontal one
-that could end up placed past where a narrow screen actually has room.
+window crosses roughly phone width.
 
 ### Compact view
 
 Next to Edit layout, **Compact view** switches between the compact and
-full pool *for whichever device pool you're currently in* - Desktop ⇄
-Desktop-Compact, or Mobile ⇄ Mobile-Compact, never crossing between device
-pools itself (that half is automatic, see above). A compact layout drops
+full pool *for whichever dashboard pool you're currently in* - Desktop ⇄
+Desktop-Compact, or Mobile ⇄ Mobile-Compact. A compact layout drops
 each card down to just its icon, name, and status badge on one line, then
-the uptime history strip on a second, nothing else, no Run now/History
-buttons, no type/address/last-checked line, no individual check rows. A
-long name that would otherwise run into the status badge fades out
-smoothly instead of getting cut off mid-character. Because there's so much
+the uptime history strip on a second, nothing else. Because there's so much
 less on a compact card, it can also be resized much smaller than a full
-one (on Desktop-Compact; Mobile-Compact cards are always full list-width
-either way).
+one.
 
 A layout is fixed as compact or not (and Desktop or Mobile) the moment it's
 created, never flipped in place afterward - clicking Compact view activates
 one of your existing layouts in the other compact-ness within your current
-device pool, and the layout dropdown next to it only ever lists layouts
-from whichever of the four pools you're currently in. **+ New** always
-creates within whichever pool is currently active, so making more compact
-layouts later is just Compact view, then + New, same as for full ones.
-
-Useful for a wall-mounted display or anywhere you want "is it up" at a
-glance rather than a full breakdown, or just to keep a leaner view of your
-services alongside your normal detailed one.
+dashboard pool.
 
 ### Uptime bars per card
 
 In edit mode, a small **Bars** field sits directly above every card's
 uptime strip - how many bars that specific card's strip is divided into,
 for every ranged option in the uptime/History picker ("Last 5 minutes"
-through "Last 1 week"). It's per card, not a single dashboard-wide number,
-so a wide card and a narrow one on the same layout can genuinely show
-different counts, each tuned to what actually looks good at that card's
-own size. Doesn't touch "Just the last poll", which always shows exactly
-one bar (the live status already in hand) regardless - there's nothing to
-divide a single poll into.
-
-A card's own current width caps how high this can be set - 50 at 16 grid
-units wide or narrower, rising in a straight line to the full 200 at 64
-grid units and beyond (32 units, for reference, tops out at 100). This
-isn't arbitrary: past a certain point, the gap between bars eats more of a
-narrow card's width than the bars themselves have left, and they start
-rendering as slivers or disappearing outright rather than just looking a
-little thin. Resizing a card narrower than its current Bars value clamps
-what's actually drawn down to the new limit automatically (without
-discarding the higher number you'd set - widen the card back out and it
-returns); typing a value above the field's own max simply gets capped to
-it on save.
-
-While actively dragging a card's resize handle, a small badge appears in
-its top-right corner showing that card's current internal grid size and
-the bar-count ceiling that size implies (e.g. "32 × 12 grid · max 100
-bars") - a troubleshooting aid for exactly this relationship, gone again
-the moment you let go.
+through "Last 1 week"). A card's own current width caps how high this can be set
 
 ### Layout theme
 
-The **Theme** dropdown in the top bar (next to Rename/Delete, edit mode
-only) sets this specific layout's own theme - Dark by default, or any of
-the other three. There's no "inherit the admin theme" option: every layout
-always has one of the four picked explicitly, Dark being what a newly
-created layout starts with.
+The **Theme** dropdown in the top bar sets this specific layout's own theme. 
+There's no "inherit the admin theme" option: every layout always has one of 
+the four picked explicitly, Dark being what a newly created layout starts with.
 
 On the admin app this is deliberately narrow: only the dashboard tab's own
 background, text, and cards switch, the header and nav bar stay on
 whatever Settings > Customizations is set to, regardless of which layout
-(or its theme) you're currently looking at. The public dashboard (port
-8090) has no separate chrome to protect that way and doesn't consult
-Customizations at all - there, a layout's theme simply is the whole page's
-look, unless Dashboard Settings' "Public port theme override" is set (see
-below), which wins outright over any layout's own theme. See
-Customizations below for the four themes themselves.
+(or its theme) you're currently looking at. 
+The public dashboard theme simply is the whole page's look, 
+unless Dashboard Settings' "Public port theme override" is set (see
+below), which wins outright over any layout's own theme.
 
 ### Dashboard Settings (what the public port shows)
 
 Settings > Dashboard Settings controls which layout the public dashboard
 port (8090) shows, independent of whatever you currently have active in the
-admin app - two separate pins, not one:
+admin app:
 
 - **Dashboard to show on Desktop**: which layout a desktop-width visitor to
   port 8090 gets. Only lists your Desktop and Desktop-Compact layouts
-  (compact ones are labeled so you can tell them apart) - a Mobile-pool
-  layout would never be a sensible pick here, so it isn't offered. Leave
-  unset to fall back to your Desktop pool's All Services.
-- **Dashboard to show on Mobile**: the equivalent pin for a phone-width
-  visitor, offering only your Mobile and Mobile-Compact layouts. This is
-  what actually fixes a phone getting rendered the wrong dashboard - before
-  these were split, a phone visitor could only ever fall back to the
-  Mobile pool's default, with no way to pin a specific curated Mobile
-  layout of your own the way Desktop always could.
-
-Either pin shows this one regardless of what admin is actively editing or
-has switched to, so you can rearrange your own view without disturbing
-what a housemate or a status page pointed at port 8090 sees. Whether a pin
-renders compact simply follows whether the layout you picked for it is one
-of your compact ones - there's nothing separate to configure for that.
+  (compact ones are labeled so you can tell them apart) Leave unset to fall
+  back to your Desktop pool's All Services.
+- **Dashboard to show on Mobile**: which layout a phone-width visitor to
+  port 8090 gets. Only lists your Mobile and Mobile-Compact layouts
+  (compact ones are labeled so you can tell them apart) Leave unset to fall
+  back to your Mobile pool's All Services.
 
 **Public port theme override**: forces port 8090 to always render this
-theme, full stop - overriding whichever layout is actually pinned above
-and that layout's own theme entirely. Leave it at "No override" for the
-normal behavior (follow the pinned layout's own theme, see "Layout theme"
-above); pick one of the four to lock the public dashboard to a specific
-look regardless of anything else, e.g. keeping a wall-mounted or
-externally-shared view on Dark even while you experiment with layout
-themes elsewhere.
+theme. Overriding whichever layout is actually pinned above and that layout's 
+own theme entirely. Leave it at "No override" to follow the pinned layout's 
+own theme.
 
 ## Customizations
 
 Settings > Customizations picks the admin app's overall theme - the whole
 app, header included - from four:
-
-- **Dark**: the original look, dark navy background, blue accent.
-- **White**: a light background instead, same blue accent, deeper-toned
-  status colors for contrast against white.
-- **OLED**: true black background/panels (not just a darker navy - the
-  point is genuinely-off pixels on an OLED screen), same blue accent as
-  Dark.
-- **Coder**: the same true black as OLED, but a terminal/Monokai-style
-  green accent instead of blue - deliberately a different shade of green
-  from the status-OK green, so the two don't read as the same color next
-  to each other.
-
-Takes effect immediately on save, no reload needed. This only ever
-controls the admin app's own header/nav - each dashboard layout has its
-own separate theme for its cards/background (see "Layout theme" above,
-Dark by default there too), and the public dashboard (port 8090), which
-has no separate chrome, follows whichever layout it's showing regardless
-of what's picked here.
+Takes effect immediately.
 
 ## History
 
-The History tab (admin) and page (public) loads incrementally as you
-scroll rather than a single capped fetch, and respects the time range
-picked in the top bar down to the minute, not just the hour, so "Last 5
-minutes" actually shows five minutes of data instead of quietly rounding up
-to an hour. "Just the last poll" is its own special case rather than a
-1-minute window (which would come back empty for anything polled less
-often than once a minute) - it shows each selected service's most recent
-result per check, exactly what the dashboard cards are currently showing.
+The History tab (admin) and page (public) loads all poll results for the selected
+filters for the time range picked in the top bar down to the minute.
 
 Every configured service gets its own pill button in a row above the table.
-Click one to toggle it on or off - nothing is selected by default, so the
-table starts empty and loads nothing until you pick at least one, keeping
-the page fast even with a lot of history piled up. Pick more than one and
-each row gets a Service column so you can tell them apart.
+Click one to toggle it on or off. Pick more than one and each row gets a Service 
+column so you can tell them apart.
 
 A second row of pills right below it - **OK / Warn / Fail** - filters by
-result severity the same way, toggle any combination on or off. Unlike the
-service pills, all three start selected (matching what you'd see with no
-filter at all), so this is purely a narrowing tool, not something you have
-to configure before the table shows anything.
+result severity the same way, toggle any combination on or off.
 
 A warn/fail row that happened while its service was covered by an active
 Scheduled Down Time schedule gets a small bell-with-a-slash icon next to
-its Status badge - hover it for a reminder of what it means (that row's
-alert was suppressed, not sent). This is recorded permanently at the
-moment each check actually runs, not worked out after the fact from
-whatever schedules happen to still exist later - so it stays accurate for
-that row forever, including for an Instant SDT window that's long since
-ended and been cleaned up (Settings > Scheduled Down Time deletes those
-once they're over, to keep that list from growing forever; the History
-rows that happened during one keep their icon regardless).
+its Status badge
 
 A separate small repeat-arrows icon appears the same way whenever a
 warn/fail row's own check has an "Alert after" count above 1 (see
 ConfiguringServices.md) and this particular result hadn't reached that
-count yet, so no alert went out for it either - a different reason from
-SDT, and a row can show both icons together if both happen to apply.
-
-**Columns** opens a small dialog listing every available column (Time,
-Service, Check, Type, Status, Response, Message) with a checkbox and a drag
-handle, check to show, drag to reorder, at least one has to stay visible.
-The Time column never wraps onto a second line; every other column
-truncates with an ellipsis instead of wrapping the row. Drag the edge of a
-column header to resize it, both the column set and any manual widths are
-remembered. This is desktop only - see below for how a phone-width screen
-renders History instead.
+count yet, so no alert went out for it.
 
 **Export CSV** downloads every row matching the current service/severity
-selection and time range, not just whatever happened to be scrolled into
-view, using whichever columns are currently shown, in that order, plus
-"In SDT" and "Alert Threshold Suppressed" TRUE/FALSE columns at the end -
-always included regardless of which columns are currently shown, since
-they're audit data rather than a display preference.
-
-### On a phone
-
-The column layout above gives way to one compact line per event instead:
-a short date/time (`YY-MM-DD HH:MM`), the service's icon alone (no name -
-it doesn't fit, and the icon is enough once you know your own services), a
-short OK/WARN/FAIL badge, the same Scheduled Down Time/Alert-threshold
-icons described above when either applies, and the same abbreviated result
-summary the mobile dashboard cards use (`200 OK`, `Files OK`, and so on).
-Tap the "›" at the end of a row to expand it into everything left out -
-full service and check name, check type, exact time, response time,
-explicit "In SDT"/"Alert threshold" lines when they apply, and the
-complete message - the same detail the row would show outright on a wider
-screen.
+selection and time range, using whichever columns are currently shown, in that order.
+The CSV includes "In SDT" and "Alert Threshold Suppressed" TRUE/FALSE columns too.
 
 ## Notifications tab
 
@@ -266,13 +136,11 @@ Shows every check currently sitting in warn or fail, across every service,
 with the service's icon and name, the check name, the message it actually
 received, and when it was last checked. This is a live view of what's
 wrong right now, not a history, once a check recovers it drops off the
-list on the next poll. If a whole service goes offline, every check
+list on the next poll. 
+If a whole service goes offline, every check
 against it shows up here too, even ones that would otherwise report
 through the *arr apps' own health feed, since this reads actual check
 results rather than waiting for a service to tell you about itself.
-
-When there's nothing to show, the empty state picks one of a handful of
-lines at random each time rather than always saying the same thing.
 
 ## Push Notifications
 
