@@ -303,9 +303,16 @@ async def check_health(
 
     worst = "error" if any(n.severity == "error" for n in notifications) else "warning"
     status = STATUS_FAIL if worst == "error" else STATUS_WARN
-    return CheckOutcome(
-        status,
-        f"{len(notifications)} active health issue(s) reported",
-        elapsed,
-        notifications=notifications,
-    )
+    # The actual text Radarr/Sonarr would show in their own UI (e.g. "Indexer
+    # X is unavailable"), not just a bare count - this is what ends up as
+    # this check's CheckResult.message, so it's what shows on the dashboard
+    # card, the Notifications tab (queries.get_active_issues reads the
+    # latest failing CheckResult, not the separate Notification table below),
+    # and the History log. A bare "N active health issue(s) reported" told
+    # you *that* something was wrong, never *what*, without switching over
+    # to the target app itself to find out.
+    if len(notifications) == 1:
+        message = notifications[0].message
+    else:
+        message = f"{len(notifications)} active health issues: " + "; ".join(n.message for n in notifications)
+    return CheckOutcome(status, message, elapsed, notifications=notifications)
