@@ -33,6 +33,12 @@ public_app.mount("/static", StaticFiles(directory="app/static"), name="static")
 public_app.mount("/custom-icons", StaticFiles(directory=str(settings.icons_path)), name="custom-icons")
 templates = Jinja2Templates(directory="app/templates")
 
+# Matches the longest option in the frontend's UPTIME_RANGES (common.js) -
+# "Last year". Keep the two in sync if that list's range ever grows. Not
+# imported from routers/status.py - this module deliberately never imports
+# anything from the admin-only routers package (see module docstring).
+MAX_HISTORY_MINUTES = 525600
+
 
 @public_app.get("/api/status", response_model=list[schemas.ServiceStatusOut])
 def status(db: Session = Depends(get_db)):
@@ -43,7 +49,7 @@ def status(db: Session = Depends(get_db)):
 def history(
     service_ids: list[int] = Query([]),
     check_id: int | None = Query(None),
-    minutes: int = Query(1440, ge=1, le=10080),
+    minutes: int = Query(1440, ge=1, le=MAX_HISTORY_MINUTES),
     limit: int = Query(100, ge=1, le=5000),
     before_id: int | None = Query(None),
     statuses: list[str] = Query([]),
@@ -55,7 +61,7 @@ def history(
 @public_app.get("/api/uptime")
 def uptime(
     service_id: int = Query(...),
-    minutes: int = Query(1440, ge=1, le=10080),
+    minutes: int = Query(1440, ge=1, le=MAX_HISTORY_MINUTES),
     bars: int = Query(20, ge=1, le=200),
     db: Session = Depends(get_db),
 ):

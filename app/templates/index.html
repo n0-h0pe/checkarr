@@ -77,7 +77,7 @@
         <button class="sub-tab-btn active" data-subtab="services">Services</button>
         <button class="sub-tab-btn" data-subtab="channels">Push Notifications</button>
         <button class="sub-tab-btn" data-subtab="downtime">Scheduled Down Time</button>
-        <button class="sub-tab-btn" data-subtab="pruning">Log &amp; History Pruning</button>
+        <button class="sub-tab-btn" data-subtab="pruning">Check History Pruning</button>
         <button class="sub-tab-btn" data-subtab="dashboard-settings">Dashboard Settings</button>
         <button class="sub-tab-btn" data-subtab="customizations">Customizations</button>
       </div>
@@ -152,7 +152,7 @@
       <div class="subtab-panel" id="subtab-pruning">
         <div class="panel">
           <div class="panel-header">
-            <h2>Log &amp; History Pruning</h2>
+            <h2>Check History Pruning</h2>
           </div>
           <form id="pruning-form">
             <div class="field">
@@ -162,8 +162,14 @@
                 <span class="text-dim">days</span>
               </div>
             </div>
-            <div class="field text-dim">Pruning runs automatically every 30 minutes .</div>
+            <div class="field text-dim">Pruning runs automatically every 6 hours.</div>
             <div class="field text-dim" id="prune-last-run"></div>
+            <div class="field text-dim">
+              This only covers check history (the results shown in the dashboard and History tab).
+              Checkarr doesn't write its own log files to prune - its process logs go straight to
+              stdout the same as any other Docker container's, so Docker's own log rotation
+              settings are the right place to manage those.
+            </div>
             <div class="modal-actions" style="justify-content:flex-start;">
               <button type="submit" class="primary">Save</button>
               <button type="button" id="prune-now-btn">Prune now</button>

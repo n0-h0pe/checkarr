@@ -2160,7 +2160,11 @@ async function cancelInstantSdt(schedule) {
   }
 }
 
-// ---------- settings: log & history pruning ----------
+// ---------- settings: check history pruning ----------
+// Endpoint/route names (log-pruning-settings, LogPruningSettings) are the
+// old "Log & History Pruning" naming, kept as-is rather than renamed - this
+// has only ever pruned CheckResult rows, never log files (see the note in
+// the Settings tab itself), so the rename is UI-facing text only.
 
 function renderPruneLastRun(lastPrunedAt) {
   $("#prune-last-run").textContent = "Last pruned: " + (lastPrunedAt ? relTime(lastPrunedAt) : "never");
@@ -2171,7 +2175,7 @@ async function loadLogPruningSettings() {
   try {
     s = await api("/api/log-pruning-settings");
   } catch (e) {
-    toast("Failed to load log & history pruning settings: " + e.message, true);
+    toast("Failed to load check history pruning settings: " + e.message, true);
     return;
   }
   $("#prune-retention-days").value = s.retention_days;
@@ -2190,7 +2194,7 @@ async function submitPruningForm(ev) {
       method: "PUT",
       body: JSON.stringify({ retention_days: retentionDays }),
     });
-    toast("Log & History Pruning settings saved");
+    toast("Check History Pruning settings saved");
     renderPruneLastRun(s.last_pruned_at);
   } catch (e) {
     toast("Save failed: " + e.message, true);

@@ -1,11 +1,15 @@
-"""The one recurring background job (every 30 minutes, see
-scheduler.schedule_housekeeping) that does Checkarr's own upkeep: pruning
-old check history (log_pruning.prune_all_services) and watching Checkarr's
-own health (free disk space on /config, notification channels that have
-started failing to send). Self-monitoring alerts go through the same
-queue_alert batching pipeline as ordinary check alerts (see alerting.py) -
-so a channel that's broken can't flood itself with "you're broken" alerts
-any more than a flapping service can flood it with ordinary ones.
+"""The recurring background job (every 30 minutes, see
+scheduler.schedule_housekeeping) that watches Checkarr's own health: free
+disk space on /config, and notification channels that have started failing
+to send. Self-monitoring alerts go through the same queue_alert batching
+pipeline as ordinary check alerts (see alerting.py) - so a channel that's
+broken can't flood itself with "you're broken" alerts any more than a
+flapping service can flood it with ordinary ones.
+
+Check history pruning (log_pruning.py) used to run as part of this same
+job; it's now its own job on a longer interval (see
+scheduler.schedule_pruning) since a bulk DELETE doesn't need the same
+30-minute cadence these cheap reads benefit from.
 """
 
 import asyncio
@@ -15,7 +19,6 @@ import shutil
 from . import alerting
 from .config import settings
 from .database import SessionLocal
-from .log_pruning import prune_all_services
 from .queries import get_or_create_self_monitoring_state
 
 logger = logging.getLogger("checkarr.housekeeping")
@@ -25,7 +28,6 @@ DISK_SPACE_FAIL_BYTES = 10 * 1024 * 1024
 
 
 async def run_housekeeping() -> None:
-    await asyncio.to_thread(prune_all_services)
     await check_disk_space()
     await flush_channel_failures()
 

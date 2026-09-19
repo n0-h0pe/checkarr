@@ -50,8 +50,9 @@ app/
   scheduler.py                  APScheduler wiring around poller.py
   alerting.py                   outbound alert batching/dispatch
   downtime.py                   Scheduled Down Time suppression logic
-  housekeeping.py               the 30-minute self-upkeep job
-  log_pruning.py                History retention
+  housekeeping.py               the 30-minute self-upkeep job (disk space,
+                                 failing notification channels)
+  log_pruning.py                check history retention, its own 6-hour job
   library_scan.py               Plex/Jellyfin "Scan libraries"
   connection_test.py            the Add Service "Test connection" probe
   plex_client.py, jellyfin_client.py
