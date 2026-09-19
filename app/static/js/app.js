@@ -497,7 +497,12 @@ function discardChanges() {
 }
 
 function renderServiceRow(svc) {
-  const tr = el("tr", { class: "service-row" });
+  // Drives both the chevron below and the "collapsed" class on `tr` itself
+  // (which CSS uses to hide the whole detail row via a sibling selector -
+  // see renderChecksPanel's toggle handler and the ".service-row.collapsed
+  // + .service-detail-row" rule in style.css).
+  const isCollapsed = collapsedServiceIds.has(svc.id);
+  const tr = el("tr", { class: "service-row" + (isCollapsed ? " collapsed" : "") });
 
   // The expand/collapse toggle for the checks list below sits in its own
   // column here, right next to Type - the same control it always was
@@ -506,7 +511,6 @@ function renderServiceRow(svc) {
   // one more thing inside an already-busy sub-panel. renderChecksPanel
   // below still owns wiring its click behavior, since that's where the
   // checks-grid it actually shows/hides gets built.
-  const isCollapsed = collapsedServiceIds.has(svc.id);
   const chevron = el("span", { class: "checks-toggle-chevron" + (isCollapsed ? " collapsed" : "") });
   chevron.innerHTML = CHEVRON_DOWN_ICON;
   const toggleBtn = el("button", { class: "checks-toggle" }, [chevron, el("span", { text: `Checks (${svc.checks.length})` })]);
@@ -548,9 +552,23 @@ function renderServiceRow(svc) {
     el("button", { class: "small danger", onclick: () => deleteService(svc) }, "Delete"),
     el("button", { class: "small primary", onclick: () => openCheckModal(svc) }, "+ Add check"),
   ];
-  tr.appendChild(el("td", {}, el("div", { style: "display:flex; gap:6px; flex-wrap:wrap;" }, actions)));
+  // .service-row-actions (style.css): nowrap on desktop, paired with the
+  // actions column's own `width: 1%; white-space: nowrap` there (the trick
+  // that shrinks this column to its content instead of the browser handing
+  // it excess table width) - wraps normally again on mobile, where that
+  // column-shrinking trick doesn't apply and 3 buttons plus a narrow
+  // viewport really can need two lines.
+  tr.appendChild(el("td", {}, el("div", { class: "service-row-actions" }, actions)));
 
-  const detailRow = el("tr", { class: "service-detail-row" }, el("td", { colspan: "8" }, renderChecksPanel(svc, toggleBtn, chevron)));
+  // The whole detail row - not just the checks-grid inside it - is what
+  // disappears while collapsed (via the CSS sibling selector keyed off
+  // `tr`'s own "collapsed" class above), so a collapsed service costs
+  // nothing: no empty .checks-subpanel box, no extra padding/border, just
+  // this row's own bottom border like any other table row.
+  const detailRow = el("tr", { class: "service-detail-row" });
+  const detailCell = el("td", { colspan: "8" });
+  detailCell.appendChild(renderChecksPanel(svc, toggleBtn, chevron, tr));
+  detailRow.appendChild(detailCell);
 
   const wrapper = document.createDocumentFragment();
   wrapper.appendChild(tr);
@@ -558,12 +576,13 @@ function renderServiceRow(svc) {
   return wrapper;
 }
 
-function renderChecksPanel(svc, toggleBtn, chevron) {
-  const isCollapsed = collapsedServiceIds.has(svc.id);
+function renderChecksPanel(svc, toggleBtn, chevron, serviceRow) {
   const panel = el("div", { class: "checks-subpanel" });
 
-  // Lives here (inside the collapsible Checks panel), not in the row's own
-  // action buttons - see renderServiceRow's comment on why it moved.
+  // Scan libraries only shows once Checks is unravelled - it lives inside
+  // the same row that's entirely hidden while collapsed, so it just
+  // naturally disappears/reappears with everything else here, no separate
+  // visibility logic needed for it.
   if (svc.type === "plex" || svc.type === "jellyfin") {
     panel.appendChild(
       el("div", { class: "checks-panel-toolbar" }, [
@@ -582,28 +601,37 @@ function renderChecksPanel(svc, toggleBtn, chevron) {
 
   if (svc.checks.length === 0) {
     panel.appendChild(el("div", { class: "text-dim", text: "No checks configured" }));
-    return panel;
+  } else {
+    const grid = el("div", { class: "checks-grid" }, [
+      el("div", { class: "checks-grid-header" }),
+      el("div", { class: "checks-grid-header", text: "Enable" }),
+      el("div", { class: "checks-grid-header", text: "Check Type" }),
+      el("div", { class: "checks-grid-header", text: "Name" }),
+      el("div", { class: "checks-grid-header", text: "Alert level" }),
+      el("div", { class: "checks-grid-header", text: "Actions" }),
+    ]);
+    for (const c of svc.checks) {
+      appendCheckGridRow(grid, svc, c);
+    }
+    panel.appendChild(grid);
   }
-  const grid = el("div", { class: "checks-grid" }, [
-    el("div", { class: "checks-grid-header" }),
-    el("div", { class: "checks-grid-header", text: "Enable" }),
-    el("div", { class: "checks-grid-header", text: "Check Type" }),
-    el("div", { class: "checks-grid-header", text: "Name" }),
-    el("div", { class: "checks-grid-header", text: "Alert level" }),
-    el("div", { class: "checks-grid-header", text: "Actions" }),
-  ]);
-  grid.style.display = isCollapsed ? "none" : "";
-  for (const c of svc.checks) {
-    appendCheckGridRow(grid, svc, c);
-  }
+
+  // Wired unconditionally (a service with zero checks used to skip this
+  // entirely, back when there was no toolbar and nothing else in here to
+  // toggle) - Scan libraries and this panel's own box both need the toggle
+  // to work regardless of whether there happen to be any checks yet.
+  // Toggles a class on the service-row itself, not this panel or its own
+  // <tr> - see the ".service-row.collapsed + .service-detail-row" rule in
+  // style.css, which hides the whole detail row from one class in one
+  // place (and, on mobile, also re-closes the service-row's own card
+  // corners/border for when there's no detail-row "cap" showing below it).
   toggleBtn.addEventListener("click", () => {
-    const collapse = grid.style.display !== "none";
-    grid.style.display = collapse ? "none" : "";
-    chevron.classList.toggle("collapsed", collapse);
-    if (collapse) collapsedServiceIds.add(svc.id); else collapsedServiceIds.delete(svc.id);
+    const collapsing = !serviceRow.classList.contains("collapsed");
+    serviceRow.classList.toggle("collapsed", collapsing);
+    chevron.classList.toggle("collapsed", collapsing);
+    if (collapsing) collapsedServiceIds.add(svc.id); else collapsedServiceIds.delete(svc.id);
     saveCollapsedServiceIds();
   });
-  panel.appendChild(grid);
   return panel;
 }
 
