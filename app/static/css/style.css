@@ -462,6 +462,32 @@ table { width: 100%; border-collapse: collapse; }
 table th, table td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--border); font-size: 13px; }
 table th { color: var(--text-dim); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .03em; }
 
+/* Services table's last (buttons-only, unlabeled header) column - with
+   plain auto table layout, the browser was giving it much more width than
+   Edit/Delete/+Add check ever need, leaving the actual gap visible to the
+   right of the buttons instead of going to the columns that could use it
+   (Name, Local, Remote). `width: 1%` is the standard auto-layout trick for
+   "shrink this column to its content" - a percentage width can't actually
+   be honored below the content's own minimum, but it tells the browser not
+   to hand this column any of the leftover space either, so every other
+   column gets it instead. `white-space: nowrap` keeps the three buttons on
+   one line so that minimum stays small and predictable. Desktop only
+   (min-width matching the mobile stacked-table breakpoint below) - on
+   mobile every cell becomes a full-width block row instead, where a 1%
+   width or forced nowrap would just clip the buttons instead of helping. */
+@media (min-width: 701px) {
+  #services-table th:last-child, #services-table td:last-child { width: 1%; white-space: nowrap; }
+}
+
+/* Edit/Delete/+Add check on a service row - nowrap by default (see the
+   width:1% column-shrink trick above, which this pairs with: a flex row
+   still allowed to wrap would just wrap anyway once the column shrinks to
+   fit). Only ever 3 buttons now (Scan libraries moved into the Checks
+   panel - see renderChecksPanel), so this fits on one line on any desktop
+   width. Reverted to wrapping on mobile below, where the column trick
+   doesn't apply and a narrow viewport can genuinely need two lines. */
+.service-row-actions { display: flex; gap: 6px; flex-wrap: nowrap; }
+
 /* The History table only - table-layout:fixed plus its own <colgroup>
    (rendered in common.js's renderHistoryColgroup) gives every column a real
    bounded width to truncate against, so a long Message ellipsizes instead
@@ -600,6 +626,19 @@ table th { color: var(--text-dim); font-weight: 600; font-size: 12px; text-trans
 .checks-subpanel { background: var(--bg); border-radius: 6px; padding: 10px 14px; margin: 6px 0 16px; }
 
 .checks-panel-toolbar { display: flex; gap: 6px; margin-bottom: 10px; }
+
+/* A collapsed service's whole detail row (the Checks toggle's target) is
+   removed from layout entirely, not just its checks-grid - previously
+   only the grid inside .checks-subpanel hid itself, leaving that div's own
+   background/padding/margin rendering as an empty box between every
+   collapsed service. Keyed off the "collapsed" class toggled on the
+   service-row above it (renderChecksPanel's toggle handler in app.js)
+   rather than a class/inline style on the detail row itself, so hiding it
+   and (on mobile, below) re-closing the service-row's own card corners
+   both come from that one class in one place. Unconditional (not inside
+   the mobile media query) since "collapsed means hidden" is true at every
+   width. */
+#services-body tr.service-row.collapsed + tr.service-detail-row { display: none; }
 
 /* CSS Grid, not a <table> - this environment's <thead>/<tbody> box
    generation for programmatically-created tables doesn't reliably share a
@@ -977,6 +1016,12 @@ table th { color: var(--text-dim); font-weight: 600; font-size: 12px; text-trans
   .checks-grid .check-actions { justify-content: flex-end; }
   .checks-grid .drag-handle { justify-content: flex-start; padding-bottom: 0; }
 
+  /* The desktop column-shrink trick (width:1% on this table's last column)
+     is itself already scoped to min-width:701px, but .service-row-actions'
+     own nowrap isn't - undo it here so 3 buttons can still drop to a
+     second line on a narrow phone instead of overflowing/clipping. */
+  .service-row-actions { flex-wrap: wrap; }
+
   /* Each service reads as one visually separate block instead of blending
      into the next - .service-row and its .service-detail-row (the checks
      subpanel) are two different <tr>s but share one card treatment, joined
@@ -997,6 +1042,16 @@ table th { color: var(--text-dim); font-weight: 600; font-size: 12px; text-trans
   }
   #services-body tr.service-detail-row td { padding-top: 0; }
   #services-body tr:first-child.service-row { margin-top: 0; }
+
+  /* Collapsed: the detail-row "cap" below is display:none (see the
+     sibling-selector rule up near .checks-subpanel), so .service-row above
+     needs to close its own card instead of assuming that cap is there -
+     a full border and full border-radius, rather than the open-bottomed
+     flat edge every expanded row still gets. */
+  #services-body tr.service-row.collapsed {
+    border-bottom: 1px solid var(--border);
+    border-radius: var(--radius);
+  }
 
   .schedule-card-header { flex-direction: column; }
   .schedule-card-actions { flex-wrap: wrap; }
