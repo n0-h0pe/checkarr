@@ -155,10 +155,13 @@ def get_uptime_buckets(db: Session, service_id: int, minutes: int, bar_count: in
     carry) and bucketing here instead means the only cap on how much of the
     range is covered is the cutoff itself, same as the History tab's export
     already gets by paging through everything with `before_id` - there's no
-    row limit here at all, which is fine, since two narrow columns even for
-    a very chatty service over the longest offered range (1 week) is still
-    a small, fast query. Only `bar_count` values ever cross back to the
-    client either way.
+    row limit here at all. Two narrow columns is cheap for any range/volume
+    combination a typical setup produces; the longest offered range is now
+    a year, so a service with both a short poll interval and years of
+    retained history (LogPruningSettings.retention_days can go up to 3650)
+    is the one combination that could make this a genuinely large query -
+    still correct, just not instant. Only `bar_count` values ever cross
+    back to the client either way.
     """
     now = datetime.now(timezone.utc)
     cutoff = now - timedelta(minutes=minutes)

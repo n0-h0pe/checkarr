@@ -24,8 +24,8 @@ def update_log_pruning_settings(payload: schemas.LogPruningSettingsUpdate, db: S
 
     db.commit()
     db.refresh(settings_row)
-    # Nothing to reschedule - housekeeping runs on a fixed 30-minute
-    # interval regardless of retention_days (see scheduler.schedule_housekeeping).
+    # Nothing to reschedule - pruning runs on a fixed interval regardless of
+    # retention_days (see scheduler.schedule_pruning/PRUNE_INTERVAL_HOURS).
     return settings_row
 
 

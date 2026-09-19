@@ -56,7 +56,7 @@ dashboard pool.
 In edit mode, a small **Bars** field sits directly above every card's
 uptime strip - how many bars that specific card's strip is divided into,
 for every ranged option in the uptime/History picker ("Last 5 minutes"
-through "Last 1 week"). A card's own current width caps how high this can be set
+through "Last year"). A card's own current width caps how high this can be set
 
 ### Layout theme
 

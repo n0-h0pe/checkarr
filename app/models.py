@@ -379,20 +379,27 @@ class DowntimeScheduleGroup(Base):
 class LogPruningSettings(Base):
     """Singleton row (exactly one, seeded at startup - see
     queries.get_or_create_log_pruning_settings) configuring the recurring
-    housekeeping job (see housekeeping.run_housekeeping, scheduled every 30
-    minutes by scheduler.schedule_housekeeping) that deletes CheckResult
-    ("Log & History") rows older than `retention_days` across every service.
-    No time-of-day setting - it just runs on a fixed interval and deletes
-    whatever currently qualifies. `prune_hour`/`prune_minute` are legacy
-    columns from the old once-daily-at-a-time schedule; left in place
-    (unused) rather than dropped, per this file's migration convention of
-    only ever adding columns. `last_pruned_at` is just an informational
-    "last ran at" readout now."""
+    job (see log_pruning.prune_all_services, scheduled every
+    scheduler.PRUNE_INTERVAL_HOURS hours by scheduler.schedule_pruning)
+    that deletes CheckResult rows older than `retention_days` across every
+    service. Despite the class/table name (kept as-is rather than renamed,
+    same reasoning as this file's migration convention below), this has
+    only ever covered check history, never log files - Checkarr writes no
+    log files of its own to prune in the first place, see the Settings tab's
+    own note on this. No time-of-day setting - it just runs on a fixed
+    interval and deletes whatever currently qualifies. `prune_hour`/
+    `prune_minute` are legacy columns from an old once-daily-at-a-time
+    schedule; left in place (unused) rather than dropped, per this file's
+    migration convention of only ever adding columns. `last_pruned_at` is
+    just an informational "last ran at" readout now."""
 
     __tablename__ = "log_pruning_settings"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    retention_days: Mapped[int] = mapped_column(Integer, default=7)
+    # 30, not the shorter defaults this app used early on - long enough to
+    # be useful for the dashboard's longer uptime-range options (see
+    # common.js's UPTIME_RANGES) without unbounded DB growth by default.
+    retention_days: Mapped[int] = mapped_column(Integer, default=30)
     prune_hour: Mapped[int] = mapped_column(Integer, default=2)
     prune_minute: Mapped[int] = mapped_column(Integer, default=0)
     last_pruned_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)

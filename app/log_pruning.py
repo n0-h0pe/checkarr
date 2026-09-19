@@ -1,11 +1,12 @@
-"""Deletes old CheckResult rows ("Log & History", see Settings > Log &
-History Pruning / LogPruningSettings) across every service. Called every 30
-minutes by housekeeping.run_housekeeping (see scheduler.schedule_housekeeping)
-- just deletes whatever currently qualifies, no time-of-day scheduling to
-get right. Replaces the old per-poll-per-service pruning that used to live
-in poller.py.
+"""Deletes old CheckResult rows (Settings > Check History Pruning /
+LogPruningSettings - see that model's docstring for the name mismatch)
+across every service. Scheduled on its own interval by
+scheduler.schedule_pruning - just deletes whatever currently qualifies, no
+time-of-day scheduling to get right. Replaces the old per-poll-per-service
+pruning that used to live in poller.py.
 """
 
+import asyncio
 import logging
 from datetime import datetime, timedelta, timezone
 
@@ -40,3 +41,11 @@ def prune_all_services(db=None) -> int:
     finally:
         if own_session:
             db.close()
+
+
+async def prune_all_services_async() -> None:
+    """Scheduler entry point (see scheduler.schedule_pruning) - APScheduler
+    jobs run on the event loop, so the actual (blocking) DB work still needs
+    to go through asyncio.to_thread, same as housekeeping.run_housekeeping
+    does for its own DB-touching steps."""
+    await asyncio.to_thread(prune_all_services)

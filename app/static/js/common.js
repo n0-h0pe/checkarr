@@ -58,6 +58,10 @@ const UPTIME_RANGES = [
   { value: "1440", minutes: 1440, label: "Last 24 hours" },
   { value: "2880", minutes: 2880, label: "Last 48 hours" },
   { value: "10080", minutes: 10080, label: "Last 1 week" },
+  { value: "20160", minutes: 20160, label: "Last 2 weeks" },
+  { value: "43200", minutes: 43200, label: "Last month" },
+  { value: "129600", minutes: 129600, label: "Last 3 months" },
+  { value: "525600", minutes: 525600, label: "Last year" },
 ];
 const DEFAULT_UPTIME_RANGE = "2880";
 

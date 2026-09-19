@@ -446,9 +446,10 @@ asleep doesn't see a push notification either:
 
 ### Self-monitoring alerts
 
-Checkarr also watches its own health, checked every 30 minutes alongside
-Log & History Pruning (see below), and alerts through the same channels and
-the same batching described above:
+Checkarr also watches its own health, checked every 30 minutes (a separate,
+more frequent schedule than Check History Pruning below, since these are
+cheap reads worth reacting to quickly), and alerts through the same
+channels and the same batching described above:
 
 - **Low disk space on `/config`**: warns under 100 MB free, escalates to
   fail under 10 MB free. Alerts only on the transition into a worse tier
@@ -492,21 +493,31 @@ quietly cleans itself up once it ends.
   applying to no group suppresses nothing.
 
 
-# Log & History Pruning
+# Check History Pruning
 
-Settings > Log & History Pruning controls how long check history sticks
-around: delete check history after a number of days (default 7). That's
+Settings > Check History Pruning controls how long check history sticks
+around: delete check history after a number of days (default 30). That's
 the only setting, there's no time of day to configure, a background job
-simply checks every 30 minutes for anything older than the configured
-number of days and deletes it. Prune now runs it immediately, useful for
+simply checks every 6 hours for anything older than the configured number
+of days and deletes it. Prune now runs it immediately, useful for
 confirming a new retention value takes effect without waiting for the next
 cycle. A "Last pruned" readout shows when it last ran.
 
-This only covers History, the check results stored in the database. There
-isn't a separate container log file to prune, Checkarr's own process logs
-go straight to stdout the same way any other Docker container's do, and
-Docker's own log rotation settings are the right place to manage those if
-you need to.
+This only covers History, the check results stored in the database - it's
+also what backs the dashboard's uptime strip, so retention needs to
+comfortably cover whichever range you pick there (Settings > Dashboard
+doesn't control this - the range picker above the dashboard/History tab
+does, up to "Last year"; the default 30-day retention covers everything up
+to "Last month" but not the two longer options unless you raise this).
+
+There isn't a separate container log file to prune - Checkarr's own
+process logs go straight to stdout the same way any other Docker
+container's do, and Docker's own log rotation settings (the `logging:`
+block in `docker-compose.yml`, or the equivalent container settings on
+Unraid) are the right place to manage those if you need to. This page was
+called "Log & History Pruning" before it was renamed for clarity - it
+never actually touched those logs, since Checkarr doesn't write any of its
+own to prune in the first place.
 
 
 # Dashboard Settings
