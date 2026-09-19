@@ -174,10 +174,11 @@ empty directory. Three ways to catch this:
 ## Scanning libraries automatically
 
 For Plex and Jellyfin, instead of typing out filesystem checks by hand for
-every library, click "Scan libraries" on the service's expanded row in
-Settings. It asks the service itself what libraries and folders it has
-configured, and adds one filesystem check per folder automatically. Safe 
-to click again later, it skips any path that already has a check.
+every library, expand that service's Checks section in Settings and click
+"Scan libraries" above the checks list. It asks the service itself what
+libraries and folders it has configured, and adds one filesystem check per
+folder automatically. Safe to click again later, it skips any path that
+already has a check.
 
 ## Available check types
 
@@ -348,9 +349,11 @@ thresholds already decide this.
 
 Click the Checks (N) button - its own column in the services table, right
 next to Type - to collapse or expand just that service's checks table,
-remembered per service in a browser cookie. Add check and, for Plex/
-Jellyfin, Scan libraries sit on the service's own row, after Edit/Delete -
-they act immediately (no Save Changes needed), same as always.
+remembered per service in a browser cookie. Add check sits on the
+service's own row, after Edit/Delete; for Plex/Jellyfin, Scan libraries
+sits inside the expanded Checks panel instead, above the checks list, so
+every row's own buttons stay the same regardless of service type. Both act
+immediately (no Save Changes needed), same as always.
 
 The Status column is a real toggle, not just a readout - click it to
 enable/disable the whole service. Like Enable/Alert level/Delete above,

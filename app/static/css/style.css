@@ -541,6 +541,29 @@ table th { color: var(--text-dim); font-weight: 600; font-size: 12px; text-trans
 .field.checkbox { display: flex; align-items: center; gap: 8px; }
 .field.checkbox label { margin: 0; text-transform: none; font-size: 13px; color: var(--text); }
 
+/* Service Edit dialog: unsaved-field / just-saved-field indicators - see
+   updateServiceFormDirtyState/flashServiceFormSaved in app.js. The dirty
+   color is the same orange as .unsaved-banner above (var(--warn), same
+   hardcoded rgba backing color the .badge.warn tint above also uses,
+   rather than the theme-adaptive hex directly, since a semi-transparent
+   fill needs an alpha channel a plain hex var doesn't have). Only applied
+   in edit mode - see serviceFormBaseline's docstring for why Add mode
+   never triggers this. */
+.field input.field-dirty, .field select.field-dirty, .field textarea.field-dirty,
+.icon-preview.field-dirty {
+  background: rgba(245, 166, 35, .3); border-color: var(--warn);
+}
+.field input.field-saved, .field select.field-saved, .field textarea.field-saved,
+.icon-preview.field-saved {
+  background: rgba(46, 204, 113, .3); border-color: var(--ok);
+}
+.icon-preview.field-dirty, .icon-preview.field-saved { border-radius: 6px; border: 1px solid; }
+.field.checkbox.field-dirty, .field.checkbox.field-saved {
+  border-radius: 6px; padding: 6px 8px; margin: -6px -8px 6px;
+}
+.field.checkbox.field-dirty { background: rgba(245, 166, 35, .3); }
+.field.checkbox.field-saved { background: rgba(46, 204, 113, .3); }
+
 /* Settings > Customizations theme picker (renderThemePicker in app.js) -
    each swatch previews that theme's own background/accent regardless of
    which theme is currently applied to the page, so picking one doesn't
@@ -575,6 +598,8 @@ table th { color: var(--text-dim); font-weight: 600; font-size: 12px; text-trans
 .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
 
 .checks-subpanel { background: var(--bg); border-radius: 6px; padding: 10px 14px; margin: 6px 0 16px; }
+
+.checks-panel-toolbar { display: flex; gap: 6px; margin-bottom: 10px; }
 
 /* CSS Grid, not a <table> - this environment's <thead>/<tbody> box
    generation for programmatically-created tables doesn't reliably share a

@@ -538,24 +538,16 @@ function renderServiceRow(svc) {
     ])
   );
 
+  // "Scan libraries" (Plex/Jellyfin only) used to live here too - moved
+  // into the Checks panel below (see renderChecksPanel) so every row's
+  // action column has the same 3 buttons regardless of service type,
+  // instead of Plex/Jellyfin rows alone pushing this column wider than
+  // every other row needs it to be.
   const actions = [
     el("button", { class: "small", onclick: () => openServiceModal(svc) }, "Edit"),
     el("button", { class: "small danger", onclick: () => deleteService(svc) }, "Delete"),
+    el("button", { class: "small primary", onclick: () => openCheckModal(svc) }, "+ Add check"),
   ];
-  if (svc.type === "plex" || svc.type === "jellyfin") {
-    actions.push(
-      el(
-        "button",
-        {
-          class: "small",
-          title: "Fetches this service's configured library folders and adds a filesystem check for each",
-          onclick: () => scanLibraries(svc),
-        },
-        "Scan libraries"
-      )
-    );
-  }
-  actions.push(el("button", { class: "small primary", onclick: () => openCheckModal(svc) }, "+ Add check"));
   tr.appendChild(el("td", {}, el("div", { style: "display:flex; gap:6px; flex-wrap:wrap;" }, actions)));
 
   const detailRow = el("tr", { class: "service-detail-row" }, el("td", { colspan: "8" }, renderChecksPanel(svc, toggleBtn, chevron)));
@@ -569,6 +561,25 @@ function renderServiceRow(svc) {
 function renderChecksPanel(svc, toggleBtn, chevron) {
   const isCollapsed = collapsedServiceIds.has(svc.id);
   const panel = el("div", { class: "checks-subpanel" });
+
+  // Lives here (inside the collapsible Checks panel), not in the row's own
+  // action buttons - see renderServiceRow's comment on why it moved.
+  if (svc.type === "plex" || svc.type === "jellyfin") {
+    panel.appendChild(
+      el("div", { class: "checks-panel-toolbar" }, [
+        el(
+          "button",
+          {
+            class: "small",
+            title: "Fetches this service's configured library folders and adds a filesystem check for each",
+            onclick: () => scanLibraries(svc),
+          },
+          "Scan libraries"
+        ),
+      ])
+    );
+  }
+
   if (svc.checks.length === 0) {
     panel.appendChild(el("div", { class: "text-dim", text: "No checks configured" }));
     return panel;
@@ -947,6 +958,133 @@ function updateServiceIconPreview() {
   const type = $("#svc-type").value;
   preview.appendChild(typeIcon({ type, icon_type: pendingServiceIcon.type, icon_value: pendingServiceIcon.value }));
   $("#svc-icon-reset-btn").hidden = !pendingServiceIcon.type;
+  updateServiceFormDirtyState();
+}
+
+// ---------- service modal: unsaved-changes tracking ----------
+// Add-service mode never goes through this - there's no "existing" state
+// to diff a brand new, still-being-filled-in form against, so Save just
+// stays enabled the way it always has for that case (see openServiceModal
+// below, which only sets serviceFormBaseline when editing). Editing an
+// existing service is the case this exists for: grey out Save until
+// something's actually different from what the service already has, and
+// highlight which field(s) changed.
+
+let serviceFormBaseline = null;
+
+const SERVICE_TEXT_FIELD_IDS = ["svc-name", "svc-local-url", "svc-remote-url", "svc-username", "svc-interval", "svc-notes"];
+// Highlighted on their parent .field.checkbox row, not the tiny checkbox
+// square itself - see fieldHighlightTarget below.
+const SERVICE_CHECKBOX_FIELD_IDS = ["svc-check-both", "svc-enabled"];
+
+function fieldHighlightTarget(id) {
+  return SERVICE_CHECKBOX_FIELD_IDS.includes(id) ? $(`#${id}`).closest(".field") : $(`#${id}`);
+}
+
+function setFieldHighlight(node, state) {
+  // state: "dirty" | "saved" | null
+  if (!node) return;
+  node.classList.toggle("field-dirty", state === "dirty");
+  node.classList.toggle("field-saved", state === "saved");
+}
+
+// A secret field's baseline is its no-op state, not whatever's literally
+// in the DOM (which, for an already-set literal secret, is the 12-dot
+// placeholder from applySecretPlaceholderDots - see common.js) - env-var
+// mode: the current env var name; literal mode: always "", the same
+// "blank means keep existing" value readSecretField already treats as no
+// change.
+function captureSecretBaseline(input, checkbox) {
+  return { useEnv: checkbox.checked, envVar: checkbox.checked ? input.value.trim() : "" };
+}
+
+function secretFieldDirty(input, checkbox, baseline) {
+  if (checkbox.checked !== baseline.useEnv) return true;
+  if (checkbox.checked) return input.value.trim() !== baseline.envVar;
+  const val = input.value;
+  // Untouched placeholder dots count the same as genuinely blank - neither
+  // is a real edit.
+  return val !== "" && val !== SECRET_PLACEHOLDER_DOTS;
+}
+
+function captureServiceFormBaseline() {
+  const baseline = { icon: { ...pendingServiceIcon } };
+  for (const id of SERVICE_TEXT_FIELD_IDS) baseline[id] = $(`#${id}`).value;
+  for (const id of SERVICE_CHECKBOX_FIELD_IDS) baseline[id] = $(`#${id}`).checked;
+  baseline.apiKey = captureSecretBaseline($("#svc-key"), $("#svc-key-use-env"));
+  baseline.jellyfinPassword = captureSecretBaseline($("#svc-jellyfin-admin-password"), $("#svc-jellyfin-admin-password-use-env"));
+  return baseline;
+}
+
+function clearServiceFormHighlights() {
+  for (const id of [...SERVICE_TEXT_FIELD_IDS, ...SERVICE_CHECKBOX_FIELD_IDS]) setFieldHighlight(fieldHighlightTarget(id), null);
+  setFieldHighlight($("#svc-key"), null);
+  setFieldHighlight($("#svc-jellyfin-admin-password"), null);
+  setFieldHighlight($("#svc-icon-preview"), null);
+}
+
+function updateServiceFormDirtyState() {
+  const saveBtn = $("#service-save-btn");
+  if (!serviceFormBaseline) {
+    // Add-service mode (or the modal hasn't been opened yet) - nothing to
+    // diff against, so nothing to greyed out.
+    if (saveBtn) saveBtn.disabled = false;
+    return;
+  }
+
+  let anyDirty = false;
+  for (const id of SERVICE_TEXT_FIELD_IDS) {
+    const dirty = $(`#${id}`).value !== serviceFormBaseline[id];
+    setFieldHighlight(fieldHighlightTarget(id), dirty ? "dirty" : null);
+    anyDirty = anyDirty || dirty;
+  }
+  for (const id of SERVICE_CHECKBOX_FIELD_IDS) {
+    const dirty = $(`#${id}`).checked !== serviceFormBaseline[id];
+    setFieldHighlight(fieldHighlightTarget(id), dirty ? "dirty" : null);
+    anyDirty = anyDirty || dirty;
+  }
+
+  const apiKeyDirty = secretFieldDirty($("#svc-key"), $("#svc-key-use-env"), serviceFormBaseline.apiKey);
+  setFieldHighlight($("#svc-key"), apiKeyDirty ? "dirty" : null);
+  anyDirty = anyDirty || apiKeyDirty;
+
+  const jellyfinDirty = secretFieldDirty($("#svc-jellyfin-admin-password"), $("#svc-jellyfin-admin-password-use-env"), serviceFormBaseline.jellyfinPassword);
+  setFieldHighlight($("#svc-jellyfin-admin-password"), jellyfinDirty ? "dirty" : null);
+  anyDirty = anyDirty || jellyfinDirty;
+
+  const iconDirty = pendingServiceIcon.type !== serviceFormBaseline.icon.type || pendingServiceIcon.value !== serviceFormBaseline.icon.value;
+  setFieldHighlight($("#svc-icon-preview"), iconDirty ? "dirty" : null);
+  anyDirty = anyDirty || iconDirty;
+
+  if (saveBtn) saveBtn.disabled = !anyDirty;
+}
+
+function wireServiceFormDirtyTracking() {
+  for (const id of SERVICE_TEXT_FIELD_IDS) $(`#${id}`).addEventListener("input", updateServiceFormDirtyState);
+  for (const id of SERVICE_CHECKBOX_FIELD_IDS) $(`#${id}`).addEventListener("change", updateServiceFormDirtyState);
+  $("#svc-key").addEventListener("input", updateServiceFormDirtyState);
+  $("#svc-key-use-env").addEventListener("change", updateServiceFormDirtyState);
+  $("#svc-jellyfin-admin-password").addEventListener("input", updateServiceFormDirtyState);
+  $("#svc-jellyfin-admin-password-use-env").addEventListener("change", updateServiceFormDirtyState);
+}
+
+// Flashes whichever fields were actually dirty green, then closes the
+// modal - called from submitServiceForm right after a successful edit
+// save, never for an add (see there). The 1s delay is just so "Saved"
+// registers before the modal vanishes, same idea as the toast it's
+// layered on top of.
+function flashServiceFormSaved() {
+  for (const id of [...SERVICE_TEXT_FIELD_IDS, ...SERVICE_CHECKBOX_FIELD_IDS]) {
+    const node = fieldHighlightTarget(id);
+    if (node.classList.contains("field-dirty")) setFieldHighlight(node, "saved");
+  }
+  for (const node of [$("#svc-key"), $("#svc-jellyfin-admin-password"), $("#svc-icon-preview")]) {
+    if (node.classList.contains("field-dirty")) setFieldHighlight(node, "saved");
+  }
+  setTimeout(() => {
+    closeServiceModal();
+    loadSettings();
+  }, 1000);
 }
 
 function resetConnStatus() {
@@ -967,12 +1105,11 @@ function openServiceModal(svc = null) {
   $("#svc-check-both").checked = svc ? !!svc.check_both_targets : false;
   $("#svc-username").value = svc && svc.username ? svc.username : "";
   setSecretFieldState($("#svc-key"), $("#svc-key-use-env"), svc && svc.api_key_env_var);
-  $("#svc-key-hint").textContent = svc && svc.has_api_key && !svc.api_key_env_var ? "(already set - leave blank to keep)" : "";
+  applySecretPlaceholderDots($("#svc-key"), !!(svc && svc.has_api_key && !svc.api_key_env_var));
+  $("#svc-key-hint").textContent = "";
   setSecretFieldState($("#svc-jellyfin-admin-password"), $("#svc-jellyfin-admin-password-use-env"), svc && svc.jellyfin_admin_password_env_var);
-  $("#svc-jellyfin-admin-password-hint").textContent =
-    svc && svc.has_jellyfin_admin_password && !svc.jellyfin_admin_password_env_var
-      ? "(already set - leave blank to keep)"
-      : "(optional, paired with the Admin username above)";
+  applySecretPlaceholderDots($("#svc-jellyfin-admin-password"), !!(svc && svc.has_jellyfin_admin_password && !svc.jellyfin_admin_password_env_var));
+  $("#svc-jellyfin-admin-password-hint").textContent = "(optional, paired with the Admin username above)";
   $("#svc-interval").value = svc && svc.poll_interval_seconds ? svc.poll_interval_seconds : "";
   $("#svc-enabled").checked = svc ? svc.enabled : true;
   $("#svc-notes").value = svc && svc.notes ? svc.notes : "";
@@ -1008,6 +1145,17 @@ function openServiceModal(svc = null) {
     updateCredentialFieldsForType(initialType);
     updateServiceIconPreview();
   }
+
+  // Snapshot for the dirty-tracking above, taken last so it reflects the
+  // form exactly as populated above (not the raw `svc` object) - only set
+  // when editing (see updateServiceFormDirtyState's own guard for why Add
+  // mode is unaffected). clearServiceFormHighlights first because this is
+  // one static modal reused across opens - without it, a field left
+  // highlighted from a cancelled previous edit would still show that way
+  // here.
+  clearServiceFormHighlights();
+  serviceFormBaseline = svc ? captureServiceFormBaseline() : null;
+  updateServiceFormDirtyState();
 
   $("#service-modal").classList.remove("hidden");
 }
@@ -1102,6 +1250,7 @@ async function startPlexSignIn() {
       syncSecretFieldAppearance($("#svc-key"), $("#svc-key-use-env"));
       $("#svc-key").value = res.token;
       $("#svc-key-hint").textContent = "(filled in from Plex sign-in)";
+      updateServiceFormDirtyState();
       if (!popup.closed) popup.close();
       toast("Signed in to Plex");
     }
@@ -1150,6 +1299,8 @@ async function submitServiceForm(ev) {
   payload.jellyfin_admin_password_env_var = jellyfinAdminPassword.envVar;
   if (jellyfinAdminPassword.literal) payload.jellyfin_admin_password = jellyfinAdminPassword.literal;
 
+  const saveBtn = $("#service-save-btn");
+  if (saveBtn) saveBtn.disabled = true;
   try {
     if (id) {
       // PUT: an empty box means "clear this address" - null is indistinguishable
@@ -1164,10 +1315,21 @@ async function submitServiceForm(ev) {
       await api("/api/services", { method: "POST", body: JSON.stringify(payload) });
     }
     toast("Service saved");
-    closeServiceModal();
-    loadSettings();
+    if (id) {
+      // Edit mode: flash whichever fields changed green, then close after a
+      // beat - see flashServiceFormSaved. Add mode has no baseline/dirty
+      // fields to flash, so it keeps the previous immediate close.
+      flashServiceFormSaved();
+    } else {
+      closeServiceModal();
+      loadSettings();
+    }
   } catch (e) {
     toast("Save failed: " + e.message, true);
+    // Re-derive rather than just flipping saveBtn back on - still correct
+    // for both Add (always enabled) and Edit (enabled only if the form is
+    // actually still dirty, which it is here since nothing was reverted).
+    updateServiceFormDirtyState();
   }
 }
 
@@ -2421,6 +2583,7 @@ async function init() {
   $("#icon-picker-upload-btn").addEventListener("click", uploadIconFile);
   initSecretField($("#svc-key"), $("#svc-key-use-env"));
   initSecretField($("#svc-jellyfin-admin-password"), $("#svc-jellyfin-admin-password-use-env"));
+  wireServiceFormDirtyTracking();
   $("#check-cancel").addEventListener("click", closeCheckModal);
   $("#check-form").addEventListener("submit", submitCheckForm);
   $("#history-columns-btn").addEventListener("click", openColumnsModal);

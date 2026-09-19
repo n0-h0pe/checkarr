@@ -322,6 +322,32 @@ function setSecretFieldState(input, checkbox, existingEnvVar) {
   syncSecretFieldAppearance(input, checkbox);
 }
 
+// 12 dots rather than an "(already set)" hint elsewhere on the page - a
+// password input already renders any value as masked dots, so a fixed
+// 12-character sentinel just *is* "there's a secret here" at a glance,
+// with no separate text to keep in sync with the field's actual state.
+// Only ever set on a literal (non-env-var) secret that's already stored -
+// see the service modal's openServiceModal for the has_api_key check.
+const SECRET_PLACEHOLDER_DOTS = "•".repeat(12);
+
+// Doesn't touch input.value when hasLiteralSecret is false - the caller
+// (setSecretFieldState, just called first) already put the right thing
+// there (an env var name, or "" for a genuinely unset secret), and
+// overwriting either with "" here would lose the env var name.
+function applySecretPlaceholderDots(input, hasLiteralSecret) {
+  if (hasLiteralSecret) input.value = SECRET_PLACEHOLDER_DOTS;
+  input.addEventListener("focus", clearSecretPlaceholderOnFocus);
+}
+
+// Only clears the sentinel itself, never anything the user actually typed
+// - so tabbing past without editing leaves the field blank (still "keep
+// the existing secret", the same rule readSecretField below already
+// applies to any blank literal field), while a real value already typed
+// in survives refocusing.
+function clearSecretPlaceholderOnFocus(e) {
+  if (e.target.value === SECRET_PLACEHOLDER_DOTS) e.target.value = "";
+}
+
 function readSecretField(input, checkbox) {
   if (checkbox.checked) {
     return { useEnv: true, envVar: input.value.trim(), literal: null };
