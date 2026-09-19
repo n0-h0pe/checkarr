@@ -164,12 +164,6 @@
             </div>
             <div class="field text-dim">Pruning runs automatically every 6 hours.</div>
             <div class="field text-dim" id="prune-last-run"></div>
-            <div class="field text-dim">
-              This only covers check history (the results shown in the dashboard and History tab).
-              Checkarr doesn't write its own log files to prune - its process logs go straight to
-              stdout the same as any other Docker container's, so Docker's own log rotation
-              settings are the right place to manage those.
-            </div>
             <div class="modal-actions" style="justify-content:flex-start;">
               <button type="submit" class="primary">Save</button>
               <button type="button" id="prune-now-btn">Prune now</button>
