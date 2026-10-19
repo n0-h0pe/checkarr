@@ -508,19 +508,8 @@ cycle. A "Last pruned" readout shows when it last ran.
 
 This only covers History, the check results stored in the database - it's
 also what backs the dashboard's uptime strip, so retention needs to
-comfortably cover whichever range you pick there (Settings > Dashboard
-doesn't control this - the range picker above the dashboard/History tab
-does, up to "Last year"; the default 30-day retention covers everything up
-to "Last month" but not the two longer options unless you raise this).
-
-There isn't a separate container log file to prune - Checkarr's own
-process logs go straight to stdout the same way any other Docker
-container's do, and Docker's own log rotation settings (the `logging:`
-block in `docker-compose.yml`, or the equivalent container settings on
-Unraid) are the right place to manage those if you need to. This page was
-called "Log & History Pruning" before it was renamed for clarity - it
-never actually touched those logs, since Checkarr doesn't write any of its
-own to prune in the first place.
+comfortably cover whichever range you pick there. The default 30-day retention 
+covers everything up to "Last month" but not the two longer options unless you raise this.
 
 
 # Dashboard Settings
