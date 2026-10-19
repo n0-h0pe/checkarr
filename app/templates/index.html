@@ -73,7 +73,7 @@
     </section>
 
     <section class="tab-panel" id="tab-settings">
-      <div class="sub-tabs">
+      <div class="sub-tabs" id="settings-subtabs">
         <button class="sub-tab-btn active" data-subtab="services">Services</button>
         <button class="sub-tab-btn" data-subtab="channels">Push Notifications</button>
         <button class="sub-tab-btn" data-subtab="downtime">Scheduled Down Time</button>
@@ -81,6 +81,7 @@
         <button class="sub-tab-btn" data-subtab="dashboard-settings">Dashboard Settings</button>
         <button class="sub-tab-btn" data-subtab="customizations">Customizations</button>
       </div>
+      <select class="sub-tab-select" id="settings-subtab-select" aria-label="Settings section"></select>
 
       <div class="subtab-panel active" id="subtab-services">
         <div class="unsaved-banner" id="unsaved-banner" hidden>

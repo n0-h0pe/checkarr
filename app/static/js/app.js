@@ -15,13 +15,25 @@ function initTabs() {
   $all(".tab-btn").forEach((btn) => {
     btn.addEventListener("click", () => switchTab(btn.dataset.tab));
   });
-  $all(".sub-tab-btn").forEach((btn) => {
+  // Scoped to Settings' own strip - the icon picker modal reuses the
+  // .sub-tab-btn look for its tabs, and those have their own handler
+  // (switchIconPickerTab).
+  $all("#settings-subtabs .sub-tab-btn").forEach((btn) => {
     btn.addEventListener("click", () => switchSettingsSubTab(btn.dataset.subtab));
   });
+  // Mobile's stand-in for the strip above (six buttons don't fit a phone's
+  // width - see .sub-tab-select in style.css), built from those same
+  // buttons so the two can never list different sections.
+  const subtabSelect = $("#settings-subtab-select");
+  for (const btn of $all("#settings-subtabs .sub-tab-btn")) {
+    subtabSelect.appendChild(el("option", { value: btn.dataset.subtab }, btn.textContent));
+  }
+  subtabSelect.addEventListener("change", () => switchSettingsSubTab(subtabSelect.value));
 }
 
 function switchSettingsSubTab(subtab) {
-  $all(".sub-tab-btn").forEach((b) => b.classList.toggle("active", b.dataset.subtab === subtab));
+  $all("#settings-subtabs .sub-tab-btn").forEach((b) => b.classList.toggle("active", b.dataset.subtab === subtab));
+  $("#settings-subtab-select").value = subtab;
   $all(".subtab-panel").forEach((p) => p.classList.toggle("active", p.id === `subtab-${subtab}`));
   if (subtab === "channels") loadChannels();
   if (subtab === "downtime") loadServiceGroups().then(loadSchedules);

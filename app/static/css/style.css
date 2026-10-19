@@ -512,6 +512,22 @@ table th { color: var(--text-dim); font-weight: 600; font-size: 12px; text-trans
    stays compact instead of a whole extra column to scan. Same icon reused
    inline in the mobile compact row (see .history-row-compact below). */
 .history-status-cell { display: inline-flex; align-items: center; gap: 6px; }
+
+/* Desktop History rows open the full-details dialog (openHistoryEventModal
+   in common.js) on click. */
+.history-row-clickable { cursor: pointer; }
+.history-row-clickable:hover td { background: var(--bg-panel-alt); }
+.modal-backdrop.modal-centered { align-items: center; }
+.history-event-dialog { max-width: 760px; }
+.history-event-fields {
+  display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 8px 16px;
+  align-items: baseline; font-size: 13px;
+}
+.history-event-service { display: inline-flex; align-items: center; gap: 6px; }
+.history-event-message {
+  white-space: pre-wrap; overflow-wrap: anywhere; max-height: 50vh; overflow-y: auto;
+  background: var(--bg-panel-alt); border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px;
+}
 .sdt-icon { display: inline-flex; color: var(--warn); flex-shrink: 0; cursor: help; }
 /* A different color from .sdt-icon above (--unknown, not --warn) - the two
    can appear side by side on the same row, and needed to read as two
@@ -528,6 +544,13 @@ table th { color: var(--text-dim); font-weight: 600; font-size: 12px; text-trans
 }
 .sub-tab-btn.active { color: var(--text); border-bottom-color: var(--accent); }
 .sub-tab-btn:hover { color: var(--text); }
+/* Mobile-only replacement for .sub-tabs (swapped in by the max-width:700px
+   block below) - six buttons in one row overflow a phone's width. */
+.sub-tab-select {
+  display: none; width: 100%; margin-bottom: 14px;
+  background: var(--bg-panel-alt); color: var(--text); border: 1px solid var(--border);
+  border-radius: 6px; padding: 8px 10px; font-size: 14px;
+}
 .subtab-panel { display: none; }
 .subtab-panel.active { display: block; }
 
@@ -731,6 +754,7 @@ table th { color: var(--text-dim); font-weight: 600; font-size: 12px; text-trans
 }
 .service-pill:hover { border-color: var(--accent); color: var(--text); }
 .service-pill.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+.service-pill-all { font-weight: 600; }
 /* The severity filter pills (same .service-pill shape/size) get their own
    active color per severity instead of the generic accent, so Fail/Warn/OK
    read at a glance in the bar itself, not just in the rows it filters. */
@@ -886,6 +910,9 @@ table th { color: var(--text-dim); font-weight: 600; font-size: 12px; text-trans
   nav.tabs button { padding: 8px 12px; font-size: 13px; white-space: nowrap; flex-shrink: 0; }
 
   main { padding: 10px 8px 40px; }
+
+  #settings-subtabs { display: none; }
+  .sub-tab-select { display: block; }
 
   /* Dashboard cards: less padding to reclaim space on a narrow screen, and
      a much bigger resize-handle hit target - 16px square is fine for a

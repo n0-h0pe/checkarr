@@ -99,7 +99,13 @@ filters for the time range picked in the top bar down to the minute.
 
 Every configured service gets its own pill button in a row above the table.
 Click one to toggle it on or off. Pick more than one and each row gets a Service 
-column so you can tell them apart.
+column so you can tell them apart. The first pill, **All Services**, turns every
+service on in one click; click it again to go back to whatever you had picked
+before. Your browser remembers the selection (in a cookie) between visits.
+
+Columns size themselves to what's in them every time the filters change - drag
+a column's edge to adjust one until the next change. On desktop, click any row
+to see that result in full, including the whole message, in a pop-up.
 
 A second row of pills right below it - **OK / Warn / Fail** - filters by
 result severity the same way, toggle any combination on or off.

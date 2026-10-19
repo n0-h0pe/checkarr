@@ -1155,6 +1155,16 @@ async function loadDashboard(cardOpts = {}) {
   await applyActiveLayoutTheme(layout);
   const grid = $("#dashboard-grid");
   if (!grid) return;
+  // The rebuild below empties the grid and then reads layout (grid width in
+  // computeCardLayout, label widths at the end) before every card is back -
+  // each read forces a layout pass with a much shorter page, and the
+  // browser clamps the scroll position to fit it, which is what kept
+  // throwing a scrolled-down dashboard back to the top on its 30-second
+  // refresh. Holding the grid at its old height for the duration keeps the
+  // page tall enough, and the scroll position is put back afterwards in
+  // case anything else still moved it.
+  const scrollX = window.scrollX, scrollY = window.scrollY;
+  grid.style.minHeight = `${grid.offsetHeight}px`;
   grid.innerHTML = "";
 
   // Compact and mobile are both properties of the layout itself
@@ -1215,6 +1225,9 @@ async function loadDashboard(cardOpts = {}) {
   for (const title of grid.querySelectorAll(".card-header .title span:last-child")) {
     title.classList.toggle("title-fade", title.scrollWidth > title.clientWidth);
   }
+
+  grid.style.minHeight = "";
+  if (window.scrollX !== scrollX || window.scrollY !== scrollY) window.scrollTo(scrollX, scrollY);
 }
 
 // ---------- notifications (shared) ----------
@@ -1372,25 +1385,36 @@ function saveHistoryColumns() {
 }
 state.historyColumns = loadHistoryColumns();
 
-function loadHistoryColumnWidths() {
-  const raw = getCookie("hc_history_column_widths");
-  if (!raw) return {};
-  try {
-    const parsed = JSON.parse(raw);
-    return parsed && typeof parsed === "object" ? parsed : {};
-  } catch (_) {
-    return {};
-  }
-}
-function saveHistoryColumnWidths() {
-  setCookie("hc_history_column_widths", JSON.stringify(state.historyColumnWidths), 365);
-}
-state.historyColumnWidths = loadHistoryColumnWidths();
+// Column widths are worked out from the loaded rows' own content on every
+// loadHistoryTab (see autoSizeHistoryColumns) - a manual drag on a column
+// edge only lasts until the next filter change, so there's nothing left to
+// persist. Clears the cookie older versions stored those drags in.
+state.historyColumnWidths = {};
+setCookie("hc_history_column_widths", "", -1);
 
-// Which services' history currently shows - defaults to none every load
-// (not persisted), so the table stays empty (and fast - nothing is
-// fetched) until the user actually picks at least one.
-state.historySelectedServiceIds = [];
+// Which services' history currently shows - remembered per browser in a
+// cookie, and none on a browser that's never picked any, so the table
+// stays empty (and fast - nothing is fetched) until the user picks at
+// least one. `historyPreAllServiceIds` is what the "All Services" pill
+// (see renderHistoryServicePills) restores when it's clicked off again,
+// kept in the same cookie so that toggle still works after a reload.
+function loadHistorySelectedServices() {
+  const raw = getCookie("hc_history_services");
+  const ids = (v) => (Array.isArray(v) ? v.filter((id) => Number.isInteger(id)) : []);
+  try {
+    const parsed = raw ? JSON.parse(raw) : null;
+    if (parsed && typeof parsed === "object") return { selected: ids(parsed.selected), preAll: parsed.preAll == null ? null : ids(parsed.preAll) };
+  } catch (_) { /* fall through to the default */ }
+  return { selected: [], preAll: null };
+}
+function saveHistorySelectedServices() {
+  setCookie(
+    "hc_history_services",
+    JSON.stringify({ selected: state.historySelectedServiceIds, preAll: state.historyPreAllServiceIds }),
+    365
+  );
+}
+({ selected: state.historySelectedServiceIds, preAll: state.historyPreAllServiceIds } = loadHistorySelectedServices());
 
 // Which result severities currently show - unlike the service filter
 // above, defaults to all three (existing behavior, unfiltered) rather than
@@ -1464,7 +1488,6 @@ function attachColumnResizeHandle(handle, key) {
     const onUp = () => {
       document.removeEventListener("pointermove", onMove);
       document.removeEventListener("pointerup", onUp);
-      saveHistoryColumnWidths();
     };
     document.addEventListener("pointermove", onMove);
     document.addEventListener("pointerup", onUp);
@@ -1482,7 +1505,13 @@ function historyRowElement(r) {
   if (isMobileViewport()) return historyRowElementMobile(r);
   return el(
     "tr",
-    {},
+    {
+      class: "history-row-clickable",
+      title: "Show full details",
+      // Not when the click was the end of selecting some of the row's text
+      // to copy - that'd pop the dialog over what was just selected.
+      onclick: () => { if (!String(window.getSelection() || "")) openHistoryEventModal(r); },
+    },
     state.historyColumns.map((key) => {
       const col = HISTORY_COLUMNS[key];
       return el(
@@ -1547,6 +1576,61 @@ function historyRowElementMobile(r) {
   );
 }
 
+// Desktop's equivalent of the mobile row's "›" detail block above: the
+// table truncates every cell to its column (a long Message especially), so
+// clicking a row shows everything about that one result, message in full,
+// in a centered dialog. Built on first use rather than living in
+// index.html/public.html, since both pages' History share this code.
+function historyEventModal() {
+  let modal = $("#history-event-modal");
+  if (modal) return modal;
+  modal = el("div", { class: "modal-backdrop modal-centered hidden", id: "history-event-modal" }, [
+    el("div", { class: "modal history-event-dialog", role: "dialog", "aria-modal": "true", "aria-labelledby": "history-event-title" }, [
+      el("h3", { id: "history-event-title", text: "Event details" }),
+      el("div", { class: "history-event-fields" }),
+      el("div", { class: "modal-actions" }, [
+        el("button", { type: "button", class: "primary", id: "history-event-close", onclick: closeHistoryEventModal }, "Close"),
+      ]),
+    ]),
+  ]);
+  // Only a click on the dimmed backdrop itself, not one that started inside
+  // the dialog (e.g. selecting message text) and was released outside it.
+  let downOnBackdrop = false;
+  modal.addEventListener("pointerdown", (e) => { downOnBackdrop = e.target === modal; });
+  modal.addEventListener("click", (e) => { if (downOnBackdrop && e.target === modal) closeHistoryEventModal(); });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !modal.classList.contains("hidden")) closeHistoryEventModal();
+  });
+  document.body.appendChild(modal);
+  return modal;
+}
+
+function openHistoryEventModal(r) {
+  const modal = historyEventModal();
+  const svc = serviceById(r.service_id);
+  const field = (label, value) => [el("div", { class: "text-dim", text: label }), el("div", {}, value)];
+  const fields = $(".history-event-fields", modal);
+  fields.innerHTML = "";
+  fields.append(
+    ...field("Time", fmtTime(r.timestamp)),
+    ...field("Service", el("span", { class: "history-event-service" }, [svc ? typeIcon(svc) : null, serviceNameById(r.service_id)])),
+    ...field("Check", r.check_name),
+    ...field("Type", r.check_type),
+    ...field("Status", el("span", { class: `badge ${r.status}`, text: r.status })),
+    ...field("Response", r.response_time_ms ? `${Math.round(r.response_time_ms)} ms` : "-"),
+    ...(r.in_sdt ? field("In SDT", "Yes - any alert for this result was suppressed") : []),
+    ...(r.suppressed_by_threshold ? field("Alert threshold", "Not yet reached - no alert was sent for this result") : []),
+    ...field("Message", el("div", { class: "history-event-message", text: r.message || "(none)" }))
+  );
+  modal.classList.remove("hidden");
+  $("#history-event-close", modal).focus();
+}
+
+function closeHistoryEventModal() {
+  const modal = $("#history-event-modal");
+  if (modal) modal.classList.add("hidden");
+}
+
 let historyObserver = null;
 
 function ensureHistoryObserver() {
@@ -1573,9 +1657,21 @@ function historySeveritiesQuery() {
 // to just do).
 async function loadHistoryTab() {
   await ensureStatuses();
+  // A remembered selection (see loadHistorySelectedServices) can outlive a
+  // service that's since been deleted - only once statuses actually loaded,
+  // so a failed fetch can't read as "every service is gone".
+  if (state.statuses.length > 0) {
+    const known = new Set(state.statuses.map((s) => s.service.id));
+    state.historySelectedServiceIds = state.historySelectedServiceIds.filter((id) => known.has(id));
+    if (state.historyPreAllServiceIds) state.historyPreAllServiceIds = state.historyPreAllServiceIds.filter((id) => known.has(id));
+  }
   renderHistoryServicePills();
   renderHistorySeverityPills();
   renderHistoryHeader();
+  // Bumped on every reload so a page still in flight from the previous
+  // filter (quick clicks through several pills) gets dropped instead of
+  // appended under the new one - see loadMoreHistoryRows.
+  state.historyGeneration = (state.historyGeneration || 0) + 1;
   state.historyBeforeId = null;
   state.historyExhausted = false;
   state.historyLoading = false;
@@ -1585,9 +1681,59 @@ async function loadHistoryTab() {
   if (state.historySelectedServiceIds.length === 0 || state.historySelectedSeverities.length === 0) {
     const text = state.historySelectedServiceIds.length === 0 ? "Pick at least one service above" : "Pick at least one severity above";
     body.appendChild(el("tr", {}, el("td", { colspan: String(Math.max(1, state.historyColumns.length)), class: "empty-state", text })));
+    autoSizeHistoryColumns();
     return;
   }
+  const generation = state.historyGeneration;
   await loadMoreHistoryRows();
+  if (generation === state.historyGeneration) autoSizeHistoryColumns();
+}
+
+// Sizes every column to fit what's actually in it right now - Time, Status
+// and Response barely vary, so they get exactly their content's width;
+// Service/Check/Type get theirs up to a cap; and whichever free-text column
+// is showing (Message, normally) is left without a width at all so it
+// takes up whatever the rest leave over, rather than table-layout:fixed
+// splitting the slack evenly and handing Time a third of the table. Only
+// against the first page - later pages appended while scrolling leave
+// the widths alone instead of shifting columns under the reader.
+const HISTORY_COLUMN_MAX_WIDTH = { service: 260, check: 260, type: 160 };
+const HISTORY_FILL_COLUMN_PRIORITY = ["message", "check", "service", "type"];
+const HISTORY_FILL_COLUMN_MIN_WIDTH = 200;
+
+function autoSizeHistoryColumns() {
+  const table = historyTable();
+  const headRow = table && table.querySelector("thead tr");
+  if (!headRow || isMobileViewport()) return;
+  const keys = state.historyColumns;
+  const fillKey = HISTORY_FILL_COLUMN_PRIORITY.find((k) => keys.includes(k)) || keys[keys.length - 1];
+
+  // Measured under table-layout:auto with no widths set - every cell is
+  // already nowrap (see .history-table in style.css), so each column comes
+  // out at exactly its widest cell, header included. All synchronous, so
+  // the browser never paints this intermediate state.
+  for (const col of table.querySelectorAll("colgroup col")) col.style.width = "";
+  table.style.tableLayout = "auto";
+  table.style.width = "max-content";
+  table.style.minWidth = "";
+  const natural = {};
+  Array.from(headRow.children).forEach((th, i) => {
+    natural[keys[i]] = Math.ceil(th.getBoundingClientRect().width);
+  });
+  table.style.tableLayout = "";
+  table.style.width = "";
+
+  const widths = {};
+  for (const key of keys) {
+    if (key === fillKey) continue;
+    widths[key] = Math.min(natural[key], HISTORY_COLUMN_MAX_WIDTH[key] || Infinity);
+  }
+  state.historyColumnWidths = widths;
+  renderHistoryColgroup();
+  // Past this, the fill column would be squeezed to nothing - the table
+  // overflows into its overflow-x:auto wrapper instead.
+  const fixedTotal = Object.values(widths).reduce((a, b) => a + b, 0);
+  table.style.minWidth = `${fixedTotal + Math.min(natural[fillKey], HISTORY_FILL_COLUMN_MIN_WIDTH)}px`;
 }
 
 // Fetches and appends the next page, cursor-paginated on id (see
@@ -1601,6 +1747,7 @@ async function loadMoreHistoryRows() {
   if (state.historyLoading || state.historyExhausted) return;
   if (state.historySelectedServiceIds.length === 0 || state.historySelectedSeverities.length === 0) return;
   state.historyLoading = true;
+  const generation = state.historyGeneration;
 
   let rows;
   try {
@@ -1609,10 +1756,14 @@ async function loadMoreHistoryRows() {
       `/api/history?${historyServiceIdsQuery()}&${historySeveritiesQuery()}&minutes=${uptimeRangeMinutes()}&limit=${HISTORY_PAGE_SIZE}${cursor}`
     );
   } catch (e) {
+    if (generation !== state.historyGeneration) return;
     toast("Failed to load history: " + e.message, true);
     state.historyLoading = false;
     return;
   }
+  // The filter changed while this was in flight - loadHistoryTab has
+  // already reset the table (and historyLoading) for the new one.
+  if (generation !== state.historyGeneration) return;
 
   const body = $("#history-body");
   const oldSentinel = $("#history-sentinel");
@@ -1658,6 +1809,33 @@ function renderHistoryServicePills() {
     return;
   }
   const selected = new Set(state.historySelectedServiceIds);
+  // "All Services" is always first, and active only while every service is
+  // selected. Clicking it on stashes the current selection first; clicking
+  // it off again puts that stash back (or nothing, if every service had
+  // been picked by hand - there's no earlier selection to go back to).
+  const allActive = state.statuses.every((s) => selected.has(s.service.id));
+  bar.appendChild(
+    el(
+      "button",
+      {
+        type: "button",
+        class: `service-pill service-pill-all${allActive ? " active" : ""}`,
+        "aria-pressed": allActive ? "true" : "false",
+        onclick: () => {
+          if (allActive) {
+            state.historySelectedServiceIds = state.historyPreAllServiceIds || [];
+            state.historyPreAllServiceIds = null;
+          } else {
+            state.historyPreAllServiceIds = state.historySelectedServiceIds.slice();
+            state.historySelectedServiceIds = state.statuses.map((s) => s.service.id);
+          }
+          saveHistorySelectedServices();
+          loadHistoryTab();
+        },
+      },
+      "All Services"
+    )
+  );
   for (const s of state.statuses) {
     const active = selected.has(s.service.id);
     bar.appendChild(
@@ -1671,7 +1849,7 @@ function renderHistoryServicePills() {
             const next = new Set(state.historySelectedServiceIds);
             if (next.has(s.service.id)) next.delete(s.service.id);
             else next.add(s.service.id);
-            state.historySelectedServiceIds = [...next];
+            setHistorySelectedServices([...next]);
             loadHistoryTab();
           },
         },
@@ -1681,8 +1859,13 @@ function renderHistoryServicePills() {
   }
 }
 
+// Any selection made other than through "All Services" itself (a single
+// pill, or a dashboard card's History button) drops the stash that pill
+// would otherwise restore - it'd be a selection from before this one.
 function setHistorySelectedServices(ids) {
   state.historySelectedServiceIds = ids.slice();
+  state.historyPreAllServiceIds = null;
+  saveHistorySelectedServices();
 }
 
 // Same floating pill pattern as the service filter above, one per result
