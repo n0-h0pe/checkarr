@@ -23,6 +23,8 @@ def init_db() -> None:
 
     Base.metadata.create_all(bind=engine)
     _run_migrations()
+    _backfill_builtin_checks()
+    _encrypt_check_config_secrets()
     _migrate_dashboard_layout_cards()
     _ensure_default_layouts()
 
@@ -164,6 +166,67 @@ def _run_migrations() -> None:
             conn.exec_driver_sql("ALTER TABLE dashboard_settings ADD COLUMN uptime_bar_count INTEGER DEFAULT 20")
         if "public_theme_override" not in settings_cols:
             conn.exec_driver_sql("ALTER TABLE dashboard_settings ADD COLUMN public_theme_override VARCHAR(20)")
+
+        ui_cols = _table_columns(conn, "ui_settings")
+        if "onboarding_completed" not in ui_cols:
+            conn.exec_driver_sql("ALTER TABLE ui_settings ADD COLUMN onboarding_completed BOOLEAN DEFAULT 0")
+            # An install upgrading into the setup wizard that's already got
+            # services configured is long past first boot - don't greet it
+            # with one. (A brand-new ui_settings row gets the same treatment
+            # in queries.get_or_create_ui_settings.)
+            conn.exec_driver_sql(
+                "UPDATE ui_settings SET onboarding_completed = 1 WHERE EXISTS (SELECT 1 FROM services)"
+            )
+
+
+def _encrypt_check_config_secrets() -> None:
+    """Encrypts check-config secrets (the FTP check's password) saved in
+    plain text before check_secrets.py existed. Idempotent - an already
+    encrypted value is left exactly as it is."""
+    from . import models
+    from .check_secrets import SECRET_CONFIG_FIELDS, store_check_config
+
+    db = SessionLocal()
+    try:
+        changed = False
+        checks = db.query(models.CheckDefinition).filter(models.CheckDefinition.type.in_(SECRET_CONFIG_FIELDS)).all()
+        for check in checks:
+            updated = store_check_config(check.type, check.config)
+            if updated != (check.config or {}):
+                check.config = updated
+                changed = True
+        if changed:
+            db.commit()
+    finally:
+        db.close()
+
+
+def _backfill_builtin_checks() -> None:
+    """Adds built-in checks introduced after a service was created - the
+    same ones default_checks_for_service_type would give it today - to
+    every existing service of the right type that doesn't have one yet.
+    Safe to run on every startup: built-in checks can be disabled but not
+    deleted (see the checks panel in app.js), so "this service has no check
+    of this type" only ever means it predates the check, never that the
+    user removed it."""
+    from . import models
+    from .checks.runner import BACKFILLED_BUILTIN_TYPES, default_checks_for_service_type
+
+    db = SessionLocal()
+    try:
+        changed = False
+        for service in db.query(models.Service).all():
+            existing = {c.type for c in service.checks}
+            next_order = max((c.sort_order or 0 for c in service.checks), default=0) + 1
+            for c in default_checks_for_service_type(service.type):
+                if c["type"] in BACKFILLED_BUILTIN_TYPES and c["type"] not in existing:
+                    db.add(models.CheckDefinition(service_id=service.id, sort_order=next_order, **c))
+                    next_order += 1
+                    changed = True
+        if changed:
+            db.commit()
+    finally:
+        db.close()
 
 
 def _migrate_dashboard_layout_cards() -> None:

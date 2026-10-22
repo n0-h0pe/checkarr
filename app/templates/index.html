@@ -207,10 +207,27 @@
             <label>Theme <span class="hint">(the whole admin app, header included - a dashboard layout can override this for its own cards/background, see Edit layout in the top bar)</span></label>
             <div class="theme-picker" id="ui-theme-picker"></div>
           </div>
+          <div class="field">
+            <label>Setup guide <span class="hint">(the walkthrough shown on first boot - encryption key, adding a service, and where every setting lives)</span></label>
+            <button type="button" class="small" id="reopen-onboarding-btn">Show setup guide</button>
+          </div>
         </div>
       </div>
     </section>
   </main>
+
+  <div class="modal-backdrop modal-centered hidden" id="onboarding-modal">
+    <div class="modal onboarding-dialog" role="dialog" aria-modal="true" aria-labelledby="onboarding-title">
+      <ol class="onboarding-steps" id="onboarding-steps"></ol>
+      <h3 id="onboarding-title"></h3>
+      <div id="onboarding-body"></div>
+      <div class="modal-actions onboarding-actions">
+        <button type="button" class="onboarding-skip" id="onboarding-skip">Skip setup</button>
+        <button type="button" id="onboarding-back">Back</button>
+        <button type="button" class="primary" id="onboarding-next">Next</button>
+      </div>
+    </div>
+  </div>
 
   <div class="modal-backdrop hidden" id="service-modal">
     <div class="modal">

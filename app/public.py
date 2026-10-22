@@ -25,8 +25,10 @@ from .queries import (
 )
 from .routers.meta import get_meta
 from .version import VERSION
+from .web_security import SecurityMiddleware
 
 public_app = FastAPI(title="Checkarr Status", docs_url=None, redoc_url=None, openapi_url=None)
+public_app.add_middleware(SecurityMiddleware)
 public_app.mount("/static", StaticFiles(directory="app/static"), name="static")
 # Read-only here (uploading is an admin-only route, see routers/icon_uploads.py)
 # - just needs to be servable wherever a service with a custom icon shows up.
@@ -40,7 +42,7 @@ templates = Jinja2Templates(directory="app/templates")
 MAX_HISTORY_MINUTES = 525600
 
 
-@public_app.get("/api/status", response_model=list[schemas.ServiceStatusOut])
+@public_app.get("/api/status", response_model=list[schemas.PublicServiceStatusOut])
 def status(db: Session = Depends(get_db)):
     return get_service_statuses(db)
 

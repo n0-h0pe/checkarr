@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from .. import models, schemas
+from ..check_secrets import store_check_config
 from ..database import get_db
 from ..security import require_auth
 
@@ -41,7 +42,7 @@ def bulk_update_checks(payload: schemas.CheckBulkUpdateRequest, db: Session = De
         if item.enabled is not None:
             check.enabled = item.enabled
         if item.config is not None:
-            check.config = item.config
+            check.config = store_check_config(check.type, item.config, check.config)
         updated.append(check)
 
     db.commit()

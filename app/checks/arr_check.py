@@ -1,4 +1,5 @@
 import time
+from datetime import datetime
 
 import httpx
 
@@ -316,3 +317,186 @@ async def check_health(
     else:
         message = f"{len(notifications)} active health issues: " + "; ".join(n.message for n in notifications)
     return CheckOutcome(status, message, elapsed, notifications=notifications)
+
+
+# Wanted > Missing is paged; this many records per request, and at most this
+# many requests per poll - 20k missing items is far past any real library,
+# and the cap keeps one huge one from turning every poll into a long crawl.
+_MISSING_PAGE_SIZE = 1000
+_MISSING_MAX_PAGES = 20
+_MISSING_NAMES_SHOWN = 5
+
+
+def _parse_api_time(value) -> float | None:
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(str(value).replace("Z", "+00:00")).timestamp()
+    except ValueError:
+        return None
+
+
+def _missing_item(record: dict, now: float) -> tuple[str, str] | None:
+    """(stable key, display label) for one Wanted > Missing record, or None
+    for one that can't actually have a file yet - an episode that hasn't
+    aired, an album not released, a movie Radarr doesn't consider available
+    yet. Radarr's own missing list doesn't filter those out, and an item
+    that was never obtainable isn't a missing file, it's just waiting.
+
+    Shape-based rather than per service type, so Whisparr works whichever
+    base it's on (v2 is a Sonarr fork - episodes; v3 a Radarr fork - movies)."""
+    rec_id = record.get("id")
+    if rec_id is None:
+        return None
+    if "episodeNumber" in record:
+        aired = _parse_api_time(record.get("airDateUtc"))
+        if aired is None or aired > now:
+            return None
+        series = (record.get("series") or {}).get("title") or f"Series #{record.get('seriesId', '?')}"
+        season, episode = record.get("seasonNumber") or 0, record.get("episodeNumber") or 0
+        return f"episode:{rec_id}", f"{series} S{season:02d}E{episode:02d}"
+    if "artistId" in record or "artist" in record:
+        released = _parse_api_time(record.get("releaseDate"))
+        if released is not None and released > now:
+            return None
+        artist = (record.get("artist") or {}).get("artistName") or "Unknown artist"
+        return f"album:{rec_id}", f"{artist} - {record.get('title') or 'Unknown album'}"
+    if record.get("isAvailable") is False or record.get("hasFile"):
+        return None
+    year = record.get("year")
+    title = record.get("title") or f"Movie #{rec_id}"
+    return f"movie:{rec_id}", f"{title} ({year})" if year else title
+
+
+async def _fetch_missing_records(
+    client: httpx.AsyncClient, base_url: str, api_key: str | None, service_type: str
+) -> tuple[list[dict], bool] | str:
+    """Every monitored record on the app's Wanted > Missing list, plus
+    whether the page cap cut it short - or an error message. Radarr versions
+    from before it had a Wanted page 404 here, so those fall back to the
+    full movie list, filtered the same way that page would be."""
+    api = base_url.rstrip("/") + _api_base(service_type)
+    headers = build_headers(api_key)
+    params = {
+        "pageSize": _MISSING_PAGE_SIZE,
+        "monitored": "true",
+        "includeSeries": "true",
+        "includeArtist": "true",
+    }
+    records: list[dict] = []
+    for page in range(1, _MISSING_MAX_PAGES + 1):
+        try:
+            resp = await client.get(api + "/wanted/missing", headers=headers, params={**params, "page": page})
+        except httpx.RequestError as exc:
+            return f"API request to {api}/wanted/missing failed: {exc}"
+        if resp.status_code == 401:
+            return "API key rejected (HTTP 401)"
+        if resp.status_code == 404 and page == 1 and service_type in ("radarr", "whisparr"):
+            return await _fetch_missing_movies_fallback(client, api, headers)
+        if resp.status_code != 200:
+            return f"Wanted/missing API returned HTTP {resp.status_code}"
+        try:
+            data = resp.json()
+        except ValueError:
+            return "Wanted/missing API returned invalid JSON"
+        page_records = data.get("records") or []
+        records.extend(page_records)
+        total = data.get("totalRecords") or 0
+        if len(page_records) < _MISSING_PAGE_SIZE or len(records) >= total:
+            return records, False
+    return records, True
+
+
+async def _fetch_missing_movies_fallback(
+    client: httpx.AsyncClient, api: str, headers: dict
+) -> tuple[list[dict], bool] | str:
+    try:
+        resp = await client.get(api + "/movie", headers=headers)
+    except httpx.RequestError as exc:
+        return f"API request to {api}/movie failed: {exc}"
+    if resp.status_code != 200:
+        return f"Movie API returned HTTP {resp.status_code}"
+    try:
+        movies = resp.json()
+    except ValueError:
+        return "Movie API returned invalid JSON"
+    return [m for m in movies if m.get("monitored") and not m.get("hasFile")], False
+
+
+async def check_missing_files(
+    client: httpx.AsyncClient, base_url: str, api_key: str | None, service_type: str, config: dict, state: dict
+) -> CheckOutcome:
+    """Watches the app's Wanted > Missing list and reports anything that's
+    stayed on it longer than `grace_minutes` (default 30) - long enough for
+    a normal grab/import to finish, so a new episode that's downloading
+    right now doesn't count, but a file that's disappeared from disk (or a
+    download that never completed) does.
+
+    `state` (CheckState.data, loaded and saved around this call by
+    runner.run_check) remembers when each item was first seen missing,
+    since the API only says what's missing now, not since when. The
+    first-ever poll records everything already on the list as a baseline
+    and never alerts on those - a library with years of never-found
+    episodes would otherwise just sit at "warn" forever - unless
+    `include_existing` is set. A baseline item that later gets a file and
+    then goes missing again counts as new.
+
+    Reports FAIL once anything is overdue; the check's own Alert level
+    (config.alert_level, "warn" for the built-in one) is what turns that
+    into a WARN instead - see poller.py."""
+    grace_minutes = config.get("grace_minutes")
+    grace_seconds = max(0.0, float(30 if grace_minutes is None else grace_minutes)) * 60
+    include_existing = bool(config.get("include_existing"))
+
+    start = time.perf_counter()
+    fetched = await _fetch_missing_records(client, base_url, api_key, service_type)
+    elapsed = (time.perf_counter() - start) * 1000
+    if isinstance(fetched, str):
+        # State deliberately left untouched - an outage mustn't reset how
+        # long everything's been missing.
+        return CheckOutcome(STATUS_FAIL, fetched, elapsed)
+    records, truncated = fetched
+
+    now = time.time()
+    current: dict[str, str] = {}
+    for record in records:
+        item = _missing_item(record, now)
+        if item:
+            current[item[0]] = item[1]
+
+    first_run = not state.get("initialized")
+    seen = state.get("items") or {}
+    # [first_seen_epoch, is_baseline] per key - labels aren't stored, since
+    # the only ones ever shown are for items on the list right now. Anything
+    # that's left the list is dropped, so it counts as new if it comes back.
+    items = {key: seen.get(key) or [int(now), first_run] for key in current}
+    state["items"] = items
+    state["initialized"] = True
+
+    overdue = sorted(
+        (first_seen, current[key])
+        for key, (first_seen, baseline) in items.items()
+        if (include_existing or not baseline) and now - first_seen >= grace_seconds
+    )
+    baseline_count = sum(1 for _, baseline in items.values() if baseline)
+    waiting = sum(
+        1 for first_seen, baseline in items.values() if not baseline and now - first_seen < grace_seconds
+    )
+    # Kept short - this is what a dashboard card's check row shows, where a
+    # long message crowds out the check's own name.
+    grace_label = f"{grace_seconds / 60:g} min"
+    suffix = f" (first {len(records)} checked)" if truncated else ""
+
+    if overdue:
+        names = [label for _, label in overdue[:_MISSING_NAMES_SHOWN]]
+        more = f" and {len(overdue) - len(names)} more" if len(overdue) > len(names) else ""
+        return CheckOutcome(
+            STATUS_FAIL, f"{len(overdue)} missing over {grace_label}: {', '.join(names)}{more}{suffix}", elapsed
+        )
+    if first_run and items:
+        return CheckOutcome(STATUS_OK, f"Watching - {len(items)} already missing, not alerted on{suffix}", elapsed)
+    if waiting:
+        return CheckOutcome(STATUS_OK, f"{waiting} newly missing, under {grace_label}{suffix}", elapsed)
+    if baseline_count and not include_existing:
+        return CheckOutcome(STATUS_OK, f"No new missing files ({baseline_count} older ignored){suffix}", elapsed)
+    return CheckOutcome(STATUS_OK, f"No missing files{suffix}", elapsed)

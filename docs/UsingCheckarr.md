@@ -46,6 +46,13 @@ the uptime history strip on a second, nothing else. Because there's so much
 less on a compact card, it can also be resized much smaller than a full
 one.
 
+Click a compact card (outside Edit layout) to see it as a full card: on
+desktop it opens in a box in the middle of the screen with the page behind
+darkened - the ✕ in its corner, Escape, or a click outside closes it. On a
+Mobile-Compact layout, tapping a card expands it in place to its full
+version instead, pushing the cards below it down; tap it again to collapse
+it. The public dashboard does the same for its compact layouts.
+
 A layout is fixed as compact or not (and Desktop or Mobile) the moment it's
 created, never flipped in place afterward - clicking Compact view activates
 one of your existing layouts in the other compact-ness within your current

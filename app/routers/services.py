@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from .. import models, schemas
+from ..check_secrets import store_check_config
 from ..checks.runner import default_checks_for_service_type
 from ..config import settings
 from ..connection_test import test_connection
@@ -279,7 +280,7 @@ def create_check(service_id: int, payload: schemas.CheckDefinitionCreate, db: Se
         service_id=service_id,
         name=payload.name,
         type=payload.type,
-        config=payload.config,
+        config=store_check_config(payload.type, payload.config),
         enabled=payload.enabled,
         interval_seconds=payload.interval_seconds,
         is_builtin=False,
@@ -305,7 +306,7 @@ def update_check(
             raise HTTPException(400, f"Unknown check type '{payload.type}'")
         check.type = payload.type
     if payload.config is not None:
-        check.config = payload.config
+        check.config = store_check_config(check.type, payload.config, check.config)
     if payload.enabled is not None:
         check.enabled = payload.enabled
     if payload.clear_interval:

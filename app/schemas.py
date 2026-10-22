@@ -3,6 +3,8 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from .check_secrets import mask_check_config
+
 SERVICE_TYPES = [
     "radarr",
     "sonarr",
@@ -96,6 +98,14 @@ class CheckDefinitionOut(CheckDefinitionBase):
     service_id: int
     is_builtin: bool
     sort_order: int
+
+    # Every way a check leaves the API goes through this model, so this is
+    # the one place a config secret (the FTP password) gets blanked - see
+    # check_secrets.py.
+    @model_validator(mode="after")
+    def _mask_secrets(self):
+        self.config = mask_check_config(self.type, self.config)
+        return self
 
 
 class ChecksReorderRequest(BaseModel):
@@ -250,6 +260,28 @@ class ActiveIssueOut(BaseModel):
 
 class ServiceStatusOut(BaseModel):
     service: ServiceOut
+    overall_status: str
+    last_checked: datetime | None
+    latest_results: list[CheckResultOut]
+    active_notification_count: int
+
+
+class PublicServiceOut(BaseModel):
+    """All the public dashboard port (public.py) gets to know about a
+    service - what a card needs to draw it, nothing else. ServiceOut also
+    carries its addresses, username, notes, env var names and every check's
+    config, none of which belongs on a port meant to be safe to expose."""
+
+    id: int
+    name: str
+    type: str
+    enabled: bool
+    icon_type: str | None = None
+    icon_value: str | None = None
+
+
+class PublicServiceStatusOut(BaseModel):
+    service: PublicServiceOut
     overall_status: str
     last_checked: datetime | None
     latest_results: list[CheckResultOut]

@@ -1,10 +1,16 @@
-fastapi~=0.115
-uvicorn[standard]~=0.32
-sqlalchemy~=2.0
-httpx~=0.27
-apscheduler~=3.10
-cryptography~=43.0
-jinja2~=3.1
-python-multipart~=0.0.9
-pydantic~=2.9
-pydantic-settings~=2.5
+# Minimums are the newest releases as of the last dependency review (all
+# clear on pip-audit), so a rebuild can never resolve back to a version
+# with a known vulnerability; the upper bounds only keep out the next major.
+# cryptography is the one that needed it - "~=43.0" held it at 43.0.3,
+# which carries several CVEs fixed since (bundled OpenSSL, certificate
+# verification bypasses).
+fastapi>=0.161.1,<1
+uvicorn[standard]>=0.54.0,<1
+sqlalchemy>=2.1.6,<3
+httpx>=0.28.1,<1
+apscheduler>=3.11.3,<4
+cryptography>=50.0.2
+jinja2>=3.1.6,<4
+python-multipart>=0.0.32,<0.1
+pydantic>=2.14.1,<3
+pydantic-settings>=2.16.1,<3

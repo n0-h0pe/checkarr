@@ -331,7 +331,10 @@ def get_or_create_ui_settings(db: Session) -> models.UiSettings:
     settings_row = db.query(models.UiSettings).first()
     if settings_row:
         return settings_row
-    settings_row = models.UiSettings()
+    # Services already existing with no settings row yet means an upgrade
+    # from before Customizations existed, not a first boot - no setup
+    # wizard for that one (see UiSettings.onboarding_completed).
+    settings_row = models.UiSettings(onboarding_completed=db.query(models.Service.id).first() is not None)
     db.add(settings_row)
     db.commit()
     db.refresh(settings_row)

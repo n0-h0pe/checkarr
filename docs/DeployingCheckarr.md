@@ -73,6 +73,8 @@ variables to a container. Everything is optional.
 | `HC_PUBLIC_DASHBOARD_ENABLED` | `true` | Set to `false` to disable the read-only public dashboard entirely. |
 | `HC_PUBLIC_PORT` | `8090` | The public dashboard's port. |
 | `HC_DATA_DIR` | `/config` | Where the database, secret key, and everything else Checkarr writes lives. Matches the `./config` volume in `docker-compose.yml`. |
+| `PUID` / `PGID` | (unset - runs as root) | Run as this user and group instead of root. On start the container takes ownership of `/config` for them, so an existing volume keeps working. Unraid's template sets `99`/`100` (nobody:users). |
+| `UMASK` | `022` | File-creation mask for anything Checkarr writes to `/config`. |
 
 How long check history is kept is not an environment variable, it's
 configured in Settings > Log & History Pruning, see [Settings.md](Settings.md).

@@ -45,6 +45,8 @@ For platform-specific instructions (Windows, Linux, Unraid, Mac), the full
 environment variable reference, and how to run it without Docker at all,
 see [DeployingCheckarr.md](https://github.com/n0-h0pe/checkarr/blob/master/docs/DeployingCheckarr.md).
 
+What's changed in each version: [CHANGELOG.md](https://github.com/n0-h0pe/checkarr/blob/master/CHANGELOG.md).
+
 ## Credits
 
 Service icons from

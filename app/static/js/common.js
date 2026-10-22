@@ -372,6 +372,10 @@ function shortCheckSummary(checkType, status, message) {
     const pctMatch = msg.match(/([\d.]+)%\s+(?:free|of)/);
     if (pctMatch) return `${pctMatch[1]}% free`;
   }
+  if (checkType === "arr_missing_files") {
+    const countMatch = msg.match(/^(\d+) missing/);
+    return countMatch ? `${countMatch[1]} missing` : `Missing ${label}`;
+  }
   if (/filesystem|root_folder|ftp_path/.test(checkType)) return `Files ${label}`;
   if (/login/.test(checkType)) return `Login ${label}`;
   if (/rpc_status/.test(checkType)) return `RPC ${label}`;
@@ -639,11 +643,15 @@ function resolveCollisions(draggedId, positions) {
 
 // ---------- dashboard (shared) ----------
 
+// `pos` is null for a card that isn't in the grid at all - the compact
+// dashboard's full-view popup (see openCardDetailModal) - which also passes
+// its own opts.stripId, since the grid's copy of the same card already has
+// the usual strip-<id>.
 function renderServiceCard(s, opts = {}, pos, positions) {
   const svc = s.service;
   const card = el("div", {
     class: `card${opts.compact ? " card-compact" : ""}`,
-    style: `grid-column: ${pos.x} / span ${pos.w}; grid-row: ${pos.y} / span ${pos.h};`,
+    style: pos ? `grid-column: ${pos.x} / span ${pos.w}; grid-row: ${pos.y} / span ${pos.h};` : null,
   });
   card.dataset.serviceId = svc.id;
 
@@ -690,10 +698,12 @@ function renderServiceCard(s, opts = {}, pos, positions) {
   // icon, title, and status badge on the header row, then the uptime strip
   // below it, nothing else (see also the check list, skipped further down).
   if (!opts.compact) {
+    // No addresses on the public port (see schemas.PublicServiceOut) - the
+    // line just goes without that part there.
     const addressLabel = [svc.local_url, svc.remote_url].filter(Boolean).join(" / ");
     body.appendChild(
       el("div", { class: "card-sub" }, [
-        `${svc.type} · ${addressLabel} · last checked ${relTime(s.last_checked)}`,
+        [svc.type, addressLabel, `last checked ${relTime(s.last_checked)}`].filter(Boolean).join(" · "),
         s.active_notification_count > 0 ? el("span", { style: "color:var(--warn)" }, ` · ${s.active_notification_count} notification(s)`) : null,
       ])
     );
@@ -709,7 +719,7 @@ function renderServiceCard(s, opts = {}, pos, positions) {
     body.appendChild(renderUptimeBarControl(svc, pos, opts.compact, opts.onLayoutChange));
   }
 
-  const strip = el("div", { class: "uptime-strip", id: `strip-${svc.id}` });
+  const strip = el("div", { class: "uptime-strip", id: opts.stripId || `strip-${svc.id}` });
   body.appendChild(strip);
 
   if (!opts.compact) {
@@ -1048,8 +1058,9 @@ function parseTs(iso) {
   return new Date(iso + (iso.endsWith("Z") ? "" : "Z")).getTime();
 }
 
-async function loadUptimeStrip(serviceId) {
-  const strip = $(`#strip-${serviceId}`);
+// `strip`/`bars` are for the compact dashboard's full-view popup, whose
+// strip isn't the grid's #strip-<id> and is a different width from it.
+async function loadUptimeStrip(serviceId, { strip = $(`#strip-${serviceId}`), bars = null } = {}) {
   if (!strip) return;
   strip.innerHTML = "";
   strip.style.display = "flex";
@@ -1068,7 +1079,7 @@ async function loadUptimeStrip(serviceId) {
     return;
   }
 
-  const barCount = effectiveUptimeBarCount(serviceId, !!(state.activeLayout && state.activeLayout.is_compact));
+  const barCount = bars || effectiveUptimeBarCount(serviceId, !!(state.activeLayout && state.activeLayout.is_compact));
 
   let buckets;
   try {
@@ -1206,28 +1217,183 @@ async function loadDashboard(cardOpts = {}) {
   // render pass started.
   state.lastCardPositions = positions;
   for (const s of visible) {
-    grid.appendChild(renderServiceCard(s, opts, positions.get(s.service.id), positions));
+    grid.appendChild(dashboardCardElement(s, opts, positions.get(s.service.id), positions));
   }
+  if (opts.compact && opts.mobile && !opts.editable) fitExpandedMobileCards(grid, positions);
   for (const s of visible) {
     loadUptimeStrip(s.service.id);
   }
-
-  // Only a name that's actually being clipped gets the fade treatment (see
-  // .label-fade in style.css) - has to happen after the cards are in the
-  // document, since an element's scrollWidth/clientWidth aren't meaningful
-  // until it has a real layout box. Same treatment for a card's own title
-  // (.title-fade) - a compact card in particular has the status badge
-  // sitting right up against it with no buttons in between to give a long
-  // name room, so it needs to fade out rather than run into/under the badge.
-  for (const label of grid.querySelectorAll(".check-row .name .label")) {
-    label.classList.toggle("label-fade", label.scrollWidth > label.clientWidth);
-  }
-  for (const title of grid.querySelectorAll(".card-header .title span:last-child")) {
-    title.classList.toggle("title-fade", title.scrollWidth > title.clientWidth);
-  }
+  applyCardTextFades(grid);
+  refreshCardDetailModal(visible);
 
   grid.style.minHeight = "";
   if (window.scrollX !== scrollX || window.scrollY !== scrollY) window.scrollTo(scrollX, scrollY);
+}
+
+// Only a name that's actually being clipped gets the fade treatment (see
+// .label-fade in style.css) - has to happen after the cards are in the
+// document, since an element's scrollWidth/clientWidth aren't meaningful
+// until it has a real layout box. Same treatment for a card's own title
+// (.title-fade) - a compact card in particular has the status badge
+// sitting right up against it with no buttons in between to give a long
+// name room, so it needs to fade out rather than run into/under the badge.
+function applyCardTextFades(root) {
+  for (const label of root.querySelectorAll(".check-row .name .label")) {
+    label.classList.toggle("label-fade", label.scrollWidth > label.clientWidth);
+  }
+  for (const title of root.querySelectorAll(".card-header .title span:last-child")) {
+    title.classList.toggle("title-fade", title.scrollWidth > title.clientWidth);
+  }
+}
+
+// ---------- compact cards: full view ----------
+
+// Compact cards (outside Edit layout) open up to show what the same card
+// looks like on a full layout: on desktop as a centered popup over a
+// darkened page (openCardDetailModal), on a mobile layout by expanding in
+// place, pushing the cards below it down (toggled per card, remembered
+// across the 30-second refreshes until the page is reloaded).
+state.expandedCompactCards = new Set();
+
+function dashboardCardElement(s, opts, pos, positions) {
+  const id = s.service.id;
+  const openable = opts.compact && !opts.editable;
+  const expanded = openable && opts.mobile && state.expandedCompactCards.has(id);
+  const card = renderServiceCard(s, expanded ? { ...opts, compact: false } : opts, pos, positions);
+  if (!openable) return card;
+
+  card.classList.add("card-openable");
+  if (expanded) card.classList.add("card-expanded");
+  card.tabIndex = 0;
+  card.setAttribute("role", "button");
+  if (opts.mobile) card.setAttribute("aria-expanded", expanded ? "true" : "false");
+  card.title = opts.mobile ? (expanded ? "Tap to collapse" : "Tap to expand") : "Click for the full card";
+  const activate = () => (opts.mobile ? toggleExpandedCompactCard(s, opts) : openCardDetailModal(s, opts));
+  card.addEventListener("click", (e) => {
+    // Run now/History on an expanded card keep doing their own thing.
+    if (e.target.closest("button, a, input, select, textarea")) return;
+    activate();
+  });
+  card.addEventListener("keydown", (e) => {
+    if (e.target !== card || (e.key !== "Enter" && e.key !== " ")) return;
+    e.preventDefault();
+    activate();
+  });
+  return card;
+}
+
+function toggleExpandedCompactCard(s, opts) {
+  const id = s.service.id;
+  if (state.expandedCompactCards.has(id)) state.expandedCompactCards.delete(id);
+  else state.expandedCompactCards.add(id);
+  const grid = $("#dashboard-grid");
+  const positions = state.lastCardPositions;
+  const old = grid && grid.querySelector(`.card[data-service-id="${id}"]`);
+  if (!old || !positions || !positions.get(id)) return;
+  const fresh = dashboardCardElement(s, opts, positions.get(id), positions);
+  old.replaceWith(fresh);
+  fitExpandedMobileCards(grid, positions);
+  loadUptimeStrip(id);
+  applyCardTextFades(fresh);
+  fresh.focus({ preventScroll: true });
+}
+
+// A mobile layout is one column of cards stacked top to bottom by y, each
+// card's height fixed by its saved h - an expanded card needs whatever its
+// full content actually takes instead, so it's measured at its natural
+// height and everything below it restacked to make room. Collapsing puts
+// the saved h back (kept as baseH the first time a card is touched here).
+// Only these render-time position objects change - nothing is saved, and
+// Edit layout always starts again from a fresh computeCardLayout.
+function fitExpandedMobileCards(grid, positions) {
+  const ordered = [...positions.entries()].sort((a, b) => a[1].y - b[1].y);
+  let y = 1;
+  for (const [id, p] of ordered) {
+    if (p.baseH === undefined) p.baseH = p.h;
+    let h = p.baseH;
+    const card = grid.querySelector(`.card[data-service-id="${id}"]`);
+    if (card && card.classList.contains("card-expanded")) {
+      card.style.gridRow = `${y} / span 1`;
+      card.style.alignSelf = "start";
+      const cs = getComputedStyle(card);
+      const needed = card.offsetHeight + parseFloat(cs.marginTop) + parseFloat(cs.marginBottom);
+      card.style.alignSelf = "";
+      h = Math.max(h, Math.ceil(needed / GRID_UNIT));
+    }
+    p.y = y;
+    p.h = h;
+    if (card) card.style.gridRow = `${y} / span ${h}`;
+    y += h;
+  }
+}
+
+function cardDetailModal() {
+  let modal = $("#card-detail-modal");
+  if (modal) return modal;
+  const close = el("button", { type: "button", class: "card-detail-close", "aria-label": "Close", title: "Close", onclick: closeCardDetailModal }, "✕");
+  modal = el("div", { class: "modal-backdrop modal-centered card-detail-backdrop hidden", id: "card-detail-modal" }, [
+    el("div", { class: "card-detail-wrap", role: "dialog", "aria-modal": "true", "aria-label": "Service details" }, [
+      close,
+      el("div", { class: "card-detail-slot" }),
+    ]),
+  ]);
+  let downOnBackdrop = false;
+  modal.addEventListener("pointerdown", (e) => { downOnBackdrop = e.target === modal; });
+  modal.addEventListener("click", (e) => { if (downOnBackdrop && e.target === modal) closeCardDetailModal(); });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !modal.classList.contains("hidden")) closeCardDetailModal();
+  });
+  // Inside the dashboard tab (when there is one) so the layout's own theme
+  // (#tab-dashboard[data-layout-theme], see applyActiveLayoutTheme) applies
+  // to the popup the same as to the card it came from.
+  ($("#tab-dashboard") || document.body).appendChild(modal);
+  return modal;
+}
+
+function openCardDetailModal(s, opts) {
+  state.cardDetail = { id: s.service.id, opts };
+  renderCardDetail(s, opts);
+  $(".card-detail-close", $("#card-detail-modal")).focus();
+}
+
+function renderCardDetail(s, opts) {
+  const modal = cardDetailModal();
+  const card = renderServiceCard(
+    s,
+    {
+      ...opts,
+      compact: false,
+      editable: false,
+      onRemoveCard: null,
+      stripId: `strip-detail-${s.service.id}`,
+      onHistory: opts.onHistory ? (id) => { closeCardDetailModal(); opts.onHistory(id); } : null,
+    },
+    null,
+    null
+  );
+  card.classList.add("card-detail");
+  $(".card-detail-slot", modal).replaceChildren(card);
+  // Has to be showing to have a width to size the strip from.
+  modal.classList.remove("hidden");
+  const units = Math.floor(card.getBoundingClientRect().width / GRID_UNIT);
+  loadUptimeStrip(s.service.id, { strip: card.querySelector(".uptime-strip"), bars: maxUptimeBarsForGridWidth(units) });
+  applyCardTextFades(card);
+}
+
+// Keeps an open popup in step with the dashboard's own 30-second refresh
+// (and Run now) rather than going stale underneath the user.
+function refreshCardDetailModal(visible) {
+  const modal = $("#card-detail-modal");
+  if (!state.cardDetail || !modal || modal.classList.contains("hidden")) return;
+  const s = visible.find((v) => v.service.id === state.cardDetail.id);
+  if (s) renderCardDetail(s, state.cardDetail.opts);
+  else closeCardDetailModal();
+}
+
+function closeCardDetailModal() {
+  const modal = $("#card-detail-modal");
+  if (modal) modal.classList.add("hidden");
+  state.cardDetail = null;
 }
 
 // ---------- notifications (shared) ----------

@@ -112,6 +112,22 @@ class CheckDefinition(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
     service: Mapped["Service"] = relationship(back_populates="checks")
+    state: Mapped["CheckState | None"] = relationship(cascade="all, delete-orphan", uselist=False)
+
+
+class CheckState(Base):
+    """Whatever a check needs to remember between polls - kept apart from
+    CheckDefinition.config, which is the user's own settings and gets
+    replaced wholesale every time the check is edited. Only arr_missing_files
+    uses it so far (when each missing item was first seen - see
+    checks/arr_check.check_missing_files and checks/runner.py, which loads
+    and saves this around the call)."""
+
+    __tablename__ = "check_state"
+
+    check_id: Mapped[int] = mapped_column(ForeignKey("check_definitions.id"), primary_key=True)
+    data: Mapped[dict] = mapped_column(JSON, default=dict)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
 
 
 class CheckResult(Base):
@@ -486,4 +502,10 @@ class UiSettings(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     theme: Mapped[str] = mapped_column(String(20), default="dark")
+    # The first-boot setup wizard (see routers/onboarding.py) shows until
+    # this is set - by finishing or skipping it. Installs that already had
+    # services before the wizard existed are marked done on upgrade (see
+    # database._run_migrations / queries.get_or_create_ui_settings) so it
+    # never pops up on someone who's long since set everything up.
+    onboarding_completed: Mapped[bool] = mapped_column(Boolean, default=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)

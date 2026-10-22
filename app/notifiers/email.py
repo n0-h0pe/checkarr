@@ -4,6 +4,7 @@ checks/ftp_check.py.
 """
 
 import smtplib
+import ssl
 from email.message import EmailMessage
 
 from .. import models
@@ -18,6 +19,19 @@ from ..security import resolve_secret
 _IMPLICIT_TLS_PORTS = {465}
 
 
+def _tls_context(verify: bool) -> ssl.SSLContext:
+    """smtplib's own default (no context passed) checks neither the
+    certificate nor the hostname, so anything in the network path could
+    pose as the mail server and collect the SMTP password - verified unless
+    the channel's "Verify TLS certificate" box has been turned off, for a
+    local relay with a self-signed certificate."""
+    context = ssl.create_default_context()
+    if not verify:
+        context.check_hostname = False
+        context.verify_mode = ssl.CERT_NONE
+    return context
+
+
 def send_email(channel: "models.NotificationChannel", subject: str, body: str) -> None:
     config = channel.config or {}
     host = (config.get("smtp_host") or "").strip()
@@ -27,6 +41,7 @@ def send_email(channel: "models.NotificationChannel", subject: str, body: str) -
     username = (config.get("smtp_username") or "").strip() or None
     password = resolve_secret(channel.secret_env_var, channel.secret_encrypted)
     use_tls = bool(config.get("use_tls", True))
+    context = _tls_context(bool(config.get("verify_tls", True)))
     from_addr = (config.get("from_address") or "").strip() or username or "checkarr@localhost"
     to_addrs = [a.strip() for a in (config.get("to_addresses") or "").split(",") if a.strip()]
     if not to_addrs:
@@ -39,7 +54,7 @@ def send_email(channel: "models.NotificationChannel", subject: str, body: str) -
     msg.set_content(body)
 
     if port in _IMPLICIT_TLS_PORTS:
-        with smtplib.SMTP_SSL(host, port, timeout=15) as smtp:
+        with smtplib.SMTP_SSL(host, port, timeout=15, context=context) as smtp:
             if username and password:
                 smtp.login(username, password)
             smtp.send_message(msg)
@@ -47,7 +62,7 @@ def send_email(channel: "models.NotificationChannel", subject: str, body: str) -
 
     with smtplib.SMTP(host, port, timeout=15) as smtp:
         if use_tls:
-            smtp.starttls()
+            smtp.starttls(context=context)
         if username and password:
             smtp.login(username, password)
         smtp.send_message(msg)

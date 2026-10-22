@@ -159,6 +159,22 @@ CHECK_TYPE_META = [
         ],
     },
     {
+        "type": "arr_missing_files",
+        "label": "Missing files (items stuck on the Wanted > Missing list)",
+        "applies_to": ["radarr", "sonarr", "lidarr", "whisparr"],
+        # A new one starts at Warn rather than the usual Fail - see openCheckModal.
+        "default_alert_level": "warn",
+        "fields": [
+            {"key": "grace_minutes", "label": "Alert once an item has been missing for (minutes)", "kind": "number", "default": 30},
+            {
+                "key": "include_existing",
+                "label": "Also alert on items that were already missing when this check started",
+                "kind": "checkbox",
+                "default": False,
+            },
+        ],
+    },
+    {
         "type": "arr_health",
         "label": "System health / notifications feed",
         "applies_to": ["radarr", "sonarr", "prowlarr", "lidarr", "whisparr"],
@@ -359,6 +375,12 @@ NOTIFICATION_CHANNEL_TYPE_META = [
             {"key": "smtp_username", "label": "SMTP username (optional)", "kind": "text", "default": ""},
             {"key": "smtp_password", "label": "SMTP password (optional)", "kind": "password", "default": "", "secret": True},
             {"key": "use_tls", "label": "Use STARTTLS (port 465 always uses implicit TLS instead)", "kind": "checkbox", "default": True},
+            {
+                "key": "verify_tls",
+                "label": "Verify the server's TLS certificate (only turn off for a local relay with a self-signed one)",
+                "kind": "checkbox",
+                "default": True,
+            },
             {"key": "from_address", "label": "From address", "kind": "text", "default": ""},
             {"key": "to_addresses", "label": "To address(es) (comma separated)", "kind": "text", "default": ""},
         ],

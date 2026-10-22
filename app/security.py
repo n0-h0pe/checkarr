@@ -40,11 +40,12 @@ def _load_or_create_key() -> bytes:
         return key_path.read_bytes().strip()
 
     key = Fernet.generate_key()
-    key_path.write_bytes(key)
-    try:
-        os.chmod(key_path, stat.S_IRUSR | stat.S_IWUSR)
-    except (OSError, NotImplementedError):
-        pass
+    # Created owner-only from the start (O_EXCL, mode 0600) rather than
+    # written and chmod-ed afterwards, which left it readable under the
+    # default umask for the moment in between.
+    fd = os.open(key_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, stat.S_IRUSR | stat.S_IWUSR)
+    with os.fdopen(fd, "wb") as f:
+        f.write(key)
     logger.warning(
         "Generated a new encryption key at %s. Back this file up, or set "
         "HC_APP_SECRET_KEY to a fixed value, or stored API keys become unrecoverable.",

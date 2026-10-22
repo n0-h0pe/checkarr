@@ -1,12 +1,15 @@
 import httpx
 
-from ..models import CheckDefinition, Service
+from ..check_secrets import reveal_check_config
+from ..database import SessionLocal
+from ..models import CheckDefinition, CheckState, Service
 from ..security import resolve_secret
 from .base import STATUS_FAIL, CheckOutcome
 from .arr_check import (
     check_arr_disk_space,
     check_filesystem_path_api,
     check_health,
+    check_missing_files,
     check_root_folders,
     check_system_status,
 )
@@ -46,6 +49,7 @@ TARGET_SCOPED_TYPES = {
     "arr_disk_space",
     "arr_health",
     "arr_filesystem_path",
+    "arr_missing_files",
     "plex_identity",
     "plex_filesystem_path",
     "jellyfin_health",
@@ -77,13 +81,40 @@ SERVICE_SCOPED_TYPES = {"filesystem_path", "plex_remote_access", "ftp_path", "ex
 # meaningful against a non-https address in the first place.)
 ALWAYS_BOTH_TARGETS_TYPES = {"http_200"}
 
+# Built-in check types added after release - database._backfill_builtin_checks
+# gives existing services of the right type one of each on startup, the same
+# as a service created today would get from default_checks_for_service_type.
+BACKFILLED_BUILTIN_TYPES = {"arr_missing_files"}
+
+
+def _load_check_state(check_id: int) -> dict:
+    db = SessionLocal()
+    try:
+        row = db.get(CheckState, check_id)
+        return dict(row.data or {}) if row else {}
+    finally:
+        db.close()
+
+
+def _save_check_state(check_id: int, data: dict) -> None:
+    db = SessionLocal()
+    try:
+        row = db.get(CheckState, check_id)
+        if row:
+            row.data = data
+        else:
+            db.add(CheckState(check_id=check_id, data=data))
+        db.commit()
+    finally:
+        db.close()
+
 
 async def run_check(
     client: httpx.AsyncClient, service: Service, check: CheckDefinition, base_url: str | None
 ) -> CheckOutcome:
     api_key = resolve_secret(service.api_key_env_var, service.api_key_encrypted)
-    config = check.config or {}
     ctype = check.type
+    config = reveal_check_config(ctype, check.config)
 
     # Basic auth for services that gate their web UI behind htaccess-style
     # login (mainly rTorrent/ruTorrent, which has no API of its own) -
@@ -112,6 +143,11 @@ async def run_check(
             return await check_health(client, base_url, api_key, service.type, config)
         if ctype == "arr_filesystem_path":
             return await check_filesystem_path_api(client, base_url, api_key, service.type, config)
+        if ctype == "arr_missing_files":
+            check_state = _load_check_state(check.id)
+            outcome = await check_missing_files(client, base_url, api_key, service.type, config, check_state)
+            _save_check_state(check.id, check_state)
+            return outcome
         if ctype == "plex_identity":
             return await check_plex_identity(client, base_url, api_key, config)
         if ctype == "plex_filesystem_path":
@@ -177,6 +213,14 @@ def default_checks_for_service_type(service_type: str) -> list[dict]:
         )
         checks.append(
             {"name": "Free disk space", "type": "arr_disk_space", "config": {}, "is_builtin": True}
+        )
+        checks.append(
+            {
+                "name": "Missing files",
+                "type": "arr_missing_files",
+                "config": {"grace_minutes": 30, "include_existing": False, "alert_level": "warn"},
+                "is_builtin": True,
+            }
         )
     if service_type == "plex":
         checks.append({"name": "Plex identity", "type": "plex_identity", "config": {}, "is_builtin": True})

@@ -11,9 +11,10 @@ from . import scheduler as scheduler_module
 from .config import settings
 from .database import get_db, init_db
 from .queries import get_or_create_ui_settings
-from .routers import checks_bulk, dashboard_layouts, dashboard_settings, downtime, icon_uploads, log_pruning, meta, notification_channels, notifications, plex_auth, services, status, ui_settings
+from .routers import checks_bulk, dashboard_layouts, dashboard_settings, downtime, icon_uploads, log_pruning, meta, notification_channels, notifications, onboarding, plex_auth, services, status, ui_settings
 from .security import require_auth
 from .version import VERSION
+from .web_security import SecurityMiddleware
 
 logging.basicConfig(level=settings.log_level)
 logger = logging.getLogger("checkarr")
@@ -29,6 +30,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Checkarr", lifespan=lifespan)
+app.add_middleware(SecurityMiddleware)
 
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 # settings.icons_path creates the directory (under /config) the first time
@@ -53,6 +55,7 @@ app.include_router(notification_channels.router)
 app.include_router(downtime.router)
 app.include_router(log_pruning.router)
 app.include_router(ui_settings.router)
+app.include_router(onboarding.router)
 
 
 @app.get("/", response_class=HTMLResponse, dependencies=[Depends(require_auth)])

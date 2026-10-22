@@ -171,6 +171,31 @@ empty directory. Three ways to catch this:
    still exists as an empty directory, so the check flags it as failing if
    it has fewer than the configured minimum number of entries (default 1).
 
+## Missing files
+
+Every Radarr, Sonarr, Lidarr and Whisparr service gets a built-in **Missing
+files** check (existing services get it too, the first time they start on
+this version). It watches the app's own *Wanted > Missing* list - monitored
+items only, and only ones that have actually aired or been released - and
+alerts on anything that stays on that list for longer than a set time
+(default **30 minutes**). That's long enough for a normal grab and import
+to finish, so an episode that's downloading right now doesn't count, but a
+file that's disappeared from disk, or a download that never completed,
+does.
+
+- **Alert once an item has been missing for (minutes)**: the wait before an
+  item counts.
+- **Alert level**: Warn by default; switch it to Fail like any other check.
+- **Also alert on items that were already missing when this check started**:
+  off by default. The first time the check runs, whatever is already on
+  the list is recorded as its starting point and never alerted on - a
+  library with years of never-found episodes would otherwise sit at warn
+  forever. Tick this to include those too. An old item that later gets a
+  file and then goes missing again counts as new either way.
+
+The check clears again as soon as the item gets a file, or is unmonitored
+in the app itself.
+
 ## Scanning libraries automatically
 
 For Plex and Jellyfin, instead of typing out filesystem checks by hand for
@@ -192,6 +217,7 @@ already has a check.
 | `arr_disk_space` | Radarr/Sonarr/Lidarr/Whisparr | Free disk space via the app's own API, as a percentage of total capacity |
 | `arr_filesystem_path` | Radarr/Sonarr/Lidarr/Whisparr | Same empty/populated check as `arr_root_folder`, for an arbitrary path, no volume mount needed |
 | `arr_health` | Radarr/Sonarr/Lidarr/Whisparr/Prowlarr | Pulls the app's own health feed into this dashboard |
+| `arr_missing_files` | Radarr/Sonarr/Lidarr/Whisparr | Alerts on anything stuck on the app's Wanted > Missing list for longer than a set time, see "Missing files" above |
 | `plex_identity` | Plex | Hits Plex's unauthenticated identity endpoint |
 | `plex_remote_access` | Plex | Checks plex.tv for this server's registered connections and tries to reach its public address directly |
 | `plex_filesystem_path` | Plex | Checks a path exists and is non-empty via Plex's own folder-browse API |
@@ -202,7 +228,7 @@ already has a check.
 | `qbittorrent_disk_space` | qBittorrent | Free space on qBittorrent's default save path |
 | `deluge_disk_space` | Deluge | Free space at a path via its API |
 | `rtorrent_rpc_status` | rTorrent, ruTorrent | Confirms rTorrent's XML-RPC interface is reachable, see below |
-| `ftp_path` | any | Checks a path exists and has a minimum number of entries, over FTP/FTPS |
+| `ftp_path` | any | Checks a path exists and has a minimum number of entries, over FTP/FTPS. Its password is encrypted like every other saved secret and never shown again once saved - leave the field blank to keep it |
 | `external_port_open` | any | Plain TCP connect to a static IP/hostname and port you provide, independent of the service's own address - see "Checking a port-forwarded address" below |
 | `overseerr_status` | Seerr, Jellyseerr | Confirms the API is reachable and the API key is valid |
 | `overseerr_tmdb_status` | Seerr, Jellyseerr | Confirms TMDB is reachable through it, see below |

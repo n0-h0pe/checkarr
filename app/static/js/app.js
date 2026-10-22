@@ -1200,8 +1200,16 @@ function openServiceModal(svc = null) {
   $("#service-modal").classList.remove("hidden");
 }
 
+// One-shot callback for whoever opened the dialog and wants to know when
+// it's gone again, whether saved or cancelled - the setup wizard uses it
+// to come back (see onboardingAddService).
+let afterServiceModalClosed = null;
+
 function closeServiceModal() {
   $("#service-modal").classList.add("hidden");
+  const callback = afterServiceModalClosed;
+  afterServiceModalClosed = null;
+  if (callback) callback();
 }
 
 // ---------- test connection ----------
@@ -1395,7 +1403,19 @@ function openCheckModal(svc, check = null) {
     typeSelect.appendChild(el("option", { value: ct.type, text: ct.label }));
   }
   typeSelect.value = check ? check.type : typeSelect.options[0]?.value;
-  typeSelect.onchange = () => renderDynamicFields(svc, typeSelect.value, check && check.type === typeSelect.value ? check.config : {});
+  // A brand-new check starts at its type's own default Alert level (Fail
+  // unless CHECK_TYPE_META says otherwise - Missing files starts at Warn);
+  // an existing one always shows whatever it was saved with.
+  const applyDefaultAlertLevel = () => {
+    if (check) return;
+    const meta = state.meta.check_types.find((ct) => ct.type === typeSelect.value);
+    $("#chk-alert-level").value = (meta && meta.default_alert_level) || "fail";
+  };
+  typeSelect.onchange = () => {
+    applyDefaultAlertLevel();
+    renderDynamicFields(svc, typeSelect.value, check && check.type === typeSelect.value ? check.config : {});
+  };
+  applyDefaultAlertLevel();
   renderDynamicFields(svc, typeSelect.value, check ? check.config : {});
 
   $("#check-modal").classList.remove("hidden");
@@ -1445,7 +1465,15 @@ function renderDynamicFields(svc, checkType, existingConfig = {}) {
     } else if (f.kind === "number") {
       input = el("input", { type: "number", id: `chk-field-${f.key}`, value: value });
     } else if (f.kind === "password") {
-      input = el("input", { type: "password", id: `chk-field-${f.key}`, value: value, autocomplete: "new-password" });
+      // Never sent back by the API once saved (see check_secrets.py) -
+      // `<key>_set` says whether there is one, and blank keeps it.
+      input = el("input", {
+        type: "password",
+        id: `chk-field-${f.key}`,
+        value: value,
+        autocomplete: "new-password",
+        placeholder: existingConfig[`${f.key}_set`] ? "saved - leave blank to keep" : "",
+      });
     } else {
       input = el("input", { type: "text", id: `chk-field-${f.key}`, value: value });
     }
@@ -1461,6 +1489,11 @@ function renderDynamicFields(svc, checkType, existingConfig = {}) {
   if (checkType === "arr_filesystem_path") {
     container.appendChild(
       el("div", { class: "field hint", text: "Browses this path through the app's own API, exactly like its 'Add Root Folder' picker does - no volume mount needed on Checkarr. For a folder already configured as a root folder, the 'Root folders accessible' check already covers this; use this for any other path you want to watch independently." })
+    );
+  }
+  if (checkType === "arr_missing_files") {
+    container.appendChild(
+      el("div", { class: "field hint", text: "Watches the app's own Wanted > Missing list (monitored items only, and only ones that have actually aired/released) and alerts on anything that stays on it longer than the time above - long enough for a normal download and import to finish, so something that's grabbing right now doesn't count, but a file that's disappeared from disk or a download that never completed does. Whatever's already missing the first time this check runs is recorded as a starting point and not alerted on, unless the box above is ticked. Alert level decides whether an overdue item shows as Warn or Fail." })
     );
   }
   if (checkType === "plex_remote_access") {
@@ -2585,6 +2618,310 @@ async function pruneNow() {
 
 // ---------- init ----------
 
+// ---------- first-boot setup wizard ----------
+
+// Opens by itself on first boot (UiSettings.onboarding_completed unset -
+// see routers/onboarding.py) and again on demand from Settings >
+// Customizations. Steps: the encryption key question (only while
+// HC_APP_SECRET_KEY isn't set), adding a first service through the normal
+// Add service dialog, a tour of where every setting lives, then a wrap-up
+// with the access/security notes. Finishing or skipping marks it done.
+let onboarding = null;
+
+const ONBOARDING_STEP_LABELS = { key: "Encryption key", service: "First service", tour: "Where things are", done: "Done" };
+
+async function openOnboardingWizard() {
+  let info;
+  try {
+    info = await api("/api/onboarding");
+  } catch (e) {
+    toast("Could not load the setup guide: " + e.message, true);
+    return;
+  }
+  const steps = info.encryption.env_var_set ? ["service", "tour", "done"] : ["key", "service", "tour", "done"];
+  onboarding = { info, steps, index: 0, keyChoice: null, generatedKey: null, services: [] };
+  $("#onboarding-modal").classList.remove("hidden");
+  renderOnboardingStep();
+}
+
+function closeOnboardingWizard() {
+  $("#onboarding-modal").classList.add("hidden");
+  onboarding = null;
+}
+
+async function finishOnboarding() {
+  try {
+    await api("/api/onboarding/complete", { method: "POST" });
+  } catch (e) {
+    toast("Could not save setup progress: " + e.message, true);
+  }
+  closeOnboardingWizard();
+  switchTab("dashboard");
+}
+
+// 32 random bytes in the urlsafe-base64 form Fernet expects - the exact
+// shape `Fernet.generate_key()` prints. Made here in the browser, not by
+// the server, so the key never exists anywhere but this page and wherever
+// the user pastes it. crypto.getRandomValues works over plain http too
+// (unlike crypto.subtle / clipboard), which a LAN-only install usually is.
+function generateFernetKey() {
+  const bytes = crypto.getRandomValues(new Uint8Array(32));
+  return btoa(String.fromCharCode(...bytes)).replace(/\+/g, "-").replace(/\//g, "_");
+}
+
+async function copyText(input) {
+  try {
+    await navigator.clipboard.writeText(input.value);
+  } catch (_) {
+    // navigator.clipboard needs https - fall back to the old selection copy.
+    input.select();
+    document.execCommand("copy");
+  }
+  toast("Copied");
+}
+
+function onboardingCode(text) {
+  return el("pre", { class: "onboarding-code" }, el("code", { text }));
+}
+
+function renderOnboardingStep() {
+  const { steps, index } = onboarding;
+  const step = steps[index];
+  const stepList = $("#onboarding-steps");
+  stepList.innerHTML = "";
+  steps.forEach((s, i) => {
+    stepList.appendChild(
+      el("li", { class: i === index ? "current" : i < index ? "done" : "" }, ONBOARDING_STEP_LABELS[s])
+    );
+  });
+  const body = $("#onboarding-body");
+  body.innerHTML = "";
+  const back = $("#onboarding-back");
+  const next = $("#onboarding-next");
+  back.hidden = index === 0;
+  next.disabled = false;
+  next.textContent = "Next";
+  $("#onboarding-skip").hidden = step === "done";
+  ({ key: renderOnboardingKeyStep, service: renderOnboardingServiceStep, tour: renderOnboardingTourStep, done: renderOnboardingDoneStep })[step](body, next);
+}
+
+function onboardingGo(delta) {
+  onboarding.index = Math.max(0, Math.min(onboarding.steps.length - 1, onboarding.index + delta));
+  renderOnboardingStep();
+}
+
+function renderOnboardingKeyStep(body, next) {
+  const { encryption } = onboarding.info;
+  $("#onboarding-title").textContent = "Where should the encryption key live?";
+  body.append(
+    el("p", {}, "Checkarr encrypts every API key and password you give it before saving it to its database. HC_APP_SECRET_KEY isn't set, so the key it uses is a file:"),
+    onboardingCode(encryption.key_file_path + (encryption.key_file_exists ? "" : "   (created the first time something secret is saved)")),
+    el("p", { class: "text-dim" }, "That file sits in the same /config folder as the database it protects. Anyone with a copy of that folder - a backup, a shared appdata share - can decrypt everything in it, and losing the file means re-entering every saved key.")
+  );
+
+  const option = (value, title, desc) => {
+    const input = el("input", { type: "radio", name: "onboarding-key-choice", value });
+    input.checked = onboarding.keyChoice === value;
+    input.addEventListener("change", () => {
+      onboarding.keyChoice = value;
+      renderOnboardingStep();
+    });
+    return el("label", { class: `onboarding-option${input.checked ? " selected" : ""}` }, [
+      input,
+      el("div", {}, [el("strong", { text: title }), el("div", { class: "text-dim", text: desc })]),
+    ]);
+  };
+  body.append(
+    el("div", { class: "onboarding-options" }, [
+      option("env", "Set HC_APP_SECRET_KEY and restart (recommended)", "The key lives in the container's settings instead, never in /config alongside the data it unlocks."),
+      option("file", "Keep using the key file", "Simplest. Fine on a home server, as long as the file is backed up together with the database."),
+    ])
+  );
+
+  if (onboarding.keyChoice === "file") {
+    body.append(
+      el("div", { class: "onboarding-callout" }, [
+        el("strong", { text: "Are you sure? " }),
+        `Back up ${encryption.key_file_path} with the rest of /config, and keep that backup private - it's the key to every password stored here. You can switch to HC_APP_SECRET_KEY later, but you'll have to re-enter saved API keys when you do.`,
+      ])
+    );
+    next.textContent = "Yes, use the key file";
+  } else if (onboarding.keyChoice === "env") {
+    if (!onboarding.generatedKey) onboarding.generatedKey = generateFernetKey();
+    const keyInput = el("input", { type: "text", readonly: "readonly", class: "onboarding-key", value: onboarding.generatedKey, "aria-label": "Generated key" });
+    keyInput.addEventListener("focus", () => keyInput.select());
+    body.append(
+      el("ol", { class: "onboarding-instructions" }, [
+        el("li", {}, [
+          el("strong", { text: "Generate a key. " }),
+          "Here's one made in your browser just now (nothing is sent to the server):",
+          el("div", { class: "onboarding-key-row" }, [
+            keyInput,
+            el("button", { type: "button", class: "small", onclick: () => copyText(keyInput) }, "Copy"),
+            el("button", { type: "button", class: "small", onclick: () => { onboarding.generatedKey = generateFernetKey(); renderOnboardingStep(); } }, "New key"),
+          ]),
+          "Or make one yourself from inside the container:",
+          onboardingCode('docker exec checkarr python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"'),
+          el("div", { class: "text-dim" }, "Save it in your password manager - recreating the container later needs the same key, or saved API keys can't be read."),
+        ]),
+        el("li", {}, [
+          el("strong", { text: "Give it to the container. " }),
+          el("div", {}, [el("em", { text: "Unraid: " }), "Docker tab > checkarr > Edit, paste it into Secret Key, then Apply."]),
+          el("div", {}, [el("em", { text: "Docker Compose: " }), "add this line to the .env file next to docker-compose.yml:"]),
+          onboardingCode(`HC_APP_SECRET_KEY=${onboarding.generatedKey}`),
+          el("div", {}, [el("em", { text: "docker run: " }), "add this option:"]),
+          onboardingCode(`-e HC_APP_SECRET_KEY=${onboarding.generatedKey}`),
+        ]),
+        el("li", {}, [
+          el("strong", { text: "Restart the container, " }),
+          "then reload this page. Setup carries on from the next step once it sees the key.",
+          encryption.key_file_exists
+            ? el("div", { class: "text-dim" }, `Afterwards you can delete ${encryption.key_file_path} - it's no longer used.`)
+            : null,
+        ]),
+      ])
+    );
+    if (onboarding.info.service_count > 0) {
+      body.append(
+        el("div", { class: "onboarding-callout" }, [
+          el("strong", { text: "You already have services saved. " }),
+          "Their API keys and passwords were encrypted with the key file, so after switching you'll need to re-enter each one in Settings > Services.",
+        ])
+      );
+    }
+    next.textContent = "I've restarted - check again";
+  } else {
+    next.disabled = true;
+  }
+}
+
+async function onboardingKeyNext() {
+  if (onboarding.keyChoice !== "env") return onboardingGo(1);
+  try {
+    onboarding.info = await api("/api/onboarding");
+  } catch (e) {
+    toast("Checkarr isn't reachable yet - give the restart a few more seconds", true);
+    return;
+  }
+  if (!onboarding.info.encryption.env_var_set) {
+    toast("HC_APP_SECRET_KEY still isn't set - add it to the container and restart it first", true);
+    return;
+  }
+  toast("Encryption key found");
+  onboarding.steps = onboarding.steps.filter((s) => s !== "key");
+  onboarding.index = 0;
+  renderOnboardingStep();
+}
+
+async function renderOnboardingServiceStep(body, next) {
+  $("#onboarding-title").textContent = "Add something to monitor";
+  const guide = [
+    ["Type", "Which app it is. Picking one fills in its usual name and port, and Checkarr adds that app's built-in checks automatically - for Radarr: web UI, API status, health feed, root folders, free space and missing files."],
+    ["Local address", "How Checkarr reaches it on your network - e.g. http://192.168.1.20:7878, or http://radarr:7878 if both containers share a Docker network."],
+    ["Remote address (optional)", "Its public address, e.g. behind a reverse proxy. Checked for reachability (and its certificate, if https) alongside the local one."],
+    ["API key", "For Radarr, Sonarr, Lidarr, Prowlarr and Whisparr: Settings > General > Security > API Key in that app. Plex has a Sign in to Plex button instead; the form says what each other type needs."],
+    ["Test connection", "Tries the address and key before you save, so a typo shows up straight away."],
+  ];
+  body.append(
+    el("p", {}, "Services are the apps Checkarr keeps an eye on. Add one now, through the same dialog Settings > Services uses:"),
+    el("dl", { class: "onboarding-guide" }, guide.flatMap(([term, desc]) => [el("dt", { text: term }), el("dd", { text: desc })]))
+  );
+  const list = el("div", { class: "onboarding-service-list" });
+  const addBtn = el("button", { type: "button", class: "primary", onclick: onboardingAddService }, "+ Add a service");
+  body.append(el("div", { class: "onboarding-service-actions" }, [addBtn]), list);
+  next.textContent = "Skip for now";
+
+  try {
+    onboarding.services = await api("/api/services");
+  } catch (_) {
+    onboarding.services = [];
+  }
+  if (!onboarding || onboarding.steps[onboarding.index] !== "service") return; // moved on while loading
+  if (onboarding.services.length) {
+    addBtn.textContent = "+ Add another";
+    addBtn.classList.remove("primary");
+    next.textContent = "Next";
+    for (const svc of onboarding.services) {
+      list.appendChild(
+        el("div", { class: "onboarding-service" }, [
+          typeIcon(svc),
+          el("strong", { text: svc.name }),
+          el("span", { class: "text-dim", text: `${svc.checks.length} check${svc.checks.length === 1 ? "" : "s"}` }),
+        ])
+      );
+    }
+  }
+}
+
+// The wizard steps aside while the real Add service dialog is up (two
+// stacked dialogs fighting over the same backdrop would be confusing), and
+// comes back with this step re-rendered - now listing what was added -
+// however that dialog gets closed.
+function onboardingAddService() {
+  $("#onboarding-modal").classList.add("hidden");
+  afterServiceModalClosed = () => {
+    if (!onboarding) return;
+    $("#onboarding-modal").classList.remove("hidden");
+    renderOnboardingStep();
+  };
+  openServiceModal();
+}
+
+function renderOnboardingTourStep(body) {
+  $("#onboarding-title").textContent = "Where everything is";
+  const sections = [
+    ["Dashboard", "A card per service with its checks and an uptime strip. Edit layout (top bar) moves and resizes cards, Compact view switches to small cards - click one to see it in full - and + New saves extra layouts. The range picker in the top bar sets how far back the uptime strips (and History) look."],
+    ["Notifications", "Every check that's currently in warn or fail, in one list."],
+    ["History", "Every poll result, filterable by service and severity. Click a row for the full details; Export CSV downloads the lot."],
+    ["Settings > Services", "Add and edit services and their checks. Each check has its own Alert level (warn or fail), \"Alert after\" (how many bad results in a row before alerting) and an optional interval."],
+    ["Settings > Push Notifications", "Where alerts go - Discord, Slack, Telegram, email, Pushover, Pushbullet, a webhook, or a notification in this browser. Nothing is sent anywhere until you add one."],
+    ["Settings > Scheduled Down Time", "Silence alerts during maintenance - on a schedule, or instantly for the next few minutes or hours."],
+    ["Settings > Check History Pruning", "How long check results are kept before they're deleted."],
+    ["Settings > Dashboard Settings", "Which layout the read-only public dashboard shows, on desktop and on phones."],
+    ["Settings > Customizations", "The app's theme, and the button that reopens this guide."],
+  ];
+  body.append(
+    el("div", { class: "onboarding-tour" }, sections.map(([title, desc]) =>
+      el("div", { class: "onboarding-tour-item" }, [el("strong", { text: title }), el("div", { class: "text-dim", text: desc })])
+    ))
+  );
+}
+
+function renderOnboardingDoneStep(body, next) {
+  const { info } = onboarding;
+  $("#onboarding-title").textContent = "You're all set";
+  body.append(el("p", {}, "Checks run every few minutes on their own - results show up on the Dashboard as they come in."));
+  const notes = [];
+  if (!info.auth_enabled) {
+    notes.push([
+      "The admin app has no login.",
+      " Anyone who can reach this port can change everything here. Keep it off the internet, or set HC_AUTH_USERNAME and HC_AUTH_PASSWORD on the container to require a password.",
+    ]);
+  }
+  if (info.public_dashboard.enabled) {
+    notes.push([
+      `Read-only dashboard on port ${info.public_dashboard.port}.`,
+      " It shows status only - no settings, no keys - so that's the one to share or put behind a reverse proxy, not this one.",
+    ]);
+  }
+  for (const [title, text] of notes) body.append(el("div", { class: "onboarding-callout" }, [el("strong", { text: title }), text]));
+  next.textContent = "Finish";
+}
+
+function onboardingNext() {
+  const step = onboarding.steps[onboarding.index];
+  if (step === "key") return onboardingKeyNext();
+  if (step === "done") return finishOnboarding();
+  onboardingGo(1);
+}
+
+function initOnboarding() {
+  $("#onboarding-next").addEventListener("click", onboardingNext);
+  $("#onboarding-back").addEventListener("click", () => onboardingGo(-1));
+  $("#onboarding-skip").addEventListener("click", finishOnboarding);
+  $("#reopen-onboarding-btn").addEventListener("click", openOnboardingWizard);
+}
+
 async function init() {
   initTabs();
   await loadMeta();
@@ -2698,6 +3035,12 @@ async function init() {
   setInterval(() => { if (state.tab === "dashboard" && !layoutEditMode) loadDashboardAdmin(); }, 30000);
   setInterval(() => { if (state.tab === "notifications") loadNotifications(); }, 30000);
   initBrowserNotificationStream();
+
+  initOnboarding();
+  try {
+    const onboardingState = await api("/api/onboarding");
+    if (!onboardingState.completed) openOnboardingWizard();
+  } catch (_) { /* no wizard is better than a broken first load */ }
 }
 
 document.addEventListener("DOMContentLoaded", init);
